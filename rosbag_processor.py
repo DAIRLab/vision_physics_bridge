@@ -3,8 +3,10 @@
 
 import os
 import argparse
+import time
 import cv2
 import rosbag
+import rospy
 from sensor_msgs.msg import Image
 from cv_bridge import CvBridge
 
@@ -44,15 +46,22 @@ def bag_to_pose(bagfile, pose_topic, out_filename):
     """
     Write /joint_states to a file
     """
+    # To make sure we read images and poses approximately at the same rate
+    offset = 32
     n = 0
     f = open(out_filename, 'w')
     f.write('# timestamp tx ty tz qx qy qz qw\n')
     with rosbag.Bag(bagfile, 'r') as bag:
+        prev = 0
         for (topic, msg, ts) in bag.read_messages(topics=str(pose_topic)):
+            if msg.header.seq - prev <= offset:
+                continue
+            prev = msg.header.seq
+            print(prev)
             f.write('%.12f \n position: %.12f %.12f %.12f %.12f %.12f %.12f %.12f %.12f %.12f \n \
             velocity: %.12f %.12f %.12f %.12f %.12f %.12f %.12f %.12f %.12f \n' %
                     (msg.header.stamp.to_sec(),
-                    msg.position[0], 
+                    msg.position[0],
                     msg.position[1],
                     msg.position[2],
                     msg.position[3],
@@ -70,7 +79,6 @@ def bag_to_pose(bagfile, pose_topic, out_filename):
                     msg.velocity[6],
                     msg.velocity[7],
                     msg.velocity[8]))
-           
             n += 1
             if n == 10:
                 break
