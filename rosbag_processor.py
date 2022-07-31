@@ -2,43 +2,47 @@
 """
 
 import os
-import argparse
 import time
 import cv2
 import rosbag
 import rospy
 from sensor_msgs.msg import Image
 from cv_bridge import CvBridge
+import numpy as np
 
-def bag_to_images():
+def bag_to_images(bag_file, image_topic, output_dir):
     """Extract a folder of images from a rosbag.
     Command to run: python3 bag_to_images.py raw_10.bag /data /camera/depth/image_rect_raw
     """
-    parser = argparse.ArgumentParser(description="Extract images from a ROS bag.")
-    parser.add_argument("bag_file", help="Input ROS bag.")
-    parser.add_argument("output_dir", help="Output directory.")
-    parser.add_argument("image_topic", help="Image topic.")
-    args = parser.parse_args()
+    print("Extract images from %s on topic %s into %s" % (bag_file,
+                                                          image_topic, 
+                                                          output_dir))
 
-    print("Extract images from %s on topic %s into %s" % (args.bag_file,
-                                                          args.image_topic, args.output_dir))
-
-    bag = rosbag.Bag(args.bag_file, "r")
+    bag = rosbag.Bag(bag_file, "r")
     bridge = CvBridge()
     count = 0
-    for topic, msg, t in bag.read_messages(topics=[args.image_topic]):
+    arr = []
+    for topic, msg, t in bag.read_messages(topics=[image_topic]):
         cv_img = bridge.imgmsg_to_cv2(msg, desired_encoding="passthrough")
 
-        cv2.imwrite(os.path.join(args.output_dir, "frame%06i.png" % count), cv_img)
+        cv2.imwrite(os.path.join(output_dir, "frame%06i.png" % count), cv_img)
+        arr.append(np.array(cv_img))
         print("Wrote image %i" % count)
 
         count += 1
         # Rosbag is too large, we only keep the first 10 images
         if count == 10:
             break 
-
+    arr = np.array(arr)
+    arr_reshaped = arr.reshape(arr.shape[0], -1)
+    np.savetxt("./data/images.txt", arr_reshaped)
+    loaded_arr = np.loadtxt("./data/images.txt")
+    load_original_arr = loaded_arr.reshape(
+        loaded_arr.shape[0], loaded_arr.shape[1] // arr.shape[2], arr.shape[2])
+    # check the shapes
+    print("shape of arr: ", arr.shape)
+    print("shape of load_original_arr: ", load_original_arr.shape)
     bag.close()
-
     return
 
 
@@ -85,5 +89,5 @@ def bag_to_pose(bagfile, pose_topic, out_filename):
     print('wrote ' + str(n) + ' imu messages to the file: ' + out_filename) 
 
 if __name__ == '__main__':
-    # bag_to_images()
-    bag_to_pose("raw_10.bag", "/joint_states", "./data/joint_states.txt")
+    bag_to_images("raw_10.bag", "/camera/depth/image_rect_raw", "./data")
+    # bag_to_pose("raw_10.bag", "/joint_states", "./data/joint_states.txt")

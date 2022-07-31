@@ -30,19 +30,18 @@ from manipulation.scenarios import (AddMultibodyTriad, AddRgbdSensor,
                                     MakeManipulationStation)
 from manipulation.utils import AddPackagePaths, FindResource
 import numpy as np
-import os
 import rospy 
 from sensor_msgs.msg import JointState
 
 """
-Note: I install drake from source through CMake.
+Note: I installed drake from source through CMake.
 DONE: Use JointState to simulate robot states.
 TODO: For each frame, generate a depth image; subtract the depth image from the original depth image
 """
 
 class FrankaPlaybackSim:
-    def __init__(self, meshcat, position, velocity):
-        self.meshcat = meshcat
+    def __init__(self, position, velocity):
+        self.meshcat = StartMeshcat()
         self.builder = DiagramBuilder()
         
         # Add a cube as MultibodyPlant
@@ -53,9 +52,7 @@ class FrankaPlaybackSim:
         
         self.parser = Parser(self.plant)
         self.model_file = FindResourceOrThrow("drake/manipulation/models/franka_description/urdf/panda_arm_hand.urdf")
-        self.model = self.parser.AddModelFromFile(
-            self.model_file
-        )
+        self.model = self.parser.AddModelFromFile(self.model_file)
         
         self.plant.WeldFrames(self.plant.world_frame(),
                             self.plant.GetFrameByName("panda_link0", self.model),
@@ -83,34 +80,31 @@ class FrankaPlaybackSim:
         self.camera.set_name("rgbd_sensor")
 
         # Export the camera outputs
-        # self.builder.ExportOutput(self.camera.color_image_output_port(), "color_image")
-        # self.builder.ExportOutput(self.camera.depth_image_32F_output_port(), "depth_image")
+        self.builder.ExportOutput(self.camera.color_image_output_port(), "color_image")
+        self.builder.ExportOutput(self.camera.depth_image_32F_output_port(), "depth_image")
         
 
         # Setup contexts
         # TODO: Simulation in server is not rendering
-        # self.context = self.diagram.CreateDefaultContext()
-        # self.diagram.Publish(self.context)
-        # self.plant_context = self.plant.GetMyMutableContextFromRoot(self.context)
-        # self.plant.SetPositions(self.plant_context, position)
-        # self.plant.get_actuation_input_port().FixValue(self.plant_context, np.zeros(9))
-        # self.simulator = Simulator(self.diagram, self.context)
-        # self.simulator.set_target_realtime_rate(1.0)
-        # meshcat.start_recording()
-        # self.simulator.AdvanceTo(0.1)
-        # meshcat.stop_recording()
-        # meshcat.publish_recording()
-
-
-        # ROS 
         self.diagram = self.build()
-        self.simulator = Simulator(self.diagram)
+        self.context = self.diagram.CreateDefaultContext()
+        self.diagram.Publish(self.context)
+        self.plant_context = self.plant.GetMyMutableContextFromRoot(self.context)
+        self.plant.SetPositions(self.plant_context, position)
+        self.plant.get_actuation_input_port().FixValue(self.plant_context, np.zeros(9))
+        self.simulator = Simulator(self.diagram, self.context)
         self.simulator.set_target_realtime_rate(1.0)
-        self.simulator.set_publish_every_time_step(False)
-        self.context = self.simulator.get_mutable_context()
-        self.state = self.context.get_mutable_continuous_state_vector()
-        self.state.SetFromVector(np.zeros(9*2))
-        self.simulator.Initialize()
+        self.simulator.AdvanceTo(0.1)
+
+        # ROS - temporarily don't need this since we are not processing in real-time
+        # self.diagram = self.build()
+        # self.simulator = Simulator(self.diagram)
+        # self.simulator.set_target_realtime_rate(1.0)
+        # self.simulator.set_publish_every_time_step(False)
+        # self.context = self.simulator.get_mutable_context()
+        # self.state = self.context.get_mutable_continuous_state_vector()
+        # self.state.SetFromVector(np.zeros(9*2))
+        # self.simulator.Initialize()
 
         # Real depth images extracted from rosbag
         self.real_depth_img = mpimg.imread('./data/frame000000.png')
@@ -172,6 +166,13 @@ class FrankaPlaybackSim:
         plt.title('Depth image')
         #mpld3.display()
         plt.show()
+    
+    def import_data(self):
+        text_file = open("data/joint_states.txt", "r")
+        lines = text_file.readlines()
+        for line in lines:
+            img, position, velocity = line.split(",")
+            
 
     '''
     Filter the simulated image from the real depth image
@@ -184,7 +185,7 @@ if __name__ == "__main__":
     # For testing
     position = [0.03186507895588875, 0.03186507895588875, 1.1303866857968234, 0.3907924819735715, 0.170516990603166, -2.0551906674483877, 0.3345419575098929, 1.7596621570671762, 0.34174580770791413]
     velocity = [0.0, 0.0, 0.011225922723739477, 0.07308963544653684, 0.6079061929818174, 0.26619868365598126, -0.013350198399852783, -0.7988742686585888, 0.03333959210447863]
-    meshcat = StartMeshcat()
+    
     # plot_camera_images(meshcat, position, velocity)
-    system = FrankaPlaybackSim(meshcat, position, velocity)
-    system.visualize()
+    system = FrankaPlaybackSim(position, velocity)
+    # system.visualize()
