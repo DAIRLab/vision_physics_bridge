@@ -46,15 +46,15 @@ def bag_to_images(bag_file, image_topic, output_dir):
     return
 
 
-def bag_to_pose(bagfile, pose_topic, out_filename):
+def bag_to_pose(bagfile, pose_topic, outfile_position, outfile_velocity):
     """
     Write /joint_states to a file
     """
     # To make sure we read images and poses approximately at the same rate
     offset = 32
     n = 0
-    f = open(out_filename, 'w')
-    f.write('# timestamp tx ty tz qx qy qz qw\n')
+    position = []
+    velocity = []
     with rosbag.Bag(bagfile, 'r') as bag:
         prev = 0
         for (topic, msg, ts) in bag.read_messages(topics=str(pose_topic)):
@@ -62,32 +62,24 @@ def bag_to_pose(bagfile, pose_topic, out_filename):
                 continue
             prev = msg.header.seq
             print(prev)
-            f.write('%.12f \n position: %.12f %.12f %.12f %.12f %.12f %.12f %.12f %.12f %.12f \n \
-            velocity: %.12f %.12f %.12f %.12f %.12f %.12f %.12f %.12f %.12f \n' %
-                    (msg.header.stamp.to_sec(),
-                    msg.position[0],
-                    msg.position[1],
-                    msg.position[2],
-                    msg.position[3],
-                    msg.position[4],
-                    msg.position[5],
-                    msg.position[6],
-                    msg.position[7],
-                    msg.position[8],
-                    msg.velocity[0],
-                    msg.velocity[1],
-                    msg.velocity[2],
-                    msg.velocity[3],
-                    msg.velocity[4],
-                    msg.velocity[5],
-                    msg.velocity[6],
-                    msg.velocity[7],
-                    msg.velocity[8]))
+            position.append(msg.position)
+            velocity.append(msg.velocity)
             n += 1
             if n == 10:
                 break
-    print('wrote ' + str(n) + ' imu messages to the file: ' + out_filename) 
+        position = np.array(position)
+        velocity = np.array(velocity)
+        np.savetxt(outfile_position, position)
+        np.savetxt(outfile_velocity, velocity)
+        # check the shapes
+        loaded_position = np.loadtxt(outfile_position)
+        loaded_velocity = np.loadtxt(outfile_velocity)
+        print("shape of position: ", position.shape)
+        print("shape of loaded_position: ", loaded_position.shape)
+        print("shape of velocity: ", velocity.shape)
+        print("shape of loaded_velocity: ", loaded_velocity.shape)
+    print('wrote ' + str(n) + ' imu messages to the file: ' + outfile_position + ' and ' + outfile_velocity) 
 
 if __name__ == '__main__':
-    bag_to_images("raw_10.bag", "/camera/depth/image_rect_raw", "./data")
-    # bag_to_pose("raw_10.bag", "/joint_states", "./data/joint_states.txt")
+    # bag_to_images("raw_10.bag", "/camera/depth/image_rect_raw", "./data")
+    bag_to_pose("raw_10.bag", "/joint_states", "./data/joint_position.txt", "./data/joint_velocity.txt")
