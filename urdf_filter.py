@@ -1,6 +1,7 @@
 import cv2
 import matplotlib.pyplot as plt
 import matplotlib.image as mpimg
+import pdb
 from pydrake.multibody.parsing import Parser
 from pydrake.multibody.plant import MultibodyPlant, AddMultibodyPlantSceneGraph
 from pydrake.systems.analysis import Simulator
@@ -22,6 +23,7 @@ from pydrake.all import (AbstractValue, AddMultibodyPlantSceneGraph, AngleAxis,
                          RollPitchYaw, RotationMatrix, Simulator, StartMeshcat,
                          ge)
 from pydrake.common import FindResourceOrThrow
+from pydrake.common.eigen_geometry import AngleAxis
 from pydrake.multibody.meshcat import JointSliders
 from manipulation.meshcat_cpp_utils import (AddMeshcatTriad,
                                             draw_open3d_point_cloud)
@@ -36,8 +38,6 @@ from sensor_msgs.msg import JointState
 
 """
 Note: I installed drake from source through CMake.
-DONE: Use JointState to simulate robot states.
-TODO: For each frame, generate a depth image; subtract the depth image from the original depth image
 """
 
 class FrankaPlaybackSim:
@@ -61,13 +61,12 @@ class FrankaPlaybackSim:
 
         # Add a box for the camera in the environment.
         # World to camera frame transformation
-        # self.X_Camera = RigidTransform(
-        #     RollPitchYaw(0, -0.2, 0.2).ToRotationMatrix().multiply(
-        #         RollPitchYaw(-np.pi/2.0, 0, np.pi/2.0).ToRotationMatrix()),
-        #     [.5, .1, .2])
-        self.X_Camera = RigidTransform(RollPitchYaw(-1.57165949, -1.63112887, 1.07928078).ToRotationMatrix().multiply(
-            RollPitchYaw(np.pi/2.0, np.pi/2.0, np.pi/2.0).ToRotationMatrix()),
-            [1.14164360, 0.15815239, 0.66422200])
+        axis_vec = [-1.57165949, -1.63112887, 1.07928078]
+        angle = np.linalg.norm(axis_vec)
+        axis = axis_vec / angle
+        angle_axis = AngleAxis(angle=angle,axis=axis)
+        self.X_Camera = RigidTransform(angle_axis, [1.14164360, 0.15815239, 0.66422200])
+
         self.camera_instance = self.parser.AddModelFromFile(FindResource("models/camera_box.sdf"))
         self.camera_frame = self.plant.GetFrameByName("base", self.camera_instance)    
         self.plant.WeldFrames(self.plant.world_frame(), self.camera_frame, self.X_Camera)
@@ -91,7 +90,6 @@ class FrankaPlaybackSim:
         
 
         # Setup contexts
-        # TODO: Simulation in server is not rendering
         self.diagram = self.build()
         self.context = self.diagram.CreateDefaultContext()
         self.diagram.Publish(self.context)
@@ -99,8 +97,9 @@ class FrankaPlaybackSim:
         self.plant.SetPositions(self.plant_context, position)
         self.plant.get_actuation_input_port().FixValue(self.plant_context, np.zeros(9))
         self.simulator = Simulator(self.diagram, self.context)
-        self.simulator.set_target_realtime_rate(1.0)
-        self.simulator.AdvanceTo(5.0)
+        self.simulator.Initialize()
+
+        # TODO: why are the fingers so wide?
         
         # ROS - temporarily don't need this since we are not processing in real-time
         # self.diagram = self.build()
@@ -138,9 +137,6 @@ class FrankaPlaybackSim:
             
             self.state = self.context.get_mutable_continuous_state_vector()
             self.state.SetFromVector(np.append(q,v))
-            # TODO: Should I place the camera export here?
-            self.builder.ExportOutput(self.camera.color_image_output_port(), "color_image")
-            self.builder.ExportOutput(self.camera.depth_image_32F_output_port(), "depth_image")
             self.plot_camera_images()
             self.simulator.Initialize()
             # self.builder.ExportOutput(self.camera.color_image_output_port(), "color_image")
@@ -148,7 +144,6 @@ class FrankaPlaybackSim:
             # self.diagram = self.build()
             # self.context = self.diagram.CreateDefaultContext()
             rate.sleep()
-
             # break
 
 
@@ -167,8 +162,9 @@ class FrankaPlaybackSim:
         plt.subplot(122)
         plt.imshow(np.squeeze(depth_image.data))
         plt.title('Depth image')
+        pdb.set_trace()
         #mpld3.display()
-        plt.show()
+        # plt.show()
         cv2.imwrite('./data/simulated.png', depth_image.data)
     
 '''
@@ -194,4 +190,8 @@ if __name__ == "__main__":
     simulated_img = cv2.imread('./data/simulated.png')
     real_img = cv2.imread('./data/frame000000.png')
     mask = cv2.subtract(real_img, simulated_img)
-    cv2.imshow('mask', mask)
+    pdb.set_trace()
+    plt.figure()
+    plt.imshow(mask)
+    plt.show()
+    # cv2.imshow('mask', mask)
