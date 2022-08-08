@@ -3,6 +3,7 @@
 
 import os
 import time
+from tracemalloc import start
 import cv2
 import rosbag
 import rospy
@@ -10,7 +11,7 @@ from sensor_msgs.msg import Image
 from cv_bridge import CvBridge
 import numpy as np
 
-def bag_to_images(bag_file, image_topic, output_dir):
+def bag_to_images(bag_file, image_topic, output_dir, start_frame, end_frame):
     """Extract a folder of images from a rosbag.
     Command to run: python3 bag_to_images.py raw_10.bag /data /camera/depth/image_rect_raw
     """
@@ -23,15 +24,19 @@ def bag_to_images(bag_file, image_topic, output_dir):
     count = 0
     arr = []
     for topic, msg, t in bag.read_messages(topics=[image_topic]):
+        count += 1
+        # Saving frame 100 - 110
+        if count < start_frame:
+            continue
         cv_img = bridge.imgmsg_to_cv2(msg, desired_encoding="passthrough")
 
         cv2.imwrite(os.path.join(output_dir, "frame%06i.png" % count), cv_img)
         arr.append(np.array(cv_img))
         print("Wrote image %i" % count)
 
-        count += 1
+        
         # Rosbag is too large, we only keep the first 10 images
-        if count == 10:
+        if count == end_frame:
             break 
     arr = np.array(arr)
     arr_reshaped = arr.reshape(arr.shape[0], -1)
@@ -46,26 +51,35 @@ def bag_to_images(bag_file, image_topic, output_dir):
     return
 
 
-def bag_to_pose(bagfile, pose_topic, outfile_position, outfile_velocity):
+def bag_to_pose(bagfile, pose_topic, outfile_position, outfile_velocity, start_frame, end_frame):
     """
     Write /joint_states to a file
     """
     # To make sure we read images and poses approximately at the same rate
     offset = 32
-    n = 0
+    n = start_frame
     position = []
     velocity = []
     with rosbag.Bag(bagfile, 'r') as bag:
-        prev = 0
+        prev = start_frame
         for (topic, msg, ts) in bag.read_messages(topics=str(pose_topic)):
+            if msg.header.seq < n:
+                continue
             if msg.header.seq - prev <= offset:
                 continue
             prev = msg.header.seq
-            print(prev)
-            position.append(msg.position)
-            velocity.append(msg.velocity)
+            print("recording frame: ", msg.header.seq)
+            reordered_position = [0] * len(msg.position)
+            reordered_position[:7] = msg.position[2:]
+            reordered_position[-2:] = msg.position[:2]
+            reordered_velocity = [0] * len(msg.velocity)
+            reordered_velocity[:7] = msg.velocity[2:]
+            reordered_velocity[-2:] = msg.velocity[:2]
+            
+            position.append(reordered_position)
+            velocity.append(reordered_velocity)
             n += 1
-            if n == 10:
+            if n == end_frame:
                 break
         position = np.array(position)
         velocity = np.array(velocity)
@@ -81,5 +95,5 @@ def bag_to_pose(bagfile, pose_topic, outfile_position, outfile_velocity):
     print('wrote ' + str(n) + ' imu messages to the file: ' + outfile_position + ' and ' + outfile_velocity) 
 
 if __name__ == '__main__':
-    # bag_to_images("raw_10.bag", "/camera/depth/image_rect_raw", "./data")
-    bag_to_pose("raw_10.bag", "/joint_states", "./data/joint_position.txt", "./data/joint_velocity.txt")
+    # bag_to_images("raw_10.bag", "/camera/depth/image_rect_raw", "./data", 0, 10)
+    bag_to_pose("raw_10.bag", "/joint_states", "./data/joint_position.txt", "./data/joint_velocity.txt", 0, 10)

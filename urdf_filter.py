@@ -1,4 +1,3 @@
-import cv2
 import matplotlib.pyplot as plt
 import matplotlib.image as mpimg
 import pdb
@@ -48,7 +47,8 @@ class FrankaPlaybackSim:
                             self.X_model)
 
         # Add a box for the camera in the environment.
-        # World to camera frame transformation
+        # Camera to world transformation (?)
+        # tf.rotation: the rotation of camera frame relative to world frame
         camera_pos = [1.14164360, 0.15815239, 0.66422200]
         axis_vec = [-1.57165949, -1.63112887, 1.07928078]
         angle = np.linalg.norm(axis_vec)
@@ -59,7 +59,8 @@ class FrankaPlaybackSim:
         self.camera_instance = self.parser.AddModelFromFile(FindResource("models/camera_box.sdf"))
         self.camera_frame = self.plant.GetFrameByName("base", self.camera_instance)    
         self.plant.WeldFrames(self.plant.world_frame(), self.camera_frame, self.X_Camera)
-        AddMultibodyTriad(self.camera_frame, self.scene_graph, length=.1, radius=0.005)
+        # Not sure what this line does
+        # AddMultibodyTriad(self.camera_frame, self.scene_graph, length=.1, radius=0.005)
         self.plant.Finalize()
 
         # Visualize in meshcat
@@ -142,6 +143,7 @@ class FrankaPlaybackSim:
 
         # Plot the two images.
         plt.subplot(121)
+        
         # plt.imshow(color_image.data)
         # plt.title('Color image')
         real = plt.imread('./data/frame00000{}.png'.format(frame_id))
@@ -149,16 +151,28 @@ class FrankaPlaybackSim:
         np.savetxt('./data/real_depth.txt', real)
         _min = 0
         _max = 1
-        plt.imshow(real, vmin = _min, vmax = _max)
+        plt.imshow(real, vmin = _min, vmax = 1)
+        # red dot on the end-effector 
+        # plt.plot(300, 100, 'ro')
+        # red dot on the first link
+        plt.plot(320, 250, 'ro')
+
+        plt.colorbar()
         plt.title('Real image')
         plt.subplot(122)
         plt.imshow(np.squeeze(depth_image.data), vmin = _min, vmax = _max) #(480.640,1)
+        # plt.plot(300, 100, 'ro')  
+        plt.plot(320, 250, 'ro')
+        plt.colorbar()
         plt.title('Depth image')
         np.savetxt('./data/simulated_depth.txt', depth_image.data[:,:,0])
-    
+        print(real[100:105, 280:285])
+        print(depth_image.data[100:105, 280:285,0])
+        # print(real[100,300])
+        # print(depth_image.data[100,300,0])
         # pdb.set_trace()
         #mpld3.display()
-        plt.show()
+        # plt.show()
     
 '''
 Filter the simulated image from the real depth image
@@ -181,16 +195,20 @@ if __name__ == "__main__":
     frame_id = 0
     system = FrankaPlaybackSim(positions[frame_id], velocities[frame_id])
     system.plot_camera_images(frame_id)
-    # simulated_image = np.loadtxt('./data/simulated_depth.txt')
-    # real_image = imageio.imread('./data/frame000009.png')
+    simulated_image = np.loadtxt('./data/simulated_depth.txt')
+    real_image = imageio.imread('./data/frame00000{}.png'.format(frame_id))
     # real_image = real_image * 20
-    # mask = filter(real_image, simulated_image)
-    # im = Image.fromarray(mask)
-    # if im.mode != 'RGB':
-    #     im = im.convert('RGB')
-    # im.save("./data/mask.png")
+    # print(real_image[100:105, 280:285])
+    # print(simulated_image[100:105, 280:285])
+    # print(real[100,300])
+    # print(depth_image.data[100,300,0])
+    mask = filter(real_image, simulated_image)
+    im = Image.fromarray(mask)
+    if im.mode != 'RGB':
+        im = im.convert('RGB')
+    im.save("./data/mask.png")
 
     # pdb.set_trace()
     # plt.figure()
     # plt.imshow(mask)
-    # plt.show()
+    plt.show()
