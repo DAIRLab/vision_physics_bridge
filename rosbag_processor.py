@@ -2,14 +2,15 @@
 """
 
 import os
-import time
 from tracemalloc import start
 import cv2
 import rosbag
 import rospy
-from sensor_msgs.msg import Image
+# from sensor_msgs.msg import Image
+from PIL import Image
 from cv_bridge import CvBridge
 import numpy as np
+import matplotlib.pyplot as plt
 
 def bag_to_images(bag_file, image_topic, output_dir, start_frame, end_frame):
     """Extract a folder of images from a rosbag.
@@ -29,9 +30,19 @@ def bag_to_images(bag_file, image_topic, output_dir, start_frame, end_frame):
         if count < start_frame:
             continue
         cv_img = bridge.imgmsg_to_cv2(msg, desired_encoding="passthrough")
-
+        depth_array = np.array(cv_img)*0.001
+        print(depth_array[250,300])
+        
+        # This is temporarily not being used
         cv2.imwrite(os.path.join(output_dir, "frame%06i.png" % count), cv_img)
-        arr.append(np.array(cv_img))
+        
+        # depth_array = np.array(cv_img, np.float32)
+        arr.append(depth_array)
+        # im = Image.fromarray(depth_array)
+        # if im.mode != 'RGB':
+        #     im = im.convert('RGB')
+        
+        # im.save(os.path.join(output_dir, "frame%06i.png" % count))
         print("Wrote image %i" % count)
 
         
@@ -40,8 +51,8 @@ def bag_to_images(bag_file, image_topic, output_dir, start_frame, end_frame):
             break 
     arr = np.array(arr)
     arr_reshaped = arr.reshape(arr.shape[0], -1)
-    np.savetxt("./data/images.txt", arr_reshaped)
-    loaded_arr = np.loadtxt("./data/images.txt")
+    np.savetxt("./aligned_data/images.txt", arr_reshaped)
+    loaded_arr = np.loadtxt("./aligned_data/images.txt")
     load_original_arr = loaded_arr.reshape(
         loaded_arr.shape[0], loaded_arr.shape[1] // arr.shape[2], arr.shape[2])
     # check the shapes
@@ -95,5 +106,5 @@ def bag_to_pose(bagfile, pose_topic, outfile_position, outfile_velocity, start_f
     print('wrote ' + str(n) + ' imu messages to the file: ' + outfile_position + ' and ' + outfile_velocity) 
 
 if __name__ == '__main__':
-    # bag_to_images("raw_10.bag", "/camera/depth/image_rect_raw", "./data", 0, 10)
-    bag_to_pose("raw_10.bag", "/joint_states", "./data/joint_position.txt", "./data/joint_velocity.txt", 0, 10)
+    bag_to_images("raw_10.bag", "/camera/aligned_depth_to_color/image_raw", "./aligned_data", 0, 10)
+    # bag_to_pose("raw_10.bag", "/joint_states", "./aligned_data/joint_position.txt", "./aligned_data/joint_velocity.txt", 0, 10)
