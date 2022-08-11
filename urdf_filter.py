@@ -153,7 +153,7 @@ class FrankaPlaybackSim:
         _max = 1
         plt.imshow(real, vmin = _min, vmax = _max)
         # plt.imshow(real)
-        # red dot on the end-effector 
+        # red dot on the end-effector
         # plt.plot(300, 100, 'ro')
         # red dot on the panda_link0
         plt.plot(320,250,'ro')
@@ -186,11 +186,8 @@ if __name__ == "__main__":
     simulated_image = np.loadtxt('./aligned_data/simulated_depth.txt')
     # real_image = plt.imread('./aligned_data/frame00000{}.png'.format(frame_id))
     real_image = np.loadtxt('./aligned_data/real_depth.txt')
-    print(simulated_image[320,250])
-    print(real_image[320,250])
     # Need to multiply real depth images by 1000 since simulated depth image uses mm as unit
     mask = filter(real_image*1000, simulated_image)
-    print(mask[320,250])
     im = Image.fromarray(mask)
     if im.mode != 'RGB':
         im = im.convert('RGB')

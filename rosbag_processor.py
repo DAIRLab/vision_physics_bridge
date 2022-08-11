@@ -12,8 +12,36 @@ from cv_bridge import CvBridge
 import numpy as np
 import matplotlib.pyplot as plt
 
-def bag_to_images(bag_file, image_topic, output_dir, start_frame, end_frame):
-    """Extract a folder of images from a rosbag.
+def bag_to_rgb_images(bag_file, image_topic, output_dir, start_frame, end_frame):
+    """Extract a folder of RGB images from a rosbag.
+    """
+    print("Extract images from %s on topic %s into %s" % (bag_file,
+                                                          image_topic, 
+                                                          output_dir))
+
+    bag = rosbag.Bag(bag_file, "r")
+    bridge = CvBridge()
+    count = 0
+    for topic, msg, t in bag.read_messages(topics=[image_topic]):
+        count += 1
+        if count < start_frame:
+            continue
+        cv_img = bridge.imgmsg_to_cv2(msg, desired_encoding="passthrough")
+        cv2.imwrite(os.path.join(output_dir, "frame%06i.png" % count), cv_img)
+        # im = Image.fromarray(depth_array)
+        # if im.mode != 'RGB':
+        #     im = im.convert('RGB')
+        
+        print("Wrote image %i" % count)
+
+        # Rosbag is too large, we only keep the first 10 images
+        if count == end_frame:
+            break 
+    bag.close()
+    return
+
+def bag_to_depth_images(bag_file, image_topic, output_dir, start_frame, end_frame):
+    """Extract a folder of depth images from a rosbag.
     Command to run: python3 bag_to_images.py raw_10.bag /data /camera/depth/image_rect_raw
     """
     print("Extract images from %s on topic %s into %s" % (bag_file,
@@ -45,14 +73,13 @@ def bag_to_images(bag_file, image_topic, output_dir, start_frame, end_frame):
         # im.save(os.path.join(output_dir, "frame%06i.png" % count))
         print("Wrote image %i" % count)
 
-        
         # Rosbag is too large, we only keep the first 10 images
         if count == end_frame:
             break 
     arr = np.array(arr)
     arr_reshaped = arr.reshape(arr.shape[0], -1)
-    np.savetxt("./aligned_data/images.txt", arr_reshaped)
-    loaded_arr = np.loadtxt("./aligned_data/images.txt")
+    np.savetxt(IMAGE_FILE_PATH, arr_reshaped)
+    loaded_arr = np.loadtxt(IMAGE_FILE_PATH)
     load_original_arr = loaded_arr.reshape(
         loaded_arr.shape[0], loaded_arr.shape[1] // arr.shape[2], arr.shape[2])
     # check the shapes
@@ -106,5 +133,17 @@ def bag_to_pose(bagfile, pose_topic, outfile_position, outfile_velocity, start_f
     print('wrote ' + str(n) + ' imu messages to the file: ' + outfile_position + ' and ' + outfile_velocity) 
 
 if __name__ == '__main__':
-    bag_to_images("raw_10.bag", "/camera/aligned_depth_to_color/image_raw", "./aligned_data", 0, 10)
-    # bag_to_pose("raw_10.bag", "/joint_states", "./aligned_data/joint_position.txt", "./aligned_data/joint_velocity.txt", 0, 10)
+    DEPTH_ROS_TOPIC = "/camera/aligned_depth_to_color/image_raw"
+    JOINT_STATE_ROS_TOPIC = "/joint_states"
+    RGB_ROS_TOPIC = "/camera/color/image_raw"
+
+    IMAGE_FILE_PATH = "./aligned_data/images.txt"
+    POSITION_FILE_PATH = "./aligned_data/joint_position.txt"
+    VELOCITY_FILE_PATH = "./aligned_data/joint_velocity.txt"
+
+    DEPTH_OUTPUT_DIR = "./aligned_data"
+    RGB_OUTPUT_DIR = "./rgb_data"
+    ROSBAG_NAME = "raw_10.bag"
+    bag_to_rgb_images(ROSBAG_NAME, RGB_ROS_TOPIC, RGB_OUTPUT_DIR, 0, 10)
+    # bag_to_depth_images(ROSBAG_NAME, DEPTH_ROS_TOPIC, DEPTH_OUTPUT_DIR, 0, 10)
+    # bag_to_pose(ROSBAG_NAME, JOINT_STATE_ROS_TOPIC, POSITION_FILE_PATH, VELOCITY_FILE_PATH, 0, 10)
