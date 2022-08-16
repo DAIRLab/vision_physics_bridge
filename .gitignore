@@ -1,9 +1,5 @@
 /venv 
-/data
-/aligned_data
-/rgb_data
 *.bag
 *.tar.gz
 *.txt
-*.png
 /__pycache__
