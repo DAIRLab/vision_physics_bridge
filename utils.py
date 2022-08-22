@@ -1,6 +1,19 @@
 import numpy as np
 import math
 
+length = 182.8/100 #in meters
+width = 91.3/100
+height = 73.2/100
+# camera_buffer = 1
+robot_to_length = 46.9/100
+robot_to_width = 33.7/100
+robot_to_height = 1/100
+camera_x = 1.14164360
+camera_y = 0.15815239
+camera_z = 0.66422200
+cube_length = 10.2/100
+robot_base_length = 10/100 # this is inaccurate
+
 def filter(real_img, sim_img):
     """
     Filter the simulated image from the real depth image.
@@ -38,33 +51,29 @@ def rotation_matrix_to_euler(R):
     gamma = np.arctan2(R[1,0]/np.cos(beta),R[0,0]/np.cos(beta))
     return np.array((alpha, beta, gamma))
 
+def get_translation_between_pcd_and_base(x, y, z, K, R, T):
+    """
+    The origin of the point cloud is at (0,0,0) (where the mesh_frame is), whereas the frame of the base is at the base of the robot in ROS.
+    """
+    X, Y, Z = point_cloud_to_world(x, y, z, K, R, T, depth_scale=1000)
+    return X, Y, Z
+
 def get_table_world_coordinates():
     """
     Get table's world coordinate with camera extrinsics. X is towards to camera. Y is towards to right of the camera(facing the robot). Z is upward. 
     Note: Assume robot is in the middle of the table.
     return: (a, b, c, d) that corresponds to the left bottom, right bottom, left top, right top corner of the table.
     """
-    length = 182.8/100 #in meters
-    width = 91.3/100
-    height = 73.2/100
-    camera_buffer = 1
-    robot_to_length = 46.9/100
-    robot_to_width = 33.7/100
-    robot_to_height = 1/100
-    camera_x = 1.14164360
-    camera_y = 0.15815239
-    camera_z = 0.66422200
-    # left_bottom = [camera_x+camera_buffer, -width/2, height-robot_to_height]
-    # right_bottom = [camera_x+camera_buffer, width/2, height-robot_to_height]
-    # left_top = [-robot_to_width, -width/2, height-robot_to_height]
-    # right_top = [-robot_to_width, width/2, height-robot_to_height]
+    left_bottom = [camera_x-0.2, -width/2, -robot_to_height+cube_length]
+    right_bottom = [camera_x-0.2, width/2, -robot_to_height+cube_length]
+    left_top = [robot_base_length, -width/2, -robot_to_height+cube_length]
+    right_top = [robot_base_length, width/2, -robot_to_height+cube_length]
     # For some reason the ros and open3d have inverted x, y orientation. 
     # Also, the origin is at (0,0,0) instead of the robot base.
-    translation_y = -1
-    left_bottom = [-width/2, camera_x+translation_y, height-robot_to_height]
-    right_bottom = [width/2, camera_x+translation_y, height-robot_to_height]
-    left_top = [-width/2, -robot_to_width+translation_y, height-robot_to_height]
-    right_top = [width/2, -robot_to_width+translation_y, height-robot_to_height]
+    # left_bottom = [-width/2, camera_x, height-robot_to_height]
+    # right_bottom = [width/2, camera_x, height-robot_to_height]
+    # left_top = [-width/2, -robot_to_width, height-robot_to_height]
+    # right_top = [width/2, -robot_to_width, height-robot_to_height]
     return left_bottom, right_bottom, left_top, right_top
 
 def world_to_image(point, K, R, T):
@@ -78,6 +87,24 @@ def world_to_image(point, K, R, T):
     # 2dpoint screen = tmp.x/tmp.z, tmp.y / tmp.z
     world_coord = K @ R @ point + K @ T
     return world_coord[0] / world_coord[2], world_coord[1] / world_coord[2]
+
+def point_cloud_to_world(x, y, z, K, R, T, depth_scale=1000):
+    """
+    Transform (0,0,0) in point cloud back to world coordinates according to
+    z = d / depth_scale = -X / depth_scale
+    x = (u - cx) * z / fx
+    y = (v - cy) * z / fy
+    """
+    fx, fy = K[0][0], K[1][1]
+    cx, cy = K[0][2], K[1][2]
+    d = z * depth_scale
+    print(d)
+    u = (x * fx) / z + cx
+    print(x, fx, z, cy, u)
+    v = y * fy / z + cy
+    print(v)
+    X, Y, Z = -d, u, v
+    return X, Y, Z
 
 def world_to_point_cloud(X, Y, Z, K, R, T, depth_scale=1000):  
     """
@@ -125,4 +152,3 @@ def get_boundary(pcd):
     # x towards the robot
     # [-1.78202008  0.35017328 -2.00775471] [0.92882352 3.76741797 0.732     ]
     return left_bottom, left_bottom_
-
