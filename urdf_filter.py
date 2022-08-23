@@ -22,7 +22,7 @@ from manipulation.utils import FindResource
 import numpy as np
 import rospy
 from sensor_msgs.msg import JointState
-from utils import import_data, filter
+from utils import generate_depth_img_without_robot, generate_rgb_image_without_robot, import_data, filter
 
 """
 Note: I installed drake from source through CMake.
@@ -172,28 +172,26 @@ class FrankaPlaybackSim:
         # pdb.set_trace()
         # plt.show()
 
-    def mask_out_everything_except_cube(self):
-        return 
-
 if __name__ == "__main__":
+    frame_id = 1
     img_file = "./aligned_data/images.txt"
     position_file = "./aligned_data/joint_position.txt"
     velocity_file = "./aligned_data/joint_velocity.txt"
+    depth_image_file = "./aligned_data/frame00000{}.png".format(frame_id)
+    rgb_image_file = "./rgb_data/frame00000{}.png".format(frame_id)
+    mask_image_file = "./aligned_data/mask.png"
     images, positions, velocities = import_data(img_file, position_file, velocity_file)
-    frame_id = 1
     system = FrankaPlaybackSim(positions[frame_id], velocities[frame_id])
     system.plot_camera_images(frame_id)
     simulated_image = np.loadtxt('./aligned_data/simulated_depth.txt')
-    # real_image = plt.imread('./aligned_data/frame00000{}.png'.format(frame_id))
     real_image = np.loadtxt('./aligned_data/real_depth.txt')
     # Need to multiply real depth images by 1000 since simulated depth image uses mm as unit
     mask = filter(real_image*1000, simulated_image)
     im = Image.fromarray(mask)
-    if im.mode != 'RGB':
-        im = im.convert('RGB')
-    im.save("./aligned_data/mask.png")
-
+    if im.mode != 'L':
+        im = im.convert('L')
+    im.save(mask_image_file)
     # pdb.set_trace()
-    # plt.figure()
-    # plt.imshow(mask)
     plt.show()
+    generate_depth_img_without_robot(depth_image_file, mask_image_file)
+    # generate_rgb_image_without_robot(rgb_image_file, mask_image_file)

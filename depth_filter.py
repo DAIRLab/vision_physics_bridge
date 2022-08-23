@@ -1,17 +1,42 @@
 import open3d as o3d
 import numpy as np
-
-from utils import axis_angle_to_rotation_matrix, get_table_world_coordinates
+import matplotlib.pyplot as plt
+from utils import CUBE_LENGTH, axis_angle_to_rotation_matrix, get_table_world_coordinates
+from visualization import VisOpen3D
 """
 Filter out everything in the depth image except for the object of interest.
-TODO: Map table height/width in reality to point cloud height
-TODO: Take camera orientation into consideration when orienting the obb
+TODO: Combine urdf filter and depth filter together.
 """
-depth_image_title = './data/frame000001.png'
+def visualize_depth_image():
+    w = 640
+    h = 480
+    window_visible = True
+    vis = VisOpen3D(width=w, height=h, visible=window_visible)
+    vis.add_geometry(cropped_pcd)
+    intrinsic_matrix = K
+    extrinsic_matrix = extrinsic
+    vis.load_view_point(intrinsic_matrix, extrinsic_matrix)
+    depth = vis.capture_depth_float_buffer(show=False)
+    image = vis.capture_screen_float_buffer(show=False)
+    # print("visualizing rgb...")
+    vis.capture_screen_image("screen_image.png")
+    # print("visualizing depth...")
+    vis.capture_depth_image("depth_image.png")
+    # vis.draw_camera(intrinsic_matrix, extrinsic_matrix, scale=0.5, color=[0.8, 0.2, 0.8])
+    # vis.run()
+    vis.destroy_window()
+    del vis
+
+depth_image_title = './aligned_data/frame000001.png'
 color_image_title = './rgb_data/frame000001.png'
+# depth_image_title = './depth_without_robot.png'
+# color_image_title = './rgb_without_robot.png'
 depth = o3d.io.read_image(depth_image_title)
 color = o3d.io.read_image(color_image_title)
-
+# depth_arr = np.asarray(depth)
+# rgb_arr = np.asarray(color)
+# print(depth_arr.dtype)
+# print(rgb_arr.dtype)
 rgbd = o3d.geometry.RGBDImage.create_from_color_and_depth(color, depth, convert_rgb_to_intensity = False)
 # Setup camera intrinsic
 pinhole_camera_intrinsic = o3d.camera.PinholeCameraIntrinsic(
@@ -26,32 +51,27 @@ rotation_prime = rotation.T #USE THIS
 translation_prime = -rotation_prime @ translation #USE THIS
 extrinsic = np.vstack((np.hstack((rotation_prime, translation_prime)), np.array([0,0,0,1])))
 pcd = o3d.geometry.PointCloud.create_from_rgbd_image(rgbd, intrinsic=pinhole_camera_intrinsic, extrinsic=extrinsic)
-K = [[380.2484436035156, 0, 314.2138977050781],
+# pcd = o3d.geometry.PointCloud.create_from_depth_image(depth, intrinsic=pinhole_camera_intrinsic, extrinsic=extrinsic)
+K = np.array([[380.2484436035156, 0, 314.2138977050781],
     [0, 379.8265380859375, 240.59800720214844], 
-    [0, 0, 1]]
+    [0, 0, 1]])
 # Setup the orientatin of point cloud
 pcd_obb = pcd.get_oriented_bounding_box()
 mesh_frame = o3d.geometry.TriangleMesh.create_coordinate_frame(
     size=0.6, origin=[0,0,0])
 pcd_array = np.asarray(pcd.points)
 mesh_frame.translate(pcd_obb.center)
-
-# print("pcd:",pcd.get_oriented_bounding_box().R)
-# print("mesh:",mesh_frame.get_oriented_bounding_box().R)
 # o3d.visualization.draw_geometries([pcd, mesh_frame])
 
 left_bottom, right_bottom, left_top, right_top = get_table_world_coordinates()
-
 left_bottom_pcl = np.array((left_bottom[0], left_bottom[1], left_bottom[2]))
 right_bottom_pcl = np.array((right_bottom[0], right_bottom[1], right_bottom[2]))
 left_top_pcl = np.array((left_top[0], left_top[1], left_top[2]))
 right_top_pcl = np.array((right_top[0], right_top[1], right_top[2]))
-height_buffer = 0.1
-left_bottom_pcl_ = np.array((left_bottom[0], left_bottom[1], left_bottom[2]-height_buffer))
-right_bottom_pcl_ = np.array((right_bottom[0], right_bottom[1], right_bottom[2]-height_buffer))
-left_top_pcl_ = np.array((left_top[0], left_top[1], left_top[2]-height_buffer))
-right_top_pcl_ = np.array((right_top[0], right_top[1], right_top[2]-height_buffer))
-
+left_bottom_pcl_ = np.array((left_bottom[0], left_bottom[1], left_bottom[2]-CUBE_LENGTH))
+right_bottom_pcl_ = np.array((right_bottom[0], right_bottom[1], right_bottom[2]-CUBE_LENGTH))
+left_top_pcl_ = np.array((left_top[0], left_top[1], left_top[2]-CUBE_LENGTH))
+right_top_pcl_ = np.array((right_top[0], right_top[1], right_top[2]-CUBE_LENGTH))
 corners = np.array([left_bottom_pcl, right_bottom_pcl, left_top_pcl, right_top_pcl, left_bottom_pcl_, right_bottom_pcl_, left_top_pcl_, right_top_pcl_])
 print('x:', left_bottom_pcl[0], right_bottom_pcl[0], left_top_pcl[0], right_top_pcl[0], left_bottom_pcl_[0], right_bottom_pcl_[0], left_top_pcl_[0], right_top_pcl_[0])
 print('y:', left_bottom_pcl[1], right_bottom_pcl[1], left_top_pcl[1], right_top_pcl[1], left_bottom_pcl_[1], right_bottom_pcl_[1], left_top_pcl_[1], right_top_pcl_[1])
@@ -65,16 +85,13 @@ bounding_points = o3d.utility.Vector3dVector(bounding_polygon)
 oriented_bounding_box = o3d.geometry.OrientedBoundingBox.create_from_points(bounding_points)
 relative_rotation = coord_obb.R @ np.linalg.inv(oriented_bounding_box.R)
 oriented_bounding_box.rotate(R=relative_rotation, center=oriented_bounding_box.center)
-
+# Before cropping
 o3d.visualization.draw_geometries([pcd, oriented_bounding_box, mesh_frame])
 
-obb = pcd.get_oriented_bounding_box()
-obb.color = (0, 1, 0)
-length = 182.8/100 #x in ros, y in open3d
-width = 91.3/100 #y in ros, x in open3d
-height = 73.2/100 #z
-
 cropped_pcd = pcd.crop(oriented_bounding_box)
-# print(cropped_pcd.points)
+# After cropping
 o3d.visualization.draw_geometries([cropped_pcd, oriented_bounding_box, mesh_frame])
 # pick_points(pcd)
+
+# Visualize the depth image
+# visualize_depth_image()

@@ -147,20 +147,3 @@ if __name__ == '__main__':
     # bag_to_rgb_images(ROSBAG_NAME, RGB_ROS_TOPIC, RGB_OUTPUT_DIR, 0, 10)
     # bag_to_depth_images(ROSBAG_NAME, DEPTH_ROS_TOPIC, DEPTH_OUTPUT_DIR, 0, 10)
     # bag_to_pose(ROSBAG_NAME, JOINT_STATE_ROS_TOPIC, POSITION_FILE_PATH, VELOCITY_FILE_PATH, 0, 10)
-
-    mode_to_bpp = {'1':1, 'L':8, 'P':8, 'RGB':24, 'RGBA':32, 'CMYK':32, 'YCbCr':24, 'I':32, 'F':32}
-
-    data = Image.open('./data/frame000001.png')
-    data = Image.fromarray(np.array(data).astype("uint16"))
-    import imageio
-
-    imageio.imwrite('./data/frame000001.png', data)
-    data2 = Image.open('./data/frame000001.png')
-    print(data.mode)
-    print(data2.mode)
-    array_buffer = data.tobytes()
-    img = Image.new("I", np.array(data).T.shape)
-    img.frombytes(array_buffer, 'raw', "I;16")
-    img.save("16-bit_test_pillow.png")
-    # bpp = mode_to_bpp[data.mode]
-    # print(bpp)
