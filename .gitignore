@@ -3,3 +3,9 @@
 *.tar.gz
 *.txt
 /__pycache__
+/depth_data
+/rgb_data
+/mask_data
+/cube_data
+/filtered_data
+*.ipynb

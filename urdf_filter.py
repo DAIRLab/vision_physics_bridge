@@ -1,7 +1,6 @@
 import matplotlib.pyplot as plt
 import matplotlib.image as mpimg
 import pdb
-# import imageio
 from PIL import Image
 from pydrake.multibody.parsing import Parser
 from pydrake.multibody.plant import AddMultibodyPlantSceneGraph
@@ -12,11 +11,9 @@ from pydrake.all import (AddMultibodyPlantSceneGraph, AngleAxis,
                          CameraInfo, ClippingRange, DepthRange,
                          DepthRenderCamera, DiagramBuilder,
                          MeshcatVisualizer, MeshcatVisualizerParams, Parser,
-                         PiecewisePose, PointCloud, RigidTransform,
-                         RollPitchYaw, RenderCameraCore, RotationMatrix, Simulator, StartMeshcat)
+                         RigidTransform, RenderCameraCore, Simulator, StartMeshcat)
 from pydrake.common import FindResourceOrThrow
 from pydrake.common.eigen_geometry import AngleAxis
-from pydrake.multibody.meshcat import JointSliders
 from manipulation.scenarios import (AddMultibodyTriad, AddRgbdSensor)
 from manipulation.utils import FindResource
 import numpy as np
@@ -25,6 +22,7 @@ from sensor_msgs.msg import JointState
 from utils import generate_depth_img_without_robot, generate_rgb_image_without_robot, import_data, filter
 
 """
+Generate robot masks for every frame in mask_data.
 Note: I installed drake from source through CMake.
 """
 
@@ -51,12 +49,9 @@ class FrankaPlaybackSim:
         axis = axis_vec / angle
         angle_axis = AngleAxis(angle=angle,axis=axis)
         self.X_Camera = RigidTransform(angle_axis, camera_pos)
-
         self.camera_instance = self.parser.AddModelFromFile(FindResource("models/camera_box.sdf"))
         self.camera_frame = self.plant.GetFrameByName("base", self.camera_instance)    
         self.plant.WeldFrames(self.plant.world_frame(), self.camera_frame, self.X_Camera)
-        # Not sure what this line does
-        # AddMultibodyTriad(self.camera_frame, self.scene_graph, length=.1, radius=0.005)
         self.plant.Finalize()
 
         # Visualize in meshcat
@@ -102,24 +97,17 @@ class FrankaPlaybackSim:
         # self.simulator.Initialize()
 
     def build(self):
-        # Setup JointSlider to control joint configuration
-        # default_interactive_timeout = 1.0 if "TEST_SRCDIR" in os.environ else None
-        # sliders = self.builder.AddSystem(JointSliders(meshcat, self.plant))
         diagram = self.builder.Build()
-        # sliders.Run(diagram, default_interactive_timeout)
         diagram.set_name("depth_camera_demo_system")
         return diagram
 
-    
     def visualize(self):
         def callback(msg):
             global q, v, f
             q = np.array(msg.position)
             v = np.array(msg.velocity)
             f = np.array(msg.effort)
-
         rospy.init_node('listener', anonymous=True)
-        
         rospy.Subscriber('/joint_states', JointState, callback=callback)
         rate = rospy.Rate(4)
         rate.sleep()
@@ -129,69 +117,62 @@ class FrankaPlaybackSim:
             self.plot_camera_images()
             self.simulator.Initialize()
             rate.sleep()
-            # break
 
 
-    def plot_camera_images(self, frame_id):
+    def plot_camera_images(self, real_depth_dir, simulated_depth_dir, img_dir, frame_id):
         color_image = self.diagram.GetOutputPort("color_image").Eval(self.context)
         depth_image = self.diagram.GetOutputPort("depth_image").Eval(self.context)
 
         # Plot the two images.
         plt.subplot(121)
-        
         # plt.imshow(color_image.data)
         # plt.title('Color image')
-
-        # real = plt.imread('./aligned_data/frame00000{}.png'.format(frame_id))
-
-        loaded_arr = np.loadtxt("./aligned_data/images.txt")
+        loaded_arr = np.loadtxt(img_dir)
         load_original_arr = loaded_arr.reshape(
         loaded_arr.shape[0], loaded_arr.shape[1] // 640, 640)
         real = load_original_arr[0]
-        np.savetxt('./aligned_data/real_depth.txt', real)
+        np.savetxt(real_depth_dir, real)
         _min = 0
         _max = 1
         plt.imshow(real, vmin = _min, vmax = _max)
-        # plt.imshow(real)
-        # red dot on the end-effector
-        # plt.plot(300, 100, 'ro')
-        # red dot on the panda_link0
         plt.plot(320,250,'ro')
         plt.colorbar()
         plt.title('Real image')
         plt.subplot(122)
         plt.imshow(np.squeeze(depth_image.data), vmin = _min, vmax = _max) #(480.640,1)
-        # plt.imshow(depth_image.data[:,:,0])
         plt.plot(320, 250, 'ro')
         plt.colorbar()
         plt.title('Depth image')
-        np.savetxt('./aligned_data/simulated_depth.txt', depth_image.data[:,:,0])
-        
-        # print(real[315:320, 250:255])
-        # print(depth_image.data[315:320, 250:255,0])
+        np.savetxt(simulated_depth_dir, depth_image.data[:,:,0])
         # pdb.set_trace()
         # plt.show()
 
 if __name__ == "__main__":
-    frame_id = 1
-    img_file = "./aligned_data/images.txt"
-    position_file = "./aligned_data/joint_position.txt"
-    velocity_file = "./aligned_data/joint_velocity.txt"
-    depth_image_file = "./aligned_data/frame00000{}.png".format(frame_id)
-    rgb_image_file = "./rgb_data/frame00000{}.png".format(frame_id)
-    mask_image_file = "./aligned_data/mask.png"
-    images, positions, velocities = import_data(img_file, position_file, velocity_file)
-    system = FrankaPlaybackSim(positions[frame_id], velocities[frame_id])
-    system.plot_camera_images(frame_id)
-    simulated_image = np.loadtxt('./aligned_data/simulated_depth.txt')
-    real_image = np.loadtxt('./aligned_data/real_depth.txt')
-    # Need to multiply real depth images by 1000 since simulated depth image uses mm as unit
-    mask = filter(real_image*1000, simulated_image)
-    im = Image.fromarray(mask)
-    if im.mode != 'L':
-        im = im.convert('L')
-    im.save(mask_image_file)
-    # pdb.set_trace()
-    plt.show()
-    generate_depth_img_without_robot(depth_image_file, mask_image_file)
-    # generate_rgb_image_without_robot(rgb_image_file, mask_image_file)
+    start_frame_id = 1
+    end_frame_id = 10
+    img_file = "./depth_data/images.txt" #depth image in the form of txt
+    position_file = "./depth_data/joint_position.txt" #joint positions
+    velocity_file = "./depth_data/joint_velocity.txt" #joint velocities
+    for frame_id in range(start_frame_id, end_frame_id):
+        depth_image_file = "./depth_data/depth_frame00000{}.png".format(frame_id)
+        rgb_image_file = "./rgb_data/frame00000{}.png".format(frame_id)
+        mask_image_file = "./mask_data/mask_frame00000{}.png".format(frame_id)
+        real_depth_file = "./depth_data/real_depth_frame00000{}.txt".format(frame_id)
+        simulated_depth_file = "./depth_data/simulated_depth_frame00000{}.txt".format(frame_id)
+        filtered_robot_file = "./filtered_data/depth_without_robot_frame00000{}.png".format(frame_id)
+        filtered_rgb_file = "./filtered_data/rgb_without_robot_frame00000{}.png".format(frame_id)
+        images, positions, velocities = import_data(img_file, position_file, velocity_file)
+        system = FrankaPlaybackSim(positions[frame_id], velocities[frame_id])
+        system.plot_camera_images(real_depth_file, simulated_depth_file, img_file, frame_id)
+        simulated_image = np.loadtxt(simulated_depth_file)
+        real_image = np.loadtxt(real_depth_file)
+        # Need to multiply real depth images by 1000 since simulated depth image uses mm as unit
+        mask = filter(real_image*1000, simulated_image)
+        im = Image.fromarray(mask)
+        if im.mode != 'L':
+            im = im.convert('L')
+        im.save(mask_image_file)
+        # pdb.set_trace()
+        plt.show()
+        generate_depth_img_without_robot(real_depth_file, mask_image_file, filtered_robot_file)
+        generate_rgb_image_without_robot(rgb_image_file, mask_image_file, filtered_rgb_file) #optional, seems the point cloud looks fine with the unfiltered rgb data
