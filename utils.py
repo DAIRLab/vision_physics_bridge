@@ -4,18 +4,10 @@ import math
 from PIL import Image
 import matplotlib.pyplot as plt 
 import imageio
-
-TABLE_LENGTH = 182.8/100 #in meters
-TABLE_WIDTH = 91.3/100
-TABLE_HEIGHT = 73.2/100
-ROBOT_TO_LENGTH = 46.9/100 # robot base to long side of table
-ROBOT_TO_WIDTH = 33.7/100 # robot base to short side of table
-ROBOT_TO_HEIGHT = 1/100 # height from robot base to table surface
-CAMERA_X = 1.14164360
-CAMERA_Y = 0.15815239
-CAMERA_Z = 0.66422200
-CUBE_LENGTH = 10.2/100
-ROBOT_BASE_LENGTH = 12/100 # this is inaccurate
+from tqdm import tqdm
+from PIL import Image
+import glob
+import cv2
 
 def filter(real_img, sim_img):
     """
@@ -41,9 +33,9 @@ def generate_depth_img_without_robot(depth_dir, mask_dir, filtered_depth_dir):
         for j in range(mask_array.shape[1]):
             if mask_array[i][j] == 255:
                 filtered_depth[i][j] = 0
-    plt.imshow(filtered_depth)
-    plt.colorbar()
-    plt.show()
+    # plt.imshow(filtered_depth)
+    # plt.colorbar()
+    # plt.show()
     imageio.imwrite(filtered_depth_dir, filtered_depth.astype(np.uint16))
     return filtered_depth
 
@@ -57,29 +49,43 @@ def generate_rgb_image_without_robot(rgb_dir, mask_dir, filtered_rgb_dir):
     rgb_img = Image.open(rgb_dir)
     mask_img = Image.open(mask_dir)
     rgb_array = np.array(rgb_img)
-    mask_img_ = np.zeros((np.array(mask_img).shape[0], np.array(mask_img).shape[1], 3))
-    mask_img_[:,:,0] = mask_img
-    mask_img_[:,:,1] = mask_img
-    mask_img_[:,:,2] = mask_img
-    mask_array = np.array(mask_img_)
-    filtered_rgb = np.subtract(rgb_array, mask_array)
-    plt.imshow(filtered_rgb)
-    plt.show()
-    # im = Image.fromarray(filtered_rgb)
-    im = Image.fromarray((filtered_rgb * 255).astype(np.uint8))
-    if im.mode != 'RGB':
-        im = im.convert('RGB')
-    im.save(filtered_rgb_dir)
+    mask_array = np.array(mask_img)
+    filtered_rgb = copy.deepcopy(rgb_array)
+    for i in range(mask_array.shape[0]):
+        for j in range(mask_array.shape[1]):
+            if mask_array[i][j] == 255:
+                filtered_rgb[i][j][0] = 0
+                filtered_rgb[i][j][1] = 0
+                filtered_rgb[i][j][2] = 0
+    # plt.imshow(filtered_rgb)
+    # plt.show()
+    imageio.imwrite(filtered_rgb_dir, filtered_rgb)
     return filtered_rgb
 
 def import_data(img_file, position_file, velocity_file):
     """
     Load data generated from rosbag.
     """
-    images = np.loadtxt(img_file)
+    # images = np.loadtxt(img_file) #importing images is very slow
     positions = np.loadtxt(position_file)
     velocities = np.loadtxt(velocity_file)
-    return images, positions, velocities
+    print("position and velocities imported!")
+    return positions, velocities
+
+def write_real_depth_as_txt(start_frame, end_frame):
+    """
+    Save real depth txt at once since image I/O is very slow. 
+    """
+    img_dir = "./depth_data/images.txt" #depth image in the form of txt
+    loaded_arr = np.loadtxt(img_dir)
+    load_original_arr = loaded_arr.reshape(
+    loaded_arr.shape[0], loaded_arr.shape[1] // 640, 640)
+    print("Done loading images.")
+    for frame_id in tqdm(range(start_frame, end_frame)):
+        real_depth_dir = "./depth_data/real_depth_frame00000{}.txt".format(frame_id)
+        print("frame_id", frame_id)
+        real = load_original_arr[frame_id]
+        np.savetxt(real_depth_dir, real)
 
 def axis_angle_to_rotation_matrix(axis, theta):
     """
@@ -108,24 +114,6 @@ def get_translation_between_pcd_and_base(x, y, z, K, R, T):
     """
     X, Y, Z = point_cloud_to_world(x, y, z, K, R, T, depth_scale=1000)
     return X, Y, Z
-
-def get_table_world_coordinates():
-    """
-    Get table's world coordinate with camera extrinsics. X is towards to camera. Y is towards to right of the camera(facing the robot). Z is upward. 
-    Note: Assume robot is in the middle of the table.
-    return: (a, b, c, d) that corresponds to the left bottom, right bottom, left top, right top corner of the table.
-    """
-    left_bottom = [CAMERA_X-0.2, -TABLE_WIDTH/2, -ROBOT_TO_HEIGHT+CUBE_LENGTH]
-    right_bottom = [CAMERA_X-0.2, TABLE_WIDTH/2, -ROBOT_TO_HEIGHT+CUBE_LENGTH]
-    left_top = [ROBOT_BASE_LENGTH, -TABLE_WIDTH/2, -ROBOT_TO_HEIGHT+CUBE_LENGTH]
-    right_top = [ROBOT_BASE_LENGTH, TABLE_WIDTH/2, -ROBOT_TO_HEIGHT+CUBE_LENGTH]
-    # For some reason the ros and open3d have inverted x, y orientation. 
-    # Also, the origin is at (0,0,0) instead of the robot base.
-    # left_bottom = [-width/2, camera_x, height-robot_to_height]
-    # right_bottom = [width/2, camera_x, height-robot_to_height]
-    # left_top = [-width/2, -robot_to_width, height-robot_to_height]
-    # right_top = [width/2, -robot_to_width, height-robot_to_height]
-    return left_bottom, right_bottom, left_top, right_top
 
 def world_to_image(point, K, R, T):
     """
@@ -172,3 +160,54 @@ def world_to_point_cloud(X, Y, Z, K, R, T, depth_scale=1000):
     y = (v - K[1][2]) * z / K[1][1]
     z = -X / depth_scale
     return x, y, z
+
+def render_gif():
+    """
+    Make pngs into a gif.
+    """
+    frames = []
+    for frame_id in range(1, 4432):
+        name = "./cube_data/screen_image_frame00000{}.png".format(frame_id)
+        new_frame = Image.open(name)
+        frames.append(new_frame)
+    # Save into a GIF file that loops forever
+    frames[0].save('./png_to_gif.gif', format='GIF',
+                append_images=frames[1:],
+                save_all=True,
+                duration=300, loop=0)
+
+def render_video():
+    """
+    Make pngs into a video for easy view.
+    """
+    img_array = []
+    for filename in glob.glob('C:/New folder/Images/*.jpg'):
+        img = cv2.imread(filename)
+        height, width, layers = img.shape
+        size = (width,height)
+        img_array.append(img)
+    out = cv2.VideoWriter('project.avi',cv2.VideoWriter_fourcc(*'DIVX'), 15, size)
+    for i in range(len(img_array)):
+        out.write(img_array[i])
+    out.release()
+
+def main():
+    # for frame_id in tqdm(range(1, 4432)):
+    #     real_depth_file = "./depth_data/real_depth_frame00000{}.txt".format(frame_id)
+    #     mask_image_file = "./mask_data/mask_frame00000{}.png".format(frame_id)
+    #     filtered_depth_file = "./filtered_data/depth_without_robot_frame00000{}.png".format(frame_id)
+    #     generate_depth_img_without_robot(real_depth_file, mask_image_file, filtered_depth_file)
+    #     rgb_image_file = "./rgb_data/frame%06i.png" % frame_id
+    #     filtered_rgb_file = "./filtered_data/rgb_without_robot_frame00000{}.png".format(frame_id)
+    #     generate_rgb_image_without_robot(rgb_image_file, mask_image_file, filtered_rgb_file)
+    frame_id = 104
+    real_depth_file = "./depth_data/real_depth_frame00000{}.txt".format(frame_id)
+    mask_image_file = "./dilated_mask_data/frame00000{}.png".format(frame_id)
+    filtered_depth_file = "./filtered_data/depth_without_robot_frame00000{}.png".format(frame_id)
+    generate_depth_img_without_robot(real_depth_file, mask_image_file, filtered_depth_file)
+    rgb_image_file = "./rgb_data/frame%06i.png" % frame_id
+    filtered_rgb_file = "./filtered_data/rgb_without_robot_frame00000{}.png".format(frame_id)
+    generate_rgb_image_without_robot(rgb_image_file, mask_image_file, filtered_rgb_file)
+
+if __name__ == "__main__":
+    main()

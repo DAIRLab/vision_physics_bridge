@@ -8,4 +8,6 @@
 /mask_data
 /cube_data
 /filtered_data
+/dilated_mask_data
 *.ipynb
+*.gif
