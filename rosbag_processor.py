@@ -10,6 +10,8 @@ import numpy as np
 import matplotlib.pyplot as plt
 from tqdm import tqdm
 
+from utils import quaternion_rotation_matrix
+
 def bag_to_rgb_images(bag_file, image_topic, output_dir, start_frame, end_frame):
     """Extract a folder of RGB images from a rosbag.
     """
@@ -125,16 +127,21 @@ def bag_to_pose(bagfile, pose_topic, outfile_position, outfile_velocity, start_f
         print("shape of loaded_velocity: ", loaded_velocity.shape)
     print('wrote ' + str(n) + ' imu messages to the file: ' + outfile_position + ' and ' + outfile_velocity) 
 
-def extract_poses_with_timestamps(bagfile, depth_topic, pose_topic, outfile_position, outfile_velocity, start_frame, end_frame):
+def extract_poses_with_timestamps(bagfile, depth_topic, rgb_topic, pose_topic, outfile_position, outfile_velocity, outfile_rgb, start_frame, end_frame):
     """
     Extract poses from rosbag according to matching timestamps between depth topic and pose topic.
+    This is the only function necessary for processing the rosbag.
     """
-    depth_timestamps = {}
-    pose_timestamps = {}
-    final_timestamps = {}
+    bridge = CvBridge()
+    depth_timestamps = {} # depth topic
+    pose_timestamps = {} # pose topic
+    final_pose_timestamps = {} # timestamps to extract for pose topic
+    rgb_timestamps = {} # rgb topic
+    final_rgb_timestamps = {} # timestamps to extract for rgb topic
     position = []
     velocity = []
     n = start_frame
+    m = start_frame
     with rosbag.Bag(bagfile, 'r') as bag:
         for (topic, msg, ts) in bag.read_messages(topics=str(depth_topic)):
             print("processing ", ts)
@@ -142,7 +149,8 @@ def extract_poses_with_timestamps(bagfile, depth_topic, pose_topic, outfile_posi
                 depth_timestamps[msg.header.stamp.secs] = []
             depth_timestamps[msg.header.stamp.secs].append(msg.header.stamp.nsecs)
         print("The length of the depth_timestamps is {}".format(len(depth_timestamps)))
-
+        
+        # Processing pose topic
         # Get the hashmap for pose topic
         for (topic, msg, ts) in bag.read_messages(topics=str(pose_topic)):
             if msg.header.stamp.secs in depth_timestamps.keys():
@@ -152,8 +160,8 @@ def extract_poses_with_timestamps(bagfile, depth_topic, pose_topic, outfile_posi
         print("Finished processing pose_timestamps")
         
         for secs in tqdm(depth_timestamps.keys()):
-            if secs not in final_timestamps.keys():
-                final_timestamps[secs] = []
+            if secs not in final_pose_timestamps.keys():
+                final_pose_timestamps[secs] = []
             for nsecs in depth_timestamps[secs]:
                 closest_nsecs = math.inf
                 result_nsecs = nsecs
@@ -161,12 +169,12 @@ def extract_poses_with_timestamps(bagfile, depth_topic, pose_topic, outfile_posi
                     if abs(pose_nsecs - nsecs) < closest_nsecs:
                         result_nsecs = pose_nsecs
                         closest_nsecs = abs(pose_nsecs - nsecs)
-                final_timestamps[secs].append(result_nsecs)
-        print("Finished recording final_timestamps")
+                final_pose_timestamps[secs].append(result_nsecs)
+        print("Finished recording final_pose_timestamps")
 
         # Extract poses with the timestamps we want to keep
         for (topic, msg, ts) in bag.read_messages(topics=str(pose_topic)):
-            if msg.header.stamp.secs in final_timestamps.keys() and msg.header.stamp.nsecs in final_timestamps[msg.header.stamp.secs]:
+            if msg.header.stamp.secs in final_pose_timestamps.keys() and msg.header.stamp.nsecs in final_pose_timestamps[msg.header.stamp.secs]:
                 reordered_position = [0] * len(msg.position)
                 reordered_position[:7] = msg.position[2:]
                 reordered_position[-2:] = msg.position[:2]
@@ -191,21 +199,90 @@ def extract_poses_with_timestamps(bagfile, depth_topic, pose_topic, outfile_posi
         print("shape of loaded_position: ", loaded_position.shape)
         print("shape of velocity: ", velocity.shape)
         print("shape of loaded_velocity: ", loaded_velocity.shape)
+        
+        # Processing RGB topic
+        for (topic, msg, ts) in bag.read_messages(topics=str(rgb_topic)):
+            if msg.header.stamp.secs in depth_timestamps.keys():
+                if msg.header.stamp.secs not in rgb_timestamps.keys():
+                    rgb_timestamps[msg.header.stamp.secs] = []
+                rgb_timestamps[msg.header.stamp.secs].append(msg.header.stamp.nsecs)
+        print("Finished processing rgb_timestamps")
+
+        for secs in tqdm(depth_timestamps.keys()):
+            if secs not in final_rgb_timestamps.keys():
+                final_rgb_timestamps[secs] = []
+            for nsecs in depth_timestamps[secs]:
+                closest_nsecs = math.inf
+                result_nsecs = nsecs
+                for pose_nsecs in rgb_timestamps[secs]:
+                    if abs(pose_nsecs - nsecs) < closest_nsecs:
+                        result_nsecs = pose_nsecs
+                        closest_nsecs = abs(pose_nsecs - nsecs)
+                final_rgb_timestamps[secs].append(result_nsecs)
+        print("Finished recording final_rgb_timestamps")
+
+        for (topic, msg, ts) in bag.read_messages(topics=str(rgb_topic)):
+            if msg.header.stamp.secs in final_rgb_timestamps.keys() and msg.header.stamp.nsecs in final_rgb_timestamps[msg.header.stamp.secs]:
+                cv_img = bridge.imgmsg_to_cv2(msg, desired_encoding="passthrough")
+                cv2.imwrite(os.path.join(outfile_rgb, "frame%06i.png" % m), cv_img)
+                m += 1
+                print("Wrote image %i" % m)
+
     print('wrote ' + str(n) + ' imu messages to the file: ' + outfile_position + ' and ' + outfile_velocity) 
 
+def extract_cube_pose(depth_bag_file, odom_bag_file, depth_topic, odom_topic, output_file):
+    """
+    Extract the pose information of the cube for the first frame from the rosbag generated by tagslam.
+    """
+    depth_bag = rosbag.Bag(depth_bag_file, "r")
+    bag = rosbag.Bag(odom_bag_file, "r")
+    secs = 0
+    nsecs = 0
+    for (topic, msg, ts) in depth_bag.read_messages(topics=str(depth_topic)):
+        secs = msg.header.stamp.secs
+        nsecs = msg.header.stamp.nsecs
+        print("depth timestamp: ", secs, nsecs)
+        break
+    # Find the timestamp that matches the first frame of the depth topic
+    for topic, msg, t in bag.read_messages(topics=str(odom_topic)):
+        closest_nsecs = np.inf
+        if msg.header.stamp.secs == secs:
+            if msg.header.stamp.nsecs - nsecs < closest_nsecs:
+                print('Updating...')
+                nsecs = msg.header.stamp.nsecs
+                closest_nsecs = msg.header.stamp.nsecs - nsecs
+    for topic, msg, t in bag.read_messages(topics=str(odom_topic)):
+        if msg.header.stamp.secs == secs and msg.header.stamp.nsecs == nsecs:
+            Q = np.zeros((4, 1))
+            Q[0] = msg.pose.pose.orientation.x
+            Q[1] = msg.pose.pose.orientation.y
+            Q[2] = msg.pose.pose.orientation.z
+            Q[3] = msg.pose.pose.orientation.w
+            rotation_matrix = quaternion_rotation_matrix(Q)[:,:,0]
+            position = msg.pose.pose.position
+            translation = np.array([[position.x], [position.y], [position.z]])
+            result = np.vstack((np.hstack((rotation_matrix, translation)), np.array([0,0,0,1])))
+            np.savetxt(output_file, result)
+            break
+    bag.close()
+    return
 if __name__ == '__main__':
     DEPTH_ROS_TOPIC = "/camera/aligned_depth_to_color/image_raw"
     JOINT_STATE_ROS_TOPIC = "/joint_states"
     RGB_ROS_TOPIC = "/camera/color/image_raw"
+    ODOM_ROS_TOPIC = "/tagslam/odom/body_cube"
 
     IMAGE_FILE_PATH = "./depth_data/images.txt"
     POSITION_FILE_PATH = "./depth_data/joint_position.txt"
     VELOCITY_FILE_PATH = "./depth_data/joint_velocity.txt"
+    ODOM_FILE_PATH = "/home/cnets-vision/mengti_ws/BundleTrack/Data/YCBINEOAT/contact_nets/annotated_poses/0000.txt"
 
     DEPTH_OUTPUT_DIR = "./depth_data"
     RGB_OUTPUT_DIR = "./rgb_data"
     ROSBAG_NAME = "raw_10.bag"
-    bag_to_rgb_images(ROSBAG_NAME, RGB_ROS_TOPIC, RGB_OUTPUT_DIR, 0, 10)
+    ODOM_ROSBAG_NAME = "odom_10.bag" #Rosbag generated by tagslam
+    # bag_to_rgb_images(ROSBAG_NAME, RGB_ROS_TOPIC, RGB_OUTPUT_DIR, 0, 10)
     # bag_to_depth_images(ROSBAG_NAME, DEPTH_ROS_TOPIC, DEPTH_OUTPUT_DIR, 0, 10)
     # bag_to_pose(ROSBAG_NAME, JOINT_STATE_ROS_TOPIC, POSITION_FILE_PATH, VELOCITY_FILE_PATH, 0, 10)
-    # extract_poses_with_timestamps(ROSBAG_NAME, DEPTH_ROS_TOPIC, JOINT_STATE_ROS_TOPIC, POSITION_FILE_PATH, VELOCITY_FILE_PATH, 0, 10)
+    # extract_poses_with_timestamps(ROSBAG_NAME, DEPTH_ROS_TOPIC, RGB_ROS_TOPIC, JOINT_STATE_ROS_TOPIC, POSITION_FILE_PATH, VELOCITY_FILE_PATH, RGB_OUTPUT_DIR, 0, 10)
+    extract_cube_pose(ROSBAG_NAME, ODOM_ROSBAG_NAME, DEPTH_ROS_TOPIC, ODOM_ROS_TOPIC, ODOM_FILE_PATH)

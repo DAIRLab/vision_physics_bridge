@@ -21,7 +21,8 @@ from manipulation.utils import FindResource
 import numpy as np
 import rospy
 from sensor_msgs.msg import JointState
-from utils import generate_depth_img_without_robot, generate_rgb_image_without_robot, import_data, filter
+from utils import import_data, filter
+from tqdm import tqdm
 
 """
 Generate robot masks for every frame in mask_data.
@@ -38,7 +39,7 @@ class FrankaPlaybackSim:
         self.plant, self.scene_graph = AddMultibodyPlantSceneGraph(self.builder, time_step=0.0)
         self.X_model = RigidTransform.Identity()
         self.parser = Parser(self.plant)
-        self.model_file = FindResourceOrThrow("drake/manipulation/models/franka_description/urdf/panda_arm_hand.urdf")
+        self.model_file = FindResourceOrThrow("drake/manipulation/models/franka_description/urdf/panda_arm_hand_wide_finger.urdf")
         self.model = self.parser.AddModelFromFile(self.model_file)
         
         self.plant.WeldFrames(self.plant.world_frame(),
@@ -176,12 +177,13 @@ def dilate(frame_id):
 
     
 def main():
-    start_frame_id = 4431
+    start_frame_id = 4400
     end_frame_id = 4432
     img_file = "./depth_data/images.txt" #depth image in the form of txt
     position_file = "./depth_data/joint_position.txt" #joint positions
     velocity_file = "./depth_data/joint_velocity.txt" #joint velocities
-    for frame_id in range(start_frame_id, end_frame_id):
+    positions, velocities = import_data(img_file, position_file, velocity_file)
+    for frame_id in tqdm(range(start_frame_id, end_frame_id)):
         depth_image_file = "./depth_data/frame00000{}.png".format(frame_id)
         rgb_image_file = "./rgb_data/frame00000{}.png".format(frame_id)
         mask_image_file = "./mask_data/mask_frame00000{}.png".format(frame_id)
@@ -189,7 +191,6 @@ def main():
         simulated_depth_file = "./depth_data/simulated_depth_frame00000{}.txt".format(frame_id)
         filtered_depth_file = "./filtered_data/depth_without_robot_frame00000{}.png".format(frame_id)
         filtered_rgb_file = "./filtered_data/rgb_without_robot_frame00000{}.png".format(frame_id)
-        positions, velocities = import_data(img_file, position_file, velocity_file)
         system = FrankaPlaybackSim(positions[frame_id], velocities[frame_id], frame_id)
         system.plot_camera_images(real_depth_file, simulated_depth_file, img_file)
         simulated_image = np.loadtxt(simulated_depth_file)
@@ -208,4 +209,5 @@ def main():
 
 if __name__ == "__main__":
     # main()
-    dilate(104)
+    for frame_id in tqdm(range(1, 4432)):
+        dilate(frame_id)

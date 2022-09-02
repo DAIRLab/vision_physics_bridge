@@ -132,9 +132,9 @@ class VisOpen3D:
         self.__vis.capture_depth_image(filename, do_render=True)
 
         # to read the saved depth image file use:
-        depth = o3d.io.read_image(filename)
-        plt.imshow(depth)
-        plt.show()
+        # depth = o3d.io.read_image(filename)
+        # plt.imshow(depth)
+        # plt.show()
 
     def draw_camera(self, intrinsic, extrinsic, scale=1, color=None):
         # intrinsics

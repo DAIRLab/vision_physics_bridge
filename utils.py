@@ -1,4 +1,6 @@
+from concurrent.futures import process
 import copy
+from tkinter import E
 import numpy as np
 import math
 from PIL import Image
@@ -8,6 +10,9 @@ from tqdm import tqdm
 from PIL import Image
 import glob
 import cv2
+import glob
+import shutil
+import os
 
 def filter(real_img, sim_img):
     """
@@ -87,6 +92,40 @@ def write_real_depth_as_txt(start_frame, end_frame):
         real = load_original_arr[frame_id]
         np.savetxt(real_depth_dir, real)
 
+def denoise(frame_id):
+    """
+    Filter out small pieces of noise from depth images. 
+    """
+    img_dir = "./cube_data/depth_image_frame00000{}.png".format(frame_id)
+    denoise_mask_dir = "./denoise_cube_data/frame00000{}.png".format(frame_id)
+
+    # Load image, convert to grayscale, Gaussian blur, Otsu's threshold
+    image = cv2.imread(img_dir)
+    gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+    blur = cv2.GaussianBlur(gray, (3,3), 0)
+    thresh = cv2.threshold(blur, 0, 255, cv2.THRESH_BINARY_INV + cv2.THRESH_OTSU)[1]
+
+    # Filter using contour area and remove small noise
+    cnts = cv2.findContours(thresh, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
+    cnts = cnts[0] if len(cnts) == 2 else cnts[1]
+    for c in cnts:
+        area = cv2.contourArea(c)
+        if area < 50:
+            cv2.drawContours(thresh, [c], -1, (0,0,0), -1)
+
+    # Morph close and invert image
+    kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (8,8))
+    close = 255 - cv2.morphologyEx(thresh, cv2.MORPH_CLOSE, kernel, iterations=2)
+
+    # cv2.imshow('thresh', thresh)
+    # cv2.imshow('close', close)
+    # cv2.waitKey()
+    # cv2.destroyAllWindows()
+    im = Image.fromarray(close)
+    if im.mode != 'L':
+        im = im.convert('L')
+    im.save(denoise_mask_dir)
+
 def axis_angle_to_rotation_matrix(axis, theta):
     """
     Return the rotation matrix associated with counterclockwise rotation about
@@ -108,12 +147,44 @@ def rotation_matrix_to_euler(R):
     gamma = np.arctan2(R[1,0]/np.cos(beta),R[0,0]/np.cos(beta))
     return np.array((alpha, beta, gamma))
 
-def get_translation_between_pcd_and_base(x, y, z, K, R, T):
+def quaternion_rotation_matrix(Q):
     """
-    The origin of the point cloud is at (0,0,0) (where the mesh_frame is), whereas the frame of the base is at the base of the robot in ROS.
+    Covert a quaternion into a full three-dimensional rotation matrix.
+ 
+    Input
+    :param Q: A 4 element array representing the quaternion (q0,q1,q2,q3) 
+ 
+    Output
+    :return: A 3x3 element matrix representing the full 3D rotation matrix. 
+             This rotation matrix converts a point in the local reference 
+             frame to a point in the global reference frame.
     """
-    X, Y, Z = point_cloud_to_world(x, y, z, K, R, T, depth_scale=1000)
-    return X, Y, Z
+    # Extract the values from Q
+    q0 = Q[0]
+    q1 = Q[1]
+    q2 = Q[2]
+    q3 = Q[3]
+     
+    # First row of the rotation matrix
+    r00 = 2 * (q0 * q0 + q1 * q1) - 1
+    r01 = 2 * (q1 * q2 - q0 * q3)
+    r02 = 2 * (q1 * q3 + q0 * q2)
+     
+    # Second row of the rotation matrix
+    r10 = 2 * (q1 * q2 + q0 * q3)
+    r11 = 2 * (q0 * q0 + q2 * q2) - 1
+    r12 = 2 * (q2 * q3 - q0 * q1)
+     
+    # Third row of the rotation matrix
+    r20 = 2 * (q1 * q3 - q0 * q2)
+    r21 = 2 * (q2 * q3 + q0 * q1)
+    r22 = 2 * (q0 * q0 + q3 * q3) - 1
+     
+    # 3x3 rotation matrix
+    rot_matrix = np.array([[r00, r01, r02],
+                           [r10, r11, r12],
+                           [r20, r21, r22]])   
+    return rot_matrix
 
 def world_to_image(point, K, R, T):
     """
@@ -122,25 +193,8 @@ def world_to_image(point, K, R, T):
     :param R: 3*3 rotation matrix
     :param T: 3*1 translation matrix
     """
-    # 3dpoint tmp = cameraintrinsic(3x3) * rotationvect(1x3) * xyz(3x1) + cameraintrinsic(3x3)*translation(3,1)
-    # 2dpoint screen = tmp.x/tmp.z, tmp.y / tmp.z
     world_coord = K @ R @ point + K @ T
     return world_coord[0] / world_coord[2], world_coord[1] / world_coord[2]
-
-def point_cloud_to_world(x, y, z, K, R, T, depth_scale=1000):
-    """
-    Transform (0,0,0) in point cloud back to world coordinates according to
-    z = d / depth_scale = -X / depth_scale
-    x = (u - cx) * z / fx
-    y = (v - cy) * z / fy
-    """
-    fx, fy = K[0][0], K[1][1]
-    cx, cy = K[0][2], K[1][2]
-    d = z * depth_scale
-    u = (x * fx) / z + cx
-    v = y * fy / z + cy
-    X, Y, Z = -d, u, v
-    return X, Y, Z
 
 def world_to_point_cloud(X, Y, Z, K, R, T, depth_scale=1000):  
     """
@@ -180,19 +234,55 @@ def render_video():
     """
     Make pngs into a video for easy view.
     """
-    img_array = []
-    for filename in glob.glob('C:/New folder/Images/*.jpg'):
-        img = cv2.imread(filename)
-        height, width, layers = img.shape
-        size = (width,height)
-        img_array.append(img)
-    out = cv2.VideoWriter('project.avi',cv2.VideoWriter_fourcc(*'DIVX'), 15, size)
-    for i in range(len(img_array)):
-        out.write(img_array[i])
-    out.release()
+    fileList = []
+    for frame_id in tqdm(range(1, 4432)):
+        # filename = "./cube_data/screen_image_frame00000{}.png".format(frame_id)
+        filename = "./denoise_cube_data/frame00000{}.png".format(frame_id)
+        fileList.append(filename)
+
+    writer = imageio.get_writer('new_depth.mp4', fps=20)
+
+    for im in fileList:
+        writer.append_data(imageio.imread(im))
+    writer.close()
+
+"""
+Data preparation for running BundleTrack on our own RGBD data. 
+"""
+def copy():
+    """
+    For copying images from robot_filter folder to BundleTrack folder.
+    """
+    src_dir = "/home/cnets-vision/mengti_ws/robot_filter/depth_data"
+    dst_dir = "/home/cnets-vision/mengti_ws/BundleTrack/Data/YCBINEOAT/contact_nets/depth"
+    for jpgfile in glob.iglob(os.path.join(src_dir, "*.png")):
+        shutil.copy(jpgfile, dst_dir)
+
+def create_annotated_poses(output_dir, start_frame, end_frame):
+    """
+    Create annotated_poses folder. First txt is the transformation matrix from camera to object. 
+    Others are identity matrices solely for evaluation.
+    """
+    if start_frame == 0: start_frame+=1
+    for frame_id in range(start_frame, end_frame):
+        filename = os.path.join(output_dir, "%04i.txt" % frame_id)
+        pose = np.array([[1,0,0,0],[0,1,0,0],[0,0,1,0],[0,0,0,1]])
+        np.savetxt(filename, pose)
+
+def rename():
+    """
+    Currently, all data are named as frame00000{frame_id}.png. Need to rename to {frame_id}.png 
+    to match the required format of BundleTrack.
+    Go to the directory and run rename().
+    """
+    for filename in os.listdir("."):
+        print(filename)
+        if filename.startswith("frame"):
+            os.rename(filename, filename[-8:])
+
 
 def main():
-    # for frame_id in tqdm(range(1, 4432)):
+    for frame_id in tqdm(range(1, 4432)):
     #     real_depth_file = "./depth_data/real_depth_frame00000{}.txt".format(frame_id)
     #     mask_image_file = "./mask_data/mask_frame00000{}.png".format(frame_id)
     #     filtered_depth_file = "./filtered_data/depth_without_robot_frame00000{}.png".format(frame_id)
@@ -200,14 +290,19 @@ def main():
     #     rgb_image_file = "./rgb_data/frame%06i.png" % frame_id
     #     filtered_rgb_file = "./filtered_data/rgb_without_robot_frame00000{}.png".format(frame_id)
     #     generate_rgb_image_without_robot(rgb_image_file, mask_image_file, filtered_rgb_file)
-    frame_id = 104
-    real_depth_file = "./depth_data/real_depth_frame00000{}.txt".format(frame_id)
-    mask_image_file = "./dilated_mask_data/frame00000{}.png".format(frame_id)
-    filtered_depth_file = "./filtered_data/depth_without_robot_frame00000{}.png".format(frame_id)
-    generate_depth_img_without_robot(real_depth_file, mask_image_file, filtered_depth_file)
-    rgb_image_file = "./rgb_data/frame%06i.png" % frame_id
-    filtered_rgb_file = "./filtered_data/rgb_without_robot_frame00000{}.png".format(frame_id)
-    generate_rgb_image_without_robot(rgb_image_file, mask_image_file, filtered_rgb_file)
+        real_depth_file = "./depth_data/real_depth_frame00000{}.txt".format(frame_id)
+        mask_image_file = "./dilated_mask_data/frame00000{}.png".format(frame_id)
+        filtered_depth_file = "./filtered_data/depth_without_robot_frame00000{}.png".format(frame_id)
+        generate_depth_img_without_robot(real_depth_file, mask_image_file, filtered_depth_file)
+        rgb_image_file = "./rgb_data/frame%06i.png" % frame_id
+        filtered_rgb_file = "./filtered_data/rgb_without_robot_frame00000{}.png".format(frame_id)
+        generate_rgb_image_without_robot(rgb_image_file, mask_image_file, filtered_rgb_file)
 
 if __name__ == "__main__":
-    main()
+    # main()
+    # render_video()
+    # for frame_id in tqdm(range(1, 4432)):
+        # denoise(frame_id)
+    # denoise(774)
+    # create_annotated_poses("/home/cnets-vision/mengti_ws/BundleTrack/Data/YCBINEOAT/contact_nets/annotated_poses", 1, 4432)
+    rename()

@@ -9,5 +9,7 @@
 /cube_data
 /filtered_data
 /dilated_mask_data
+/denoise_cube_data
 *.ipynb
 *.gif
+*.mp4

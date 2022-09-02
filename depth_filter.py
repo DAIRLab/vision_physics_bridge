@@ -2,6 +2,7 @@ import open3d as o3d
 import numpy as np
 from utils import axis_angle_to_rotation_matrix
 from visualization import VisOpen3D
+from tqdm import tqdm
 
 """
 Filter out everything in the depth image except for the object of interest.
@@ -103,20 +104,25 @@ class DepthFilter:
         relative_rotation_ = coord_obb.R @ np.linalg.inv(plank_oriented_bounding_box.R)
         plank_oriented_bounding_box.rotate(R=relative_rotation_, center=plank_oriented_bounding_box.center)
         plank_oriented_bounding_box.color = np.array((0,1,0))
-        print('x:', plank_left_bottom_pcl[0], plank_right_bottom_pcl[0], plank_left_top_pcl[0], plank_right_top_pcl[0], plank_left_bottom_pcl_[0], plank_right_bottom_pcl_[0], plank_left_top_pcl_[0], plank_right_top_pcl_[0])
-        print('y:', plank_left_bottom_pcl[1], plank_right_bottom_pcl[1], plank_left_top_pcl[1], plank_right_top_pcl[1], plank_left_bottom_pcl_[1], plank_right_bottom_pcl_[1], plank_left_top_pcl_[1], plank_right_top_pcl_[1])
-        print('z:', plank_left_bottom_pcl[2], plank_right_bottom_pcl[2], plank_left_top_pcl[2], plank_right_top_pcl[2], plank_left_bottom_pcl_[2], plank_right_bottom_pcl_[2], plank_left_top_pcl_[2], plank_right_top_pcl_[2])
+        # print('x:', plank_left_bottom_pcl[0], plank_right_bottom_pcl[0], plank_left_top_pcl[0], plank_right_top_pcl[0], plank_left_bottom_pcl_[0], plank_right_bottom_pcl_[0], plank_left_top_pcl_[0], plank_right_top_pcl_[0])
+        # print('y:', plank_left_bottom_pcl[1], plank_right_bottom_pcl[1], plank_left_top_pcl[1], plank_right_top_pcl[1], plank_left_bottom_pcl_[1], plank_right_bottom_pcl_[1], plank_left_top_pcl_[1], plank_right_top_pcl_[1])
+        # print('z:', plank_left_bottom_pcl[2], plank_right_bottom_pcl[2], plank_left_top_pcl[2], plank_right_top_pcl[2], plank_left_bottom_pcl_[2], plank_right_bottom_pcl_[2], plank_left_top_pcl_[2], plank_right_top_pcl_[2])
 
         # Before cropping
-        o3d.visualization.draw_geometries([self.pcd, oriented_bounding_box, plank_oriented_bounding_box, mesh_frame])
-
+        # o3d.visualization.draw_geometries([self.pcd, oriented_bounding_box, plank_oriented_bounding_box, mesh_frame])
+        
         cropped_pcd = self.pcd.crop(oriented_bounding_box)
-        cropped_pcd_ = cropped_pcd.crop(plank_oriented_bounding_box)
-
+        cropped_pcd_ = self.pcd.crop(plank_oriented_bounding_box)
+        if np.asarray(cropped_pcd_.points).shape[0] > np.asarray(cropped_pcd.points).shape[0]: 
+            print("Cube is over the plank.")
+            result = cropped_pcd_
+        else:
+            print("Cube is on the table.")
+            result = cropped_pcd
         # After cropping
-        o3d.visualization.draw_geometries([cropped_pcd_, oriented_bounding_box, plank_oriented_bounding_box, mesh_frame])
+        # o3d.visualization.draw_geometries([result, plank_oriented_bounding_box, mesh_frame])
         # pick_points(pcd)
-        return cropped_pcd
+        return result
     
     def visualize_depth_image(self):
         w = 640
@@ -132,7 +138,7 @@ class DepthFilter:
         vis.capture_screen_image(self.cube_screen_image_dir)
         vis.capture_depth_image(self.cube_depth_image_dir)
         # vis.draw_camera(intrinsic_matrix, extrinsic_matrix, scale=0.5, color=[0.8, 0.2, 0.8])
-        vis.run() #visualize the screen and depth images
+        # vis.run() #visualize the screen and depth images
         # vis.destroy_window() #This causes segmentation fault.
         # del vis
 
@@ -169,7 +175,7 @@ def main(frame_id):
     system.visualize_depth_image()
 
 if __name__ == "__main__":
-    start_frame_id = 901
-    end_frame_id = 902
-    for frame_id in range(start_frame_id, end_frame_id):
+    start_frame_id = 20
+    end_frame_id = 4432
+    for frame_id in tqdm(range(start_frame_id, end_frame_id)):
         main(frame_id)
