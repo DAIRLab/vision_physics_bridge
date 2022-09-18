@@ -21,7 +21,7 @@ from manipulation.utils import FindResource
 import numpy as np
 import rospy
 from sensor_msgs.msg import JointState
-from utils import import_data, filter
+from file_utils import import_data, filter
 from tqdm import tqdm
 
 """

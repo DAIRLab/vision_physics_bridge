@@ -1,6 +1,6 @@
 import open3d as o3d
 import numpy as np
-from utils import axis_angle_to_rotation_matrix
+from math_utils import axis_angle_to_rotation_matrix
 from visualization import VisOpen3D
 from tqdm import tqdm
 

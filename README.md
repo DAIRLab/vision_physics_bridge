@@ -16,6 +16,8 @@ A package that filters out robot from depth images.
 
 `/denoise_cube_data`: final denoised depth images of the cube. 
 
+`/tagslam_poses`: 4 by 4 transformation matrix of the object retrieved from odom.bag and timestamps.txt for duration calculation.
+
 ### Data processing procedure 
 * In `rosbag_processor.py`, run `bag_to_depth_images()` to extract depth images from rosbag and write `images.txt`
 * In `rosbag_processor.py`, run `extract_poses_with_timestamps()` to extract joint positions from rosbag

@@ -10,6 +10,7 @@
 /filtered_data
 /dilated_mask_data
 /denoise_cube_data
+/tagslam_poses
 *.ipynb
 *.gif
 *.mp4
