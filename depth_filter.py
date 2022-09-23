@@ -1,5 +1,5 @@
-import open3d as o3d
 import numpy as np
+import open3d as o3d
 from math_utils import axis_angle_to_rotation_matrix
 from visualization import VisOpen3D
 from tqdm import tqdm
@@ -104,10 +104,6 @@ class DepthFilter:
         relative_rotation_ = coord_obb.R @ np.linalg.inv(plank_oriented_bounding_box.R)
         plank_oriented_bounding_box.rotate(R=relative_rotation_, center=plank_oriented_bounding_box.center)
         plank_oriented_bounding_box.color = np.array((0,1,0))
-        # print('x:', plank_left_bottom_pcl[0], plank_right_bottom_pcl[0], plank_left_top_pcl[0], plank_right_top_pcl[0], plank_left_bottom_pcl_[0], plank_right_bottom_pcl_[0], plank_left_top_pcl_[0], plank_right_top_pcl_[0])
-        # print('y:', plank_left_bottom_pcl[1], plank_right_bottom_pcl[1], plank_left_top_pcl[1], plank_right_top_pcl[1], plank_left_bottom_pcl_[1], plank_right_bottom_pcl_[1], plank_left_top_pcl_[1], plank_right_top_pcl_[1])
-        # print('z:', plank_left_bottom_pcl[2], plank_right_bottom_pcl[2], plank_left_top_pcl[2], plank_right_top_pcl[2], plank_left_bottom_pcl_[2], plank_right_bottom_pcl_[2], plank_left_top_pcl_[2], plank_right_top_pcl_[2])
-
         # Before cropping
         # o3d.visualization.draw_geometries([self.pcd, oriented_bounding_box, plank_oriented_bounding_box, mesh_frame])
         
@@ -133,8 +129,8 @@ class DepthFilter:
         intrinsic_matrix = self.K
         extrinsic_matrix = self.extrinsic
         vis.load_view_point(intrinsic_matrix, extrinsic_matrix)
-        depth = vis.capture_depth_float_buffer(show=False)
-        image = vis.capture_screen_float_buffer(show=False)
+        depth = vis.capture_depth_float_buffer(show=True)
+        image = vis.capture_screen_float_buffer(show=True)
         vis.capture_screen_image(self.cube_screen_image_dir)
         vis.capture_depth_image(self.cube_depth_image_dir)
         # vis.draw_camera(intrinsic_matrix, extrinsic_matrix, scale=0.5, color=[0.8, 0.2, 0.8])
@@ -175,7 +171,7 @@ def main(frame_id):
     system.visualize_depth_image()
 
 if __name__ == "__main__":
-    start_frame_id = 20
-    end_frame_id = 4432
+    start_frame_id = 3135
+    end_frame_id = 3136
     for frame_id in tqdm(range(start_frame_id, end_frame_id)):
         main(frame_id)

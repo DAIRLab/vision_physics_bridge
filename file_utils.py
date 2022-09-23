@@ -92,7 +92,22 @@ def write_real_depth_as_txt(start_frame, end_frame):
         real = load_original_arr[frame_id]
         np.savetxt(real_depth_dir, real)
 
-def denoise(frame_id):
+def check_empty_img():
+    """
+    Since Bundletrack loses tracking if any of the masks are empty, we need to check emptyness for masks.
+    """
+    empty_list = []
+    for frame_id in range(1, 4431):
+        denoise_mask_dir = "./denoise_cube_data/frame00000{}.png".format(frame_id)
+        image = cv2.imread(denoise_mask_dir)
+        
+        if np.sum(image)==0:
+            empty_list.append(frame_id)
+        else:
+            continue
+    return empty_list
+
+def denoise(frame_id, show=False):
     """
     Filter out small pieces of noise from depth images. 
     """
@@ -114,7 +129,7 @@ def denoise(frame_id):
             cv2.drawContours(thresh, [c], -1, (0,0,0), -1)
 
     # Morph close and invert image
-    kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (8,8))
+    kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (4,4))
     close = 255 - cv2.morphologyEx(thresh, cv2.MORPH_CLOSE, kernel, iterations=2)
 
     # cv2.imshow('thresh', thresh)
@@ -125,6 +140,9 @@ def denoise(frame_id):
     if im.mode != 'L':
         im = im.convert('L')
     im.save(denoise_mask_dir)
+    if show:
+        plt.imshow(im)
+        plt.show()
 
 def render_gif():
     """
@@ -211,9 +229,5 @@ def main():
 
 if __name__ == "__main__":
     # main()
-    # render_video()
-    # for frame_id in tqdm(range(1, 4432)):
-        # denoise(frame_id)
-    # denoise(774)
-    # create_annotated_poses("/home/cnets-vision/mengti_ws/BundleTrack/Data/YCBINEOAT/contact_nets/annotated_poses", 1, 4432)
+    # denoise(3142, True)
     rename()

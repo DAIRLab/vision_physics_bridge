@@ -1,3 +1,4 @@
+from webbrowser import get
 import numpy as np
 import math
 import tf.transformations as tr
@@ -96,6 +97,35 @@ def world_to_point_cloud(X, Y, Z, K, R, T, depth_scale=1000):
     y = (v - K[1][2]) * z / K[1][1]
     z = -X / depth_scale
     return x, y, z
+
+def camera_to_world(m):
+    """
+    Transform camera coordinates to world coordinates.
+    R_w = wR_c @ R_c = cR_w.T @ R_c where cR_w is the rotation of the extrinsic matrix
+    T_w = -cR_w.T @ T_c
+    P_w = R.T@ P_c - R.T @ T_c
+    """
+    extrinsic = get_extrinsic()
+    cR_w = extrinsic[:3, :3]
+    # cT_w = extrinsic[:3, 3]
+    R_c = m[:3, :3]
+    T_c = m[:3, 3]
+    R_w = cR_w.T @ R_c
+    T_w = -cR_w.T @ T_c
+    T_w = T_w.reshape(-1, 1)
+    print(T_w.shape)
+    return np.vstack((np.hstack((R_w, T_w)), np.array([0,0,0,1])))
+    
+def get_extrinsic():
+    translation = np.array([[1.14164360], [0.15815239], [0.66422200]])
+    axis_vec = [-1.57165949, -1.63112887, 1.07928078]
+    angle = np.linalg.norm(axis_vec)
+    axis = axis_vec / angle
+    rotation = axis_angle_to_rotation_matrix(axis, angle) # directions of the world-axes in camera coordinates
+    rotation_prime = rotation.T #USE THIS
+    translation_prime = -rotation_prime @ translation #USE THIS
+    extrinsic = np.vstack((np.hstack((rotation_prime, translation_prime)), np.array([0,0,0,1])))
+    return extrinsic
 
 def get_angular_velocity(curr_state, next_state, dt):
     R_diff = next_state @ np.linalg.inv(curr_state)

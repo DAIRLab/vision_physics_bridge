@@ -100,7 +100,6 @@ def bag_to_depth_images(bag_file, image_topic, output_dir, start_frame, end_fram
     bag.close()
     return
 
-
 def bag_to_pose(bagfile, pose_topic, outfile_position, outfile_velocity, start_frame, end_frame):
     """
     Write /joint_states to a file
@@ -285,7 +284,6 @@ def extract_cube_pose(depth_bag_file, odom_bag_file, depth_topic, odom_topic, ou
     bag.close()
     return
 
-
 def extract_gt_poses_from_tagslam(depth_bag_file, odom_bag_file, depth_topic, odom_topic, output_dir):
     """
     Extract the pose information of the cube from tagslam to testify the results of BuddleTrack.
@@ -300,8 +298,13 @@ def extract_gt_poses_from_tagslam(depth_bag_file, odom_bag_file, depth_topic, od
             depth_timestamps[msg.header.stamp.secs] = []
         depth_timestamps[msg.header.stamp.secs].append(msg.header.stamp.nsecs)
     print("Finished processing depth_timestamps")
+    print('secs:', len(depth_timestamps))
+    l=0
+    for t in depth_timestamps.keys():
+        l+=len(depth_timestamps[t])
+    print('depth map length:', l)
 
-    # Record the timestamps for calculating angular/linear velocitis later
+    # Record the timestamps for calculating angular/linear velocities later
     frame_id = 1
     final_timestamps = []
     for sec in depth_timestamps.keys():
@@ -330,23 +333,49 @@ def extract_gt_poses_from_tagslam(depth_bag_file, odom_bag_file, depth_topic, od
                     print("Updating ...")
                     result_nsecs = odom_nsecs
                     closest_nsecs = abs(odom_nsecs - nsecs)
+            if result_nsecs in final_odom_timestamps[secs]:
+                continue
             final_odom_timestamps[secs].append(result_nsecs)
     print("Finished recording final_pose_timestamps")
-
+    actualy_recorded_timestamps = {}
     frame_id = 1
     for (topic, msg, ts) in bag.read_messages(topics=str(odom_topic)):
-        if msg.header.stamp.secs in final_odom_timestamps.keys() and msg.header.stamp.nsecs in final_odom_timestamps[msg.header.stamp.secs]:
-            Q = np.zeros((4, 1))
-            Q[0] = msg.pose.pose.orientation.x
-            Q[1] = msg.pose.pose.orientation.y
-            Q[2] = msg.pose.pose.orientation.z
-            Q[3] = msg.pose.pose.orientation.w
-            rotation_matrix = quaternion_to_rotation_matrix(Q)[:,:,0]
-            position = msg.pose.pose.position
-            translation = np.array([[position.x], [position.y], [position.z]])
-            result = np.vstack((np.hstack((rotation_matrix, translation)), np.array([0,0,0,1])))
-            np.savetxt(output_dir+'%04i.txt'%frame_id, result)
-            frame_id+=1
+        if msg.header.stamp.secs in final_odom_timestamps.keys():
+            if msg.header.stamp.secs not in actualy_recorded_timestamps.keys():
+                actualy_recorded_timestamps[msg.header.stamp.secs] = []
+            if msg.header.stamp.nsecs in final_odom_timestamps[msg.header.stamp.secs]:
+                Q = np.zeros((4, 1))
+                Q[0] = msg.pose.pose.orientation.x
+                Q[1] = msg.pose.pose.orientation.y
+                Q[2] = msg.pose.pose.orientation.z
+                Q[3] = msg.pose.pose.orientation.w
+                rotation_matrix = quaternion_to_rotation_matrix(Q)[:,:,0]
+                position = msg.pose.pose.position
+                translation = np.array([[position.x], [position.y], [position.z]])
+                result = np.vstack((np.hstack((rotation_matrix, translation)), np.array([0,0,0,1])))
+                # np.savetxt(output_dir+'%04i.txt'%frame_id, result)
+                frame_id+=1
+                actualy_recorded_timestamps[msg.header.stamp.secs].append(msg.header.stamp.nsecs)
+    
+    print('secs:', len(actualy_recorded_timestamps))
+    l=0
+    for t in actualy_recorded_timestamps.keys():
+        l+=len(actualy_recorded_timestamps[t])
+    print('l:', l)
+    
+    i = 0
+    for secs in final_odom_timestamps.keys():
+        if secs not in actualy_recorded_timestamps.keys():
+            print('secs:', secs)
+        
+        if len(final_odom_timestamps[secs]) != len(actualy_recorded_timestamps[secs]):
+            print('a', final_odom_timestamps[secs])
+            print('b', actualy_recorded_timestamps[secs])
+        for nsecs in final_odom_timestamps[secs]:
+            if nsecs not in actualy_recorded_timestamps[secs]:
+                print('nsecs:', nsecs)
+                i+=1
+    print(i)
     bag.close()
     return
 

@@ -2,6 +2,8 @@ import numpy as np
 import scipy.spatial as sp
 import matplotlib.pyplot as plt
 
+from math_utils import camera_to_world
+
 GT_POSE_DIR = "/home/cnets-vision/mengti_ws/robot_filter/tagslam_poses/"
 OUTPUT_POSE_DIR = "/home/cnets-vision/mengti_ws/poses/"
 
@@ -27,6 +29,7 @@ def plot_xyz(start_frame, end_frame):
     for frame_id in range(start_frame, end_frame):
         gt_pose = np.loadtxt(GT_POSE_DIR+'%04i.txt'% frame_id)
         output_pose = np.loadtxt(OUTPUT_POSE_DIR+'%04i.txt'% frame_id)
+        # output_pose = camera_to_world(output_pose)
         angle = get_angle(output_pose[:3, :3], gt_pose[:3, :3])
         angles.append(angle)
         output_x.append(output_pose[0, 3])
@@ -70,6 +73,38 @@ def plot_xyz(start_frame, end_frame):
     plt.title("Angle difference")
     plt.show()
 
+def plot_ground_truth(start_frame, end_frame):
+    gt_x, gt_y, gt_z = [], [], []
+    for frame_id in range(start_frame, end_frame):
+        gt_pose = np.loadtxt(GT_POSE_DIR+'%04i.txt'% frame_id)
+        gt_x.append(gt_pose[0, 3])
+        gt_y.append(gt_pose[1, 3])
+        gt_z.append(gt_pose[2, 3])
+  
+    gt_x, gt_y, gt_z = np.array(gt_x), np.array(gt_y), np.array(gt_z)
+    x = np.arange(0, gt_x.shape[0])
+    plt.plot(x, gt_x, label="ground-truth")
+    plt.xlabel("Frame")
+    plt.ylabel("X axis")
+    plt.title("Position x")
+    plt.legend()
+    plt.show()
+
+    plt.plot(x, gt_y, label="ground-truth")
+    plt.xlabel("Frame")
+    plt.ylabel("Y axis")
+    plt.title("Position y")
+    plt.legend()
+    plt.show()
+
+    plt.plot(x, gt_z, label="ground-truth")
+    plt.xlabel("Frame")
+    plt.ylabel("Z axis")
+    plt.title("Position z")
+    plt.legend()
+    plt.show()
+
 
 if __name__ ==  '__main__':
-    plot_xyz(1, 933)
+    plot_xyz(1, 1085)
+    # plot_ground_truth(1, 4396)
