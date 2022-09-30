@@ -152,9 +152,9 @@ def dilate(frame_id):
     Cut mask out of image with certain pixel margin since there is some small leftovers of the robot after applying urdf filter. 
     """
     # Load image and mask
-    rgb_image_file = "./rgb_data/frame00000{}.png".format(frame_id)
-    mask_image_file = "./mask_data/mask_frame00000{}.png".format(frame_id)
-    dilated_mask_file = "./dilated_mask_data/frame00000{}.png".format(frame_id)
+    rgb_image_file = "./rgb_data/%04i.png" % frame_id
+    mask_image_file = "./mask_data/%04i.png" % frame_id
+    dilated_mask_file = "./dilated_mask_data/%04i.png" % frame_id
     image = cv2.imread(rgb_image_file)
     mask = cv2.imread(mask_image_file)
     # Create structuring element, dilate and bitwise-and
@@ -177,20 +177,20 @@ def dilate(frame_id):
 
     
 def main():
-    start_frame_id = 4400
-    end_frame_id = 4432
+    start_frame_id = 501
+    end_frame_id = 3732
     img_file = "./depth_data/images.txt" #depth image in the form of txt
     position_file = "./depth_data/joint_position.txt" #joint positions
     velocity_file = "./depth_data/joint_velocity.txt" #joint velocities
-    positions, velocities = import_data(img_file, position_file, velocity_file)
+    positions, velocities = import_data(position_file, velocity_file)
     for frame_id in tqdm(range(start_frame_id, end_frame_id)):
-        depth_image_file = "./depth_data/frame00000{}.png".format(frame_id)
-        rgb_image_file = "./rgb_data/frame00000{}.png".format(frame_id)
-        mask_image_file = "./mask_data/mask_frame00000{}.png".format(frame_id)
-        real_depth_file = "./depth_data/real_depth_frame00000{}.txt".format(frame_id)
-        simulated_depth_file = "./depth_data/simulated_depth_frame00000{}.txt".format(frame_id)
-        filtered_depth_file = "./filtered_data/depth_without_robot_frame00000{}.png".format(frame_id)
-        filtered_rgb_file = "./filtered_data/rgb_without_robot_frame00000{}.png".format(frame_id)
+        depth_image_file = "./depth_data/%04i.png"%frame_id
+        rgb_image_file = "./rgb_data/%04i.png"%frame_id
+        mask_image_file = "./mask_data/%04i.png"%frame_id
+        real_depth_file = "./depth_data/real_depth_frame%04i.txt"%frame_id
+        simulated_depth_file = "./depth_data/simulated_depth_frame%04i.txt"%frame_id
+        filtered_depth_file = "./filtered_data/depth_without_robot_frame%04i.png"%frame_id
+        filtered_rgb_file = "./filtered_data/rgb_without_robot_frame%04i.png".format(frame_id)
         system = FrankaPlaybackSim(positions[frame_id], velocities[frame_id], frame_id)
         system.plot_camera_images(real_depth_file, simulated_depth_file, img_file)
         simulated_image = np.loadtxt(simulated_depth_file)
@@ -208,6 +208,6 @@ def main():
         # generate_rgb_image_without_robot(rgb_image_file, mask_image_file, filtered_rgb_file) #optional, seems the point cloud looks fine with the unfiltered rgb data
 
 if __name__ == "__main__":
-    # main()
-    for frame_id in tqdm(range(1, 4432)):
-        dilate(frame_id)
+    main()
+    # for frame_id in tqdm(range(1, 3732)):
+    #     dilate(frame_id)

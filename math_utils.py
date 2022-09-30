@@ -98,24 +98,49 @@ def world_to_point_cloud(X, Y, Z, K, R, T, depth_scale=1000):
     z = -X / depth_scale
     return x, y, z
 
+def world_to_camera(m):
+    R_w = m[:3, :3]
+    T_w = m[:3, 3]
+    extrinsic = get_extrinsic()
+    Rw2c = extrinsic[:3, :3]
+    Tw2c = extrinsic[:3, 3]
+    R_c = Rw2c @ R_w
+    T_c = -Rw2c @ T_w
+    T_c = T_c.reshape(-1, 1)
+    return np.vstack((np.hstack((R_c, T_c)), np.array([0,0,0,1])))
+
 def camera_to_world(m):
     """
     Transform camera coordinates to world coordinates.
-    R_w = wR_c @ R_c = cR_w.T @ R_c where cR_w is the rotation of the extrinsic matrix
-    T_w = -cR_w.T @ T_c
+    R_w = Rw2c @ R_c = cR_w.T @ R_c where cR_w is the rotation of the extrinsic matrix
+    T_w = -Rw2c.T @ T_c
     P_w = R.T@ P_c - R.T @ T_c
     """
     extrinsic = get_extrinsic()
-    cR_w = extrinsic[:3, :3]
+    Rw2c = extrinsic[:3, :3]
     # cT_w = extrinsic[:3, 3]
     R_c = m[:3, :3]
     T_c = m[:3, 3]
-    R_w = cR_w.T @ R_c
-    T_w = -cR_w.T @ T_c
+    R_w = Rw2c.T @ R_c
+    T_w = -Rw2c.T @ T_c
     T_w = T_w.reshape(-1, 1)
-    print(T_w.shape)
     return np.vstack((np.hstack((R_w, T_w)), np.array([0,0,0,1])))
-    
+
+def transform_to_camera(pred_pose):
+    """
+    https://github.com/wenbowen123/BundleTrack/issues/38
+    """
+    OUTPUT_POSE_DIR = "/home/cnets-vision/mengti_ws/poses/"
+    ODOM_FILE_PATH = "/home/cnets-vision/mengti_ws/BundleTrack/Data/YCBINEOAT/contact_nets/annotated_poses/"
+    init_pose = np.loadtxt(OUTPUT_POSE_DIR+"%04i.txt"% 1)
+    object_pose_in_camera = np.loadtxt(ODOM_FILE_PATH+"%04i.txt"% 0)
+    init_pose_new = world_to_camera(object_pose_in_camera)
+    pred_new = (pred_pose @ np.linalg.inv(init_pose)) @ init_pose_new
+    extrinsic = get_extrinsic()
+    pred_new_world = np.linalg.inv(extrinsic) @ pred_new
+    # pred_new_world = camera_to_world(pred_new)
+    return pred_new_world
+
 def get_extrinsic():
     translation = np.array([[1.14164360], [0.15815239], [0.66422200]])
     axis_vec = [-1.57165949, -1.63112887, 1.07928078]

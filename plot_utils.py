@@ -2,17 +2,17 @@ import numpy as np
 import scipy.spatial as sp
 import matplotlib.pyplot as plt
 
-from math_utils import camera_to_world
+from math_utils import camera_to_world, transform_to_camera
 
 GT_POSE_DIR = "/home/cnets-vision/mengti_ws/robot_filter/tagslam_poses/"
 OUTPUT_POSE_DIR = "/home/cnets-vision/mengti_ws/poses/"
 
 def get_cosine_sim(frame_id):
-        """Compare the output of BundleTrack with the ground-truth poses of tagslam.
-        """
-        gt_pose = np.loadtxt(GT_POSE_DIR+'%04i.txt'% frame_id)
-        output_pose = np.loadtxt(OUTPUT_POSE_DIR+'%04i.txt'% frame_id)
-        return 1 - sp.distance.cdist(gt_pose, output_pose, 'cosine')
+    """Compare the output of BundleTrack with the ground-truth poses of tagslam.
+    """
+    gt_pose = np.loadtxt(GT_POSE_DIR+'%04i.txt'% frame_id)
+    output_pose = np.loadtxt(OUTPUT_POSE_DIR+'%04i.txt'% frame_id)
+    return 1 - sp.distance.cdist(gt_pose, output_pose, 'cosine')
 
 def get_angle(P, Q):
     R = np.dot(P, Q.T)
@@ -29,7 +29,8 @@ def plot_xyz(start_frame, end_frame):
     for frame_id in range(start_frame, end_frame):
         gt_pose = np.loadtxt(GT_POSE_DIR+'%04i.txt'% frame_id)
         output_pose = np.loadtxt(OUTPUT_POSE_DIR+'%04i.txt'% frame_id)
-        # output_pose = camera_to_world(output_pose)
+        # output_pose = transform_to_camera(output_pose)
+        output_pose = camera_to_world(output_pose)
         angle = get_angle(output_pose[:3, :3], gt_pose[:3, :3])
         angles.append(angle)
         output_x.append(output_pose[0, 3])
@@ -106,5 +107,5 @@ def plot_ground_truth(start_frame, end_frame):
 
 
 if __name__ ==  '__main__':
-    plot_xyz(1, 1085)
+    plot_xyz(1, 1104)
     # plot_ground_truth(1, 4396)

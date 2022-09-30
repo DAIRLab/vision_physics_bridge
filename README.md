@@ -18,10 +18,11 @@ A package that filters out robot from depth images.
 
 `/tagslam_poses`: 4 by 4 transformation matrix of the object retrieved from odom.bag and timestamps.txt for duration calculation.
 
-### Data processing procedure 
-* In `rosbag_processor.py`, run `bag_to_depth_images()` to extract depth images from rosbag and write `images.txt`
-* In `rosbag_processor.py`, run `extract_poses_with_timestamps()` to extract joint positions from rosbag
-* In `rosbag_processor.py`, run `bag_to_rgb_images()` to extract rgb images from rosbag
-* In `utils.py`, run `write_real_depth_as_txt()` to save real depth txt at once 
-* In `urdf_filter.py`, run `main()` to get masks and filtered depth images
-* In `depth_filter`, run `main()` to get cube screen images and depth images
+### Data generation procedure
+* Generate depth data: In `rosbag_processor.py`, run `bag_to_depth_images()` to extract depth images from rosbag and write `images.txt`
+* Generate rgb data and joint positions: In `rosbag_processor.py`, run `extract_poses_with_timestamps()` to extract joint positions and rgb images at matched timestamps with depth topic from rosbag
+* In `file_utils.py`, run `write_real_depth_as_txt()` to save real depth txt at once 
+* Generate robot masks: In `urdf_filter.py`, run `main()` to get robot masks and filtered depth images
+* Generate dilated robot masks: In `urdf_filter.py`, run `dilate()` to get dilated robot masks.
+* Generate cube depth images and screen images: In `depth_filter`, run `main()` to get cube screen images and depth images
+* Calculate cube initial pose: In `rosbag_processor.py`, run `extract_cube_pose()` with desired start_frame to get the initial cube pose in camera frame and save in BundleTrack `annotated_poses` directory.

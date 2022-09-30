@@ -1,6 +1,4 @@
-from concurrent.futures import process
 import copy
-from tkinter import E
 import numpy as np
 import math
 from PIL import Image
@@ -13,6 +11,7 @@ import cv2
 import glob
 import shutil
 import os
+import re 
 
 def filter(real_img, sim_img):
     """
@@ -67,11 +66,10 @@ def generate_rgb_image_without_robot(rgb_dir, mask_dir, filtered_rgb_dir):
     imageio.imwrite(filtered_rgb_dir, filtered_rgb)
     return filtered_rgb
 
-def import_data(img_file, position_file, velocity_file):
+def import_data(position_file, velocity_file):
     """
     Load data generated from rosbag.
     """
-    # images = np.loadtxt(img_file) #importing images is very slow
     positions = np.loadtxt(position_file)
     velocities = np.loadtxt(velocity_file)
     print("position and velocities imported!")
@@ -83,11 +81,12 @@ def write_real_depth_as_txt(start_frame, end_frame):
     """
     img_dir = "./depth_data/images.txt" #depth image in the form of txt
     loaded_arr = np.loadtxt(img_dir)
+    print(loaded_arr.shape)
     load_original_arr = loaded_arr.reshape(
     loaded_arr.shape[0], loaded_arr.shape[1] // 640, 640)
     print("Done loading images.")
     for frame_id in tqdm(range(start_frame, end_frame)):
-        real_depth_dir = "./depth_data/real_depth_frame00000{}.txt".format(frame_id)
+        real_depth_dir = "./depth_data/real_depth_frame%04i.txt"%frame_id
         print("frame_id", frame_id)
         real = load_original_arr[frame_id]
         np.savetxt(real_depth_dir, real)
@@ -98,7 +97,7 @@ def check_empty_img():
     """
     empty_list = []
     for frame_id in range(1, 4431):
-        denoise_mask_dir = "./denoise_cube_data/frame00000{}.png".format(frame_id)
+        denoise_mask_dir = "./denoise_cube_data/frame%04i.png"%frame_id
         image = cv2.imread(denoise_mask_dir)
         
         if np.sum(image)==0:
@@ -209,6 +208,16 @@ def rename():
         if filename.startswith("frame"):
             os.rename(filename, filename[-8:])
 
+def removed_files(num):
+    """Remove the first num frames from data folder.
+    """
+    for filename in os.listdir("."):
+        name = re.findall(r'\d+', filename)[0]
+        new_name = int(name)
+        new_name = new_name - num
+        new_filename = "%04i.txt" % new_name
+        print(filename, new_filename)
+        os.rename(filename, new_filename)
 
 def main():
     for frame_id in tqdm(range(1, 4432)):
@@ -219,15 +228,14 @@ def main():
     #     rgb_image_file = "./rgb_data/frame%06i.png" % frame_id
     #     filtered_rgb_file = "./filtered_data/rgb_without_robot_frame00000{}.png".format(frame_id)
     #     generate_rgb_image_without_robot(rgb_image_file, mask_image_file, filtered_rgb_file)
-        real_depth_file = "./depth_data/real_depth_frame00000{}.txt".format(frame_id)
-        mask_image_file = "./dilated_mask_data/frame00000{}.png".format(frame_id)
-        filtered_depth_file = "./filtered_data/depth_without_robot_frame00000{}.png".format(frame_id)
+        real_depth_file = "./depth_data/real_depth_frame%04i.txt"%frame_id
+        mask_image_file = "./dilated_mask_data/%04i.png"%frame_id
+        filtered_depth_file = "./filtered_data/depth_without_robot_frame%04i.png"%frame_id
         generate_depth_img_without_robot(real_depth_file, mask_image_file, filtered_depth_file)
-        rgb_image_file = "./rgb_data/frame%06i.png" % frame_id
-        filtered_rgb_file = "./filtered_data/rgb_without_robot_frame00000{}.png".format(frame_id)
+        rgb_image_file = "./rgb_data/%04i.png" % frame_id
+        filtered_rgb_file = "./filtered_data/rgb_without_robot_frame%04i.png"%frame_id
         generate_rgb_image_without_robot(rgb_image_file, mask_image_file, filtered_rgb_file)
 
 if __name__ == "__main__":
-    # main()
-    # denoise(3142, True)
-    rename()
+#    create_annotated_poses("/home/cnets-vision/mengti_ws/BundleTrack/Data/YCBINEOAT/contact_nets_reduced/annotated_poses", 1, 3732)
+    write_real_depth_as_txt(1, 3733)
