@@ -25,10 +25,10 @@ PLANK_WIDTH = 36.3/100
 class DepthFilter:
     def __init__(self, frame_id):
         # self.color_image_title = './rgb_data/frame%06i.png' % frame_id
-        self.color_image_title = './filtered_data/rgb_without_robot_frame00000{}.png'.format(frame_id)
-        self.depth_image_title = './filtered_data/depth_without_robot_frame00000{}.png'.format(frame_id)
-        self.cube_screen_image_dir = "./cube_data/screen_image_frame00000{}.png".format(frame_id)
-        self.cube_depth_image_dir = "./cube_data/depth_image_frame00000{}.png".format(frame_id)
+        self.color_image_title = './filtered_data/rgb_without_robot_frame%04i.png'%frame_id
+        self.depth_image_title = './filtered_data/depth_without_robot_frame%04i.png'%frame_id
+        self.cube_screen_image_dir = "./cube_data/screen_image_frame%04i.png"%frame_id
+        self.cube_depth_image_dir = "./cube_data/depth_image_frame%04i.png"%frame_id
         self.extrinsic = self.setup_extrinsic()
         self.K = np.array([[380.2484436035156, 0, 314.2138977050781],
                     [0, 379.8265380859375, 240.59800720214844], 
@@ -129,8 +129,8 @@ class DepthFilter:
         intrinsic_matrix = self.K
         extrinsic_matrix = self.extrinsic
         vis.load_view_point(intrinsic_matrix, extrinsic_matrix)
-        depth = vis.capture_depth_float_buffer(show=True)
-        image = vis.capture_screen_float_buffer(show=True)
+        depth = vis.capture_depth_float_buffer(show=False)
+        image = vis.capture_screen_float_buffer(show=False)
         vis.capture_screen_image(self.cube_screen_image_dir)
         vis.capture_depth_image(self.cube_depth_image_dir)
         # vis.draw_camera(intrinsic_matrix, extrinsic_matrix, scale=0.5, color=[0.8, 0.2, 0.8])
@@ -171,7 +171,7 @@ def main(frame_id):
     system.visualize_depth_image()
 
 if __name__ == "__main__":
-    start_frame_id = 3135
-    end_frame_id = 3136
+    start_frame_id = 1
+    end_frame_id = 3372
     for frame_id in tqdm(range(start_frame_id, end_frame_id)):
         main(frame_id)

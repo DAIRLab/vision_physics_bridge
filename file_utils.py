@@ -1,4 +1,4 @@
-import copy
+from copy import deepcopy
 import numpy as np
 import math
 from PIL import Image
@@ -32,7 +32,7 @@ def generate_depth_img_without_robot(depth_dir, mask_dir, filtered_depth_dir):
     mask_img = Image.open(mask_dir)
     depth_array = np.array(depth_img)
     mask_array = np.array(mask_img)
-    filtered_depth = copy.deepcopy(depth_array*1000)
+    filtered_depth = deepcopy(depth_array*1000)
     for i in range(mask_array.shape[0]):
         for j in range(mask_array.shape[1]):
             if mask_array[i][j] == 255:
@@ -54,7 +54,7 @@ def generate_rgb_image_without_robot(rgb_dir, mask_dir, filtered_rgb_dir):
     mask_img = Image.open(mask_dir)
     rgb_array = np.array(rgb_img)
     mask_array = np.array(mask_img)
-    filtered_rgb = copy.deepcopy(rgb_array)
+    filtered_rgb = deepcopy(rgb_array)
     for i in range(mask_array.shape[0]):
         for j in range(mask_array.shape[1]):
             if mask_array[i][j] == 255:
@@ -66,14 +66,13 @@ def generate_rgb_image_without_robot(rgb_dir, mask_dir, filtered_rgb_dir):
     imageio.imwrite(filtered_rgb_dir, filtered_rgb)
     return filtered_rgb
 
-def import_data(position_file, velocity_file):
+def import_data(position_file):
     """
     Load data generated from rosbag.
     """
     positions = np.loadtxt(position_file)
-    velocities = np.loadtxt(velocity_file)
-    print("position and velocities imported!")
-    return positions, velocities
+    print("joint position imported!")
+    return positions
 
 def write_real_depth_as_txt(start_frame, end_frame):
     """
@@ -86,7 +85,7 @@ def write_real_depth_as_txt(start_frame, end_frame):
     loaded_arr.shape[0], loaded_arr.shape[1] // 640, 640)
     print("Done loading images.")
     for frame_id in tqdm(range(start_frame, end_frame)):
-        real_depth_dir = "./depth_data/real_depth_frame%04i.txt"%frame_id
+        real_depth_dir = "./texts/real_depth_frame%04i.txt"%frame_id
         print("frame_id", frame_id)
         real = load_original_arr[frame_id]
         np.savetxt(real_depth_dir, real)
@@ -96,7 +95,7 @@ def check_empty_img():
     Since Bundletrack loses tracking if any of the masks are empty, we need to check emptyness for masks.
     """
     empty_list = []
-    for frame_id in range(1, 4431):
+    for frame_id in range(1, 3372):
         denoise_mask_dir = "./denoise_cube_data/frame%04i.png"%frame_id
         image = cv2.imread(denoise_mask_dir)
         
@@ -110,8 +109,8 @@ def denoise(frame_id, show=False):
     """
     Filter out small pieces of noise from depth images. 
     """
-    img_dir = "./cube_data/depth_image_frame00000{}.png".format(frame_id)
-    denoise_mask_dir = "./denoise_cube_data/frame00000{}.png".format(frame_id)
+    img_dir = "./cube_data/depth_image_frame%04i.png" % frame_id
+    denoise_mask_dir = "./denoise_cube_data/%04i.png" % frame_id
 
     # Load image, convert to grayscale, Gaussian blur, Otsu's threshold
     image = cv2.imread(img_dir)
@@ -128,7 +127,7 @@ def denoise(frame_id, show=False):
             cv2.drawContours(thresh, [c], -1, (0,0,0), -1)
 
     # Morph close and invert image
-    kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (4,4))
+    kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (8,8))
     close = 255 - cv2.morphologyEx(thresh, cv2.MORPH_CLOSE, kernel, iterations=2)
 
     # cv2.imshow('thresh', thresh)
@@ -220,7 +219,7 @@ def removed_files(num):
         os.rename(filename, new_filename)
 
 def main():
-    for frame_id in tqdm(range(1, 4432)):
+    for frame_id in tqdm(range(1, 3372)):
     #     real_depth_file = "./depth_data/real_depth_frame00000{}.txt".format(frame_id)
     #     mask_image_file = "./mask_data/mask_frame00000{}.png".format(frame_id)
     #     filtered_depth_file = "./filtered_data/depth_without_robot_frame00000{}.png".format(frame_id)
@@ -237,5 +236,9 @@ def main():
         generate_rgb_image_without_robot(rgb_image_file, mask_image_file, filtered_rgb_file)
 
 if __name__ == "__main__":
+    # main()
 #    create_annotated_poses("/home/cnets-vision/mengti_ws/BundleTrack/Data/YCBINEOAT/contact_nets_reduced/annotated_poses", 1, 3732)
-    write_real_depth_as_txt(1, 3733)
+    write_real_depth_as_txt(1, 4432)
+    # for frame in range(1, 3372):
+    #     denoise(frame)
+    # check_empty_img()

@@ -30,7 +30,7 @@ Note: I installed drake from source through CMake.
 """
 
 class FrankaPlaybackSim:
-    def __init__(self, position, velocity, frame_id):
+    def __init__(self, position, frame_id):
         self.meshcat = StartMeshcat()
         self.builder = DiagramBuilder()
         self.frame_id = frame_id
@@ -123,7 +123,7 @@ class FrankaPlaybackSim:
             rate.sleep()
 
 
-    def plot_camera_images(self, real_depth_dir, simulated_depth_dir, img_dir):
+    def plot_camera_images(self, real_depth_dir, simulated_depth_dir):
         color_image = self.diagram.GetOutputPort("color_image").Eval(self.context)
         depth_image = self.diagram.GetOutputPort("depth_image").Eval(self.context)
 
@@ -145,17 +145,17 @@ class FrankaPlaybackSim:
         plt.title('Depth image')
         np.savetxt(simulated_depth_dir, depth_image.data[:,:,0])
         # pdb.set_trace()
-        # plt.show()
+        plt.show()
 
 def dilate(frame_id):
     """
     Cut mask out of image with certain pixel margin since there is some small leftovers of the robot after applying urdf filter. 
     """
     # Load image and mask
-    rgb_image_file = "./rgb_data/%04i.png" % frame_id
+    # rgb_image_file = "./rgb_data/%04i.png" % frame_id
     mask_image_file = "./mask_data/%04i.png" % frame_id
     dilated_mask_file = "./dilated_mask_data/%04i.png" % frame_id
-    image = cv2.imread(rgb_image_file)
+    # image = cv2.imread(rgb_image_file)
     mask = cv2.imread(mask_image_file)
     # Create structuring element, dilate and bitwise-and
     kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (3,3))
@@ -176,23 +176,21 @@ def dilate(frame_id):
     # cv2.imwrite(dilated_mask_file, dilate)
 
     
-def main():
-    start_frame_id = 501
-    end_frame_id = 3732
-    img_file = "./depth_data/images.txt" #depth image in the form of txt
+def run_urdf_filter():
+    start_frame_id = 1
+    end_frame_id = 3733
     position_file = "./depth_data/joint_position.txt" #joint positions
-    velocity_file = "./depth_data/joint_velocity.txt" #joint velocities
-    positions, velocities = import_data(position_file, velocity_file)
+    positions = import_data(position_file)
     for frame_id in tqdm(range(start_frame_id, end_frame_id)):
         depth_image_file = "./depth_data/%04i.png"%frame_id
         rgb_image_file = "./rgb_data/%04i.png"%frame_id
         mask_image_file = "./mask_data/%04i.png"%frame_id
-        real_depth_file = "./depth_data/real_depth_frame%04i.txt"%frame_id
-        simulated_depth_file = "./depth_data/simulated_depth_frame%04i.txt"%frame_id
+        real_depth_file = "./texts/real_depth_frame%04i.txt"%frame_id
+        simulated_depth_file = "./texts/simulated_depth_frame%04i.txt"%frame_id
         filtered_depth_file = "./filtered_data/depth_without_robot_frame%04i.png"%frame_id
         filtered_rgb_file = "./filtered_data/rgb_without_robot_frame%04i.png".format(frame_id)
-        system = FrankaPlaybackSim(positions[frame_id], velocities[frame_id], frame_id)
-        system.plot_camera_images(real_depth_file, simulated_depth_file, img_file)
+        system = FrankaPlaybackSim(positions[frame_id], frame_id)
+        system.plot_camera_images(real_depth_file, simulated_depth_file)
         simulated_image = np.loadtxt(simulated_depth_file)
         real_image = np.loadtxt(real_depth_file)
         # Need to multiply real depth images by 1000 since simulated depth image uses mm as unit
@@ -202,12 +200,13 @@ def main():
             im = im.convert('L')
         print("Saving mask frame ", frame_id)
         im.save(mask_image_file)
+        break
         # pdb.set_trace()
         # plt.show()
         # generate_depth_img_without_robot(real_depth_file, mask_image_file, filtered_depth_file)
         # generate_rgb_image_without_robot(rgb_image_file, mask_image_file, filtered_rgb_file) #optional, seems the point cloud looks fine with the unfiltered rgb data
 
 if __name__ == "__main__":
-    main()
+    run_urdf_filter()
     # for frame_id in tqdm(range(1, 3732)):
     #     dilate(frame_id)

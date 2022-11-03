@@ -76,7 +76,12 @@ def world_to_image(point, K, R, T):
     :param R: 3*3 rotation matrix.
     :param T: 3*1 translation matrix.
     """
+    print(point.shape)
+    print(K.shape)
+    print(R.shape)
+    print(T.shape)
     world_coord = K @ R @ point + K @ T
+    print("world", world_coord.shape)
     return world_coord[0] / world_coord[2], world_coord[1] / world_coord[2]
 
 def world_to_point_cloud(X, Y, Z, K, R, T, depth_scale=1000):  

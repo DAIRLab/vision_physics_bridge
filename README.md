@@ -1,5 +1,5 @@
 # robot_urdf_filter
-A package that filters out robot from depth images.
+A package that prepares images and pose data for 6D pose tracking. 
 
 ### Data directory
 `/depth_data`: original depth images (one image for each frame), joint positions and joint velocities from the rosbag, real depth from depth images and simulated depth by drake as txt files.
@@ -24,5 +24,7 @@ A package that filters out robot from depth images.
 * In `file_utils.py`, run `write_real_depth_as_txt()` to save real depth txt at once 
 * Generate robot masks: In `urdf_filter.py`, run `main()` to get robot masks and filtered depth images
 * Generate dilated robot masks: In `urdf_filter.py`, run `dilate()` to get dilated robot masks.
+* Generate depth and rgb data without robot: In `file_utils.py`, run `main()` to save filter depth and rgb images in `filtered_data`.
 * Generate cube depth images and screen images: In `depth_filter`, run `main()` to get cube screen images and depth images
+* Denoise cube depth images by running denoise() in `file_utils.py`.
 * Calculate cube initial pose: In `rosbag_processor.py`, run `extract_cube_pose()` with desired start_frame to get the initial cube pose in camera frame and save in BundleTrack `annotated_poses` directory.
