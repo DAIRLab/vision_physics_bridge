@@ -4,6 +4,7 @@ import matplotlib.pyplot as plt
 import matplotlib.image as mpimg
 import pdb
 from PIL import Image
+import imageio
 from pydrake.multibody.parsing import Parser
 from pydrake.multibody.plant import AddMultibodyPlantSceneGraph
 from pydrake.systems.analysis import Simulator
@@ -131,10 +132,11 @@ class FrankaPlaybackSim:
         plt.subplot(121)
         # plt.imshow(color_image.data)
         # plt.title('Color image')
-        real = np.loadtxt(real_depth_dir)
+        # real = np.loadtxt(real_depth_dir)
+        real = cv2.imread(real_depth_dir) #Remove dependency on txt files
         _min = 0
         _max = 1
-        plt.imshow(real, vmin = _min, vmax = _max)
+        plt.imshow(real*0.001, vmin = _min, vmax = _max)
         plt.plot(320, 250,'ro')
         plt.colorbar()
         plt.title('Real image')
@@ -176,35 +178,36 @@ def dilate(frame_id):
     # cv2.imwrite(dilated_mask_file, dilate)
 
     
-def run_urdf_filter():
-    start_frame_id = 1
-    end_frame_id = 3733
-    position_file = "./depth_data/joint_position.txt" #joint positions
-    positions = import_data(position_file)
-    for frame_id in tqdm(range(start_frame_id, end_frame_id)):
-        depth_image_file = "./depth_data/%04i.png"%frame_id
-        rgb_image_file = "./rgb_data/%04i.png"%frame_id
-        mask_image_file = "./mask_data/%04i.png"%frame_id
-        real_depth_file = "./texts/real_depth_frame%04i.txt"%frame_id
-        simulated_depth_file = "./texts/simulated_depth_frame%04i.txt"%frame_id
-        filtered_depth_file = "./filtered_data/depth_without_robot_frame%04i.png"%frame_id
-        filtered_rgb_file = "./filtered_data/rgb_without_robot_frame%04i.png".format(frame_id)
-        system = FrankaPlaybackSim(positions[frame_id], frame_id)
-        system.plot_camera_images(real_depth_file, simulated_depth_file)
-        simulated_image = np.loadtxt(simulated_depth_file)
-        real_image = np.loadtxt(real_depth_file)
-        # Need to multiply real depth images by 1000 since simulated depth image uses mm as unit
-        mask = filter(real_image*1000, simulated_image)
-        im = Image.fromarray(mask)
-        if im.mode != 'L':
-            im = im.convert('L')
-        print("Saving mask frame ", frame_id)
-        im.save(mask_image_file)
-        break
-        # pdb.set_trace()
-        # plt.show()
-        # generate_depth_img_without_robot(real_depth_file, mask_image_file, filtered_depth_file)
-        # generate_rgb_image_without_robot(rgb_image_file, mask_image_file, filtered_rgb_file) #optional, seems the point cloud looks fine with the unfiltered rgb data
+def run_urdf_filter(frame_id, positions):
+    depth_image_file = "./depth_data/%04i.png"%frame_id
+    rgb_image_file = "./rgb_data/%04i.png"%frame_id
+    mask_image_file = "./mask_data/%04i.png"%frame_id
+    # real_depth_file = "./texts/real_depth_frame%04i.txt"%frame_id
+    simulated_depth_file = "./texts/simulated_depth_frame%04i.txt"%frame_id
+    # Remove dependency on txt files
+    real_depth_file = "./depth_data/%04i.png"%frame_id
+    filtered_depth_file = "./filtered_data/depth_without_robot_frame%04i.png"%frame_id
+    filtered_rgb_file = "./filtered_data/rgb_without_robot_frame%04i.png".format(frame_id)
+    system = FrankaPlaybackSim(positions[frame_id], frame_id)
+    system.plot_camera_images(real_depth_file, simulated_depth_file)
+    simulated_image = np.loadtxt(simulated_depth_file)
+    # real_image = np.loadtxt(real_depth_file)
+    real_image = imageio.imread(real_depth_file)
+    print("I'm so confused")
+    real_image = real_image*0.001
+    print(real_image[200:400, 200:400])
+    print(simulated_image[200:400,200:400])
+    # Need to multiply real depth images by 1000 since simulated depth image uses mm as unit
+    mask = filter(real_image, simulated_image)
+    im = Image.fromarray(mask)
+    if im.mode != 'L':
+        im = im.convert('L')
+    print("Saving mask frame ", frame_id)
+    im.save(mask_image_file)
+    # pdb.set_trace()
+    # plt.show()
+    # generate_depth_img_without_robot(real_depth_file, mask_image_file, filtered_depth_file)
+    # generate_rgb_image_without_robot(rgb_image_file, mask_image_file, filtered_rgb_file) #optional, seems the point cloud looks fine with the unfiltered rgb data
 
 if __name__ == "__main__":
     run_urdf_filter()

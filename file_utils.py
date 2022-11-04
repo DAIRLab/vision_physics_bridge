@@ -78,7 +78,7 @@ def write_real_depth_as_txt(start_frame, end_frame):
     """
     Save real depth txt at once since image I/O is very slow. 
     """
-    img_dir = "./depth_data/images.txt" #depth image in the form of txt
+    img_dir = "./texts/images.txt" #depth image in the form of txt
     loaded_arr = np.loadtxt(img_dir)
     print(loaded_arr.shape)
     load_original_arr = loaded_arr.reshape(

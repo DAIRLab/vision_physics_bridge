@@ -16,7 +16,9 @@ ROBOT_TO_HEIGHT = 1/100 # height from robot base to table surface
 CAMERA_X = 1.14164360
 CAMERA_Y = 0.15815239
 CAMERA_Z = 0.66422200
-CUBE_LENGTH = 10.2/100
+# CUBE_LENGTH = 10.2/100
+# For new box 10/31/2022
+BOX_LENGTH = 9.6/100
 ROBOT_BASE_LENGTH = 12/100 # this is inaccurate
 HEIGHT_BUFFER = 0.3 # We want to bound the cube when the robot grabs it in the air. This is a buffer for the end effector configuration space.
 WIDTH_BUFFER = 0.3 # Need to make the left and right bounds larger than the table since the robot may move the cube wildly in space.
@@ -24,9 +26,10 @@ PLANK_WIDTH = 36.3/100
 
 class DepthFilter:
     def __init__(self, frame_id):
-        # self.color_image_title = './rgb_data/frame%06i.png' % frame_id
-        self.color_image_title = './filtered_data/rgb_without_robot_frame%04i.png'%frame_id
-        self.depth_image_title = './filtered_data/depth_without_robot_frame%04i.png'%frame_id
+        self.color_image_title = './rgb_data/%04i.png' % frame_id
+        self.depth_image_title = './depth_data/%04i.png' % frame_id
+        # self.color_image_title = './filtered_data/rgb_without_robot_frame%04i.png'%frame_id
+        # self.depth_image_title = './filtered_data/depth_without_robot_frame%04i.png'%frame_id
         self.cube_screen_image_dir = "./cube_data/screen_image_frame%04i.png"%frame_id
         self.cube_depth_image_dir = "./cube_data/depth_image_frame%04i.png"%frame_id
         self.extrinsic = self.setup_extrinsic()
@@ -38,8 +41,11 @@ class DepthFilter:
 
     def setup_extrinsic(self):
         # Setup camera extrinsic
-        translation = np.array([[1.14164360], [0.15815239], [0.66422200]])
-        axis_vec = [-1.57165949, -1.63112887, 1.07928078]
+        # translation = np.array([[1.14164360], [0.15815239], [0.66422200]])
+        # axis_vec = [-1.57165949, -1.63112887, 1.07928078]
+        # For new data 10/31/2022
+        translation = np.array([[1.11076422], [-0.07966290], [0.67947702]])
+        axis_vec = [-1.61997882, -1.56988553, 0.86362178]
         angle = np.linalg.norm(axis_vec)
         axis = axis_vec / angle
         rotation = axis_angle_to_rotation_matrix(axis, angle) # directions of the world-axes in camera coordinates
@@ -72,10 +78,10 @@ class DepthFilter:
         right_bottom_pcl = np.array((right_bottom[0], right_bottom[1], right_bottom[2]))
         left_top_pcl = np.array((left_top[0], left_top[1], left_top[2]))
         right_top_pcl = np.array((right_top[0], right_top[1], right_top[2]))
-        left_bottom_pcl_ = np.array((left_bottom[0], left_bottom[1], left_bottom[2]-CUBE_LENGTH-HEIGHT_BUFFER))
-        right_bottom_pcl_ = np.array((right_bottom[0], right_bottom[1], right_bottom[2]-CUBE_LENGTH-HEIGHT_BUFFER))
-        left_top_pcl_ = np.array((left_top[0], left_top[1], left_top[2]-CUBE_LENGTH-HEIGHT_BUFFER))
-        right_top_pcl_ = np.array((right_top[0], right_top[1], right_top[2]-CUBE_LENGTH-HEIGHT_BUFFER))
+        left_bottom_pcl_ = np.array((left_bottom[0], left_bottom[1], left_bottom[2]-BOX_LENGTH-HEIGHT_BUFFER))
+        right_bottom_pcl_ = np.array((right_bottom[0], right_bottom[1], right_bottom[2]-BOX_LENGTH-HEIGHT_BUFFER))
+        left_top_pcl_ = np.array((left_top[0], left_top[1], left_top[2]-BOX_LENGTH-HEIGHT_BUFFER))
+        right_top_pcl_ = np.array((right_top[0], right_top[1], right_top[2]-BOX_LENGTH-HEIGHT_BUFFER))
         corners = np.array([left_bottom_pcl, right_bottom_pcl, left_top_pcl, right_top_pcl, left_bottom_pcl_, right_bottom_pcl_, left_top_pcl_, right_top_pcl_])
         
         bounding_polygon = corners.astype("float64")
@@ -93,10 +99,10 @@ class DepthFilter:
         plank_right_bottom_pcl = np.array((plank_right_bottom[0], plank_right_bottom[1], plank_right_bottom[2]))
         plank_left_top_pcl = np.array((plank_left_top[0], plank_left_top[1], plank_left_top[2]))
         plank_right_top_pcl = np.array((plank_right_top[0], plank_right_top[1], plank_right_top[2]))
-        plank_left_bottom_pcl_ = np.array((plank_left_bottom[0], plank_left_bottom[1], plank_left_bottom[2]-CUBE_LENGTH-HEIGHT_BUFFER))
-        plank_right_bottom_pcl_ = np.array((plank_right_bottom[0], plank_right_bottom[1], plank_right_bottom[2]-CUBE_LENGTH-HEIGHT_BUFFER))
-        plank_left_top_pcl_ = np.array((plank_left_top[0], plank_left_top[1], plank_left_top[2]-CUBE_LENGTH-HEIGHT_BUFFER))
-        plank_right_top_pcl_ = np.array((plank_right_top[0], plank_right_top[1], plank_right_top[2]-CUBE_LENGTH-HEIGHT_BUFFER))
+        plank_left_bottom_pcl_ = np.array((plank_left_bottom[0], plank_left_bottom[1], plank_left_bottom[2]-BOX_LENGTH-HEIGHT_BUFFER))
+        plank_right_bottom_pcl_ = np.array((plank_right_bottom[0], plank_right_bottom[1], plank_right_bottom[2]-BOX_LENGTH-HEIGHT_BUFFER))
+        plank_left_top_pcl_ = np.array((plank_left_top[0], plank_left_top[1], plank_left_top[2]-BOX_LENGTH-HEIGHT_BUFFER))
+        plank_right_top_pcl_ = np.array((plank_right_top[0], plank_right_top[1], plank_right_top[2]-BOX_LENGTH-HEIGHT_BUFFER))
         corners_ = np.array([plank_left_bottom_pcl, plank_right_bottom_pcl, plank_left_top_pcl, plank_right_top_pcl, plank_left_bottom_pcl_, plank_right_bottom_pcl_, plank_left_top_pcl_, plank_right_top_pcl_])
         plank_bounding_polygon = corners_.astype("float64")
         plank_bounding_points = o3d.utility.Vector3dVector(plank_bounding_polygon)
@@ -144,10 +150,10 @@ def get_bounding_box_world_coordinates():
     Note: Assume robot is in the middle of the table.
     return: (a, b, c, d) that corresponds to the left bottom, right bottom, left top, right top corner of the table.
     """
-    left_bottom = [CAMERA_X+0.41, -TABLE_WIDTH/2-WIDTH_BUFFER, -ROBOT_TO_HEIGHT+CUBE_LENGTH+HEIGHT_BUFFER]
-    right_bottom = [CAMERA_X+0.41, TABLE_WIDTH/2+WIDTH_BUFFER, -ROBOT_TO_HEIGHT+CUBE_LENGTH+HEIGHT_BUFFER]
-    left_top = [ROBOT_BASE_LENGTH, -TABLE_WIDTH/2-WIDTH_BUFFER, -ROBOT_TO_HEIGHT+CUBE_LENGTH+HEIGHT_BUFFER]
-    right_top = [ROBOT_BASE_LENGTH, TABLE_WIDTH/2+WIDTH_BUFFER, -ROBOT_TO_HEIGHT+CUBE_LENGTH+HEIGHT_BUFFER]
+    left_bottom = [CAMERA_X+0.41, -TABLE_WIDTH/2-WIDTH_BUFFER, -ROBOT_TO_HEIGHT+BOX_LENGTH+HEIGHT_BUFFER]
+    right_bottom = [CAMERA_X+0.41, TABLE_WIDTH/2+WIDTH_BUFFER, -ROBOT_TO_HEIGHT+BOX_LENGTH+HEIGHT_BUFFER]
+    left_top = [ROBOT_BASE_LENGTH, -TABLE_WIDTH/2-WIDTH_BUFFER, -ROBOT_TO_HEIGHT+BOX_LENGTH+HEIGHT_BUFFER]
+    right_top = [ROBOT_BASE_LENGTH, TABLE_WIDTH/2+WIDTH_BUFFER, -ROBOT_TO_HEIGHT+BOX_LENGTH+HEIGHT_BUFFER]
     # left_bottom = [CAMERA_X+0.41, -TABLE_WIDTH/2-WIDTH_BUFFER, -ROBOT_TO_HEIGHT+CUBE_LENGTH+HEIGHT_BUFFER]
     # right_bottom = [CAMERA_X+0.41, TABLE_WIDTH/2+WIDTH_BUFFER, -ROBOT_TO_HEIGHT+CUBE_LENGTH+HEIGHT_BUFFER]
     # left_top = [ROBOT_BASE_LENGTH-0.3, -TABLE_WIDTH/2-WIDTH_BUFFER, -ROBOT_TO_HEIGHT+CUBE_LENGTH+HEIGHT_BUFFER]
@@ -160,10 +166,10 @@ def get_plank_bounding_box_world_coordinates():
     """
     buffer = 0.3
     HEIGHT_BUFFER_= 0.4
-    left_bottom = [CAMERA_X+0.41, -TABLE_WIDTH/2-buffer, -ROBOT_TO_HEIGHT+CUBE_LENGTH+HEIGHT_BUFFER_]
-    right_bottom = [CAMERA_X+0.41, TABLE_WIDTH/2+buffer, -ROBOT_TO_HEIGHT+CUBE_LENGTH+HEIGHT_BUFFER_]
-    left_top = [ROBOT_BASE_LENGTH-0.3, -TABLE_WIDTH/2-buffer, -ROBOT_TO_HEIGHT+CUBE_LENGTH+HEIGHT_BUFFER_]
-    right_top = [ROBOT_BASE_LENGTH-0.3, TABLE_WIDTH/2+buffer, -ROBOT_TO_HEIGHT+CUBE_LENGTH+HEIGHT_BUFFER_]
+    left_bottom = [CAMERA_X+0.41, -TABLE_WIDTH/2-buffer, -ROBOT_TO_HEIGHT+BOX_LENGTH+HEIGHT_BUFFER_]
+    right_bottom = [CAMERA_X+0.41, TABLE_WIDTH/2+buffer, -ROBOT_TO_HEIGHT+BOX_LENGTH+HEIGHT_BUFFER_]
+    left_top = [ROBOT_BASE_LENGTH-0.3, -TABLE_WIDTH/2-buffer, -ROBOT_TO_HEIGHT+BOX_LENGTH+HEIGHT_BUFFER_]
+    right_top = [ROBOT_BASE_LENGTH-0.3, TABLE_WIDTH/2+buffer, -ROBOT_TO_HEIGHT+BOX_LENGTH+HEIGHT_BUFFER_]
     return left_bottom, right_bottom, left_top, right_top
 
 def main(frame_id):
