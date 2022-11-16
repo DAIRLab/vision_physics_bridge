@@ -1,4 +1,3 @@
-
 import cv2
 import matplotlib.pyplot as plt
 import matplotlib.image as mpimg
@@ -17,7 +16,7 @@ from pydrake.all import (AddMultibodyPlantSceneGraph, AngleAxis,
                          RigidTransform, RenderCameraCore, Simulator, StartMeshcat)
 from pydrake.common import FindResourceOrThrow
 from pydrake.common.eigen_geometry import AngleAxis
-from manipulation.scenarios import (AddMultibodyTriad, AddRgbdSensor)
+from manipulation.scenarios import AddRgbdSensor
 from manipulation.utils import FindResource
 import numpy as np
 import rospy
@@ -48,10 +47,7 @@ class FrankaPlaybackSim:
                             self.X_model)
 
         # Add a box for the camera in the environment.
-        camera_pos = [1.14164360, 0.15815239, 0.66422200]
-        axis_vec = [-1.57165949, -1.63112887, 1.07928078]
-        angle = np.linalg.norm(axis_vec)
-        axis = axis_vec / angle
+        camera_pos, angle, axis = self.setup_extrinsic()
         angle_axis = AngleAxis(angle=angle,axis=axis)
         self.X_Camera = RigidTransform(angle_axis, camera_pos)
         self.camera_instance = self.parser.AddModelFromFile(FindResource("models/camera_box.sdf"))
@@ -101,6 +97,14 @@ class FrankaPlaybackSim:
         # self.state.SetFromVector(np.zeros(9*2))
         # self.simulator.Initialize()
 
+    def setup_extrinsic(self):
+        # For new data 10/31/2022
+        translation = [1.11076422, -0.07966290, 0.67947702]
+        axis_vec = [-1.61997882, -1.56988553, 0.86362178]
+        angle = np.linalg.norm(axis_vec)
+        axis = axis_vec / angle
+        return translation, angle, axis
+
     def build(self):
         diagram = self.builder.Build()
         diagram.set_name("depth_camera_demo_system")
@@ -132,11 +136,11 @@ class FrankaPlaybackSim:
         plt.subplot(121)
         # plt.imshow(color_image.data)
         # plt.title('Color image')
-        # real = np.loadtxt(real_depth_dir)
-        real = cv2.imread(real_depth_dir) #Remove dependency on txt files
+        real = np.loadtxt(real_depth_dir)
         _min = 0
         _max = 1
-        plt.imshow(real*0.001, vmin = _min, vmax = _max)
+        # plt.imshow(real*0.001, vmin = _min, vmax = _max)
+        plt.imshow(real, vmin = _min, vmax = _max)
         plt.plot(320, 250,'ro')
         plt.colorbar()
         plt.title('Real image')
@@ -147,16 +151,16 @@ class FrankaPlaybackSim:
         plt.title('Depth image')
         np.savetxt(simulated_depth_dir, depth_image.data[:,:,0])
         # pdb.set_trace()
-        plt.show()
+        # plt.show()
 
-def dilate(frame_id):
+def dilate(frame_id, mask_image_file, dilated_mask_file):
     """
     Cut mask out of image with certain pixel margin since there is some small leftovers of the robot after applying urdf filter. 
     """
     # Load image and mask
     # rgb_image_file = "./rgb_data/%04i.png" % frame_id
-    mask_image_file = "./mask_data/%04i.png" % frame_id
-    dilated_mask_file = "./dilated_mask_data/%04i.png" % frame_id
+    # mask_image_file = "./mask_data/%04i.png" % frame_id
+    # dilated_mask_file = "./dilated_mask_data/%04i.png" % frame_id
     # image = cv2.imread(rgb_image_file)
     mask = cv2.imread(mask_image_file)
     # Create structuring element, dilate and bitwise-and
@@ -178,27 +182,20 @@ def dilate(frame_id):
     # cv2.imwrite(dilated_mask_file, dilate)
 
     
-def run_urdf_filter(frame_id, positions):
-    depth_image_file = "./depth_data/%04i.png"%frame_id
-    rgb_image_file = "./rgb_data/%04i.png"%frame_id
-    mask_image_file = "./mask_data/%04i.png"%frame_id
-    # real_depth_file = "./texts/real_depth_frame%04i.txt"%frame_id
-    simulated_depth_file = "./texts/simulated_depth_frame%04i.txt"%frame_id
-    # Remove dependency on txt files
-    real_depth_file = "./depth_data/%04i.png"%frame_id
+def run_urdf_filter(frame_id, positions, mask_image_file, simulated_depth_file, real_depth_file):
+    # depth_image_file = "./depth_data/%04i.png"%frame_id
+    # rgb_image_file = "./rgb_data/%04i.png"%frame_id
+    # mask_image_file = "./mask_data/%04i.png"%frame_id
+    # simulated_depth_file = "./texts/simulated_depth_frame%04i.txt"%frame_id
+    # real_depth_file =  "./texts/real_depth_frame%04i.txt"%frame_id
     filtered_depth_file = "./filtered_data/depth_without_robot_frame%04i.png"%frame_id
-    filtered_rgb_file = "./filtered_data/rgb_without_robot_frame%04i.png".format(frame_id)
+    filtered_rgb_file = "./filtered_data/rgb_without_robot_frame%04i.png"%frame_id
     system = FrankaPlaybackSim(positions[frame_id], frame_id)
     system.plot_camera_images(real_depth_file, simulated_depth_file)
     simulated_image = np.loadtxt(simulated_depth_file)
-    # real_image = np.loadtxt(real_depth_file)
-    real_image = imageio.imread(real_depth_file)
-    print("I'm so confused")
-    real_image = real_image*0.001
-    print(real_image[200:400, 200:400])
-    print(simulated_image[200:400,200:400])
+    real_image = np.loadtxt(real_depth_file)
     # Need to multiply real depth images by 1000 since simulated depth image uses mm as unit
-    mask = filter(real_image, simulated_image)
+    mask = filter(real_image*1000, simulated_image)
     im = Image.fromarray(mask)
     if im.mode != 'L':
         im = im.convert('L')

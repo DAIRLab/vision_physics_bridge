@@ -37,8 +37,8 @@ def generate_depth_img_without_robot(depth_dir, mask_dir, filtered_depth_dir):
         for j in range(mask_array.shape[1]):
             if mask_array[i][j] == 255:
                 filtered_depth[i][j] = 0
-    # plt.imshow(filtered_depth)
-    # plt.colorbar()
+    plt.imshow(filtered_depth)
+    plt.colorbar()
     # plt.show()
     imageio.imwrite(filtered_depth_dir, filtered_depth.astype(np.uint16))
     return filtered_depth
@@ -74,21 +74,20 @@ def import_data(position_file):
     print("joint position imported!")
     return positions
 
-def write_real_depth_as_txt(start_frame, end_frame):
+def write_real_depth_as_txt(start_frame, end_frame, img_dir, real_depth_dir):
     """
     Save real depth txt at once since image I/O is very slow. 
     """
-    img_dir = "./texts/images.txt" #depth image in the form of txt
     loaded_arr = np.loadtxt(img_dir)
     print(loaded_arr.shape)
     load_original_arr = loaded_arr.reshape(
     loaded_arr.shape[0], loaded_arr.shape[1] // 640, 640)
     print("Done loading images.")
     for frame_id in tqdm(range(start_frame, end_frame)):
-        real_depth_dir = "./texts/real_depth_frame%04i.txt"%frame_id
+        depth_dir = real_depth_dir%frame_id
         print("frame_id", frame_id)
-        real = load_original_arr[frame_id]
-        np.savetxt(real_depth_dir, real)
+        real = load_original_arr[frame_id]*0.001
+        np.savetxt(depth_dir, real)
 
 def check_empty_img():
     """
@@ -105,13 +104,14 @@ def check_empty_img():
             continue
     return empty_list
 
-def denoise(frame_id, show=False):
+def denoise(frame_id, img_dir, denoise_mask_dir, region=(10,10), show=False,):
     """
     Filter out small pieces of noise from depth images. 
     """
-    img_dir = "./cube_data/depth_image_frame%04i.png" % frame_id
-    denoise_mask_dir = "./denoise_cube_data/%04i.png" % frame_id
-
+    # img_dir = "./cube_data/depth_image_frame%04i.png" % frame_id
+    img_dir = img_dir%frame_id
+    # denoise_mask_dir = "/home/cnets-vision/mengti_ws/BundleTrack/Data/YCBINEOAT/contact_nets/masks/%04i.png"%frame_id
+    denoise_mask_dir = denoise_mask_dir%frame_id
     # Load image, convert to grayscale, Gaussian blur, Otsu's threshold
     image = cv2.imread(img_dir)
     gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
@@ -127,7 +127,7 @@ def denoise(frame_id, show=False):
             cv2.drawContours(thresh, [c], -1, (0,0,0), -1)
 
     # Morph close and invert image
-    kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (8,8))
+    kernel = cv2.getStructuringElement(cv2.MORPH_RECT, region)
     close = 255 - cv2.morphologyEx(thresh, cv2.MORPH_CLOSE, kernel, iterations=2)
 
     # cv2.imshow('thresh', thresh)
@@ -185,16 +185,14 @@ def copy():
     for jpgfile in glob.iglob(os.path.join(src_dir, "*.png")):
         shutil.copy(jpgfile, dst_dir)
 
-def create_annotated_poses(output_dir, start_frame, end_frame):
+def create_annotated_poses(output_dir, frame_id):
     """
     Create annotated_poses folder. First txt is the transformation matrix from camera to object. 
     Others are identity matrices solely for evaluation.
     """
-    if start_frame == 0: start_frame+=1
-    for frame_id in range(start_frame, end_frame):
-        filename = os.path.join(output_dir, "%04i.txt" % frame_id)
-        pose = np.array([[1,0,0,0],[0,1,0,0],[0,0,1,0],[0,0,0,1]])
-        np.savetxt(filename, pose)
+    filename = os.path.join(output_dir, "%04i.txt" % frame_id)
+    pose = np.array([[1,0,0,0],[0,1,0,0],[0,0,1,0],[0,0,0,1]])
+    np.savetxt(filename, pose)
 
 def rename():
     """
@@ -238,7 +236,7 @@ def main():
 if __name__ == "__main__":
     # main()
 #    create_annotated_poses("/home/cnets-vision/mengti_ws/BundleTrack/Data/YCBINEOAT/contact_nets_reduced/annotated_poses", 1, 3732)
-    write_real_depth_as_txt(1, 4432)
-    # for frame in range(1, 3372):
-    #     denoise(frame)
     # check_empty_img()
+   
+    for frame in range(61, 77):
+        denoise(frame,(11,11))

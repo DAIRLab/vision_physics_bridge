@@ -13,9 +13,9 @@ TABLE_HEIGHT = 73.2/100
 ROBOT_TO_LENGTH = 46.9/100 # robot base to long side of table
 ROBOT_TO_WIDTH = 33.7/100 # robot base to short side of table
 ROBOT_TO_HEIGHT = 1/100 # height from robot base to table surface
-CAMERA_X = 1.14164360
-CAMERA_Y = 0.15815239
-CAMERA_Z = 0.66422200
+CAMERA_X = 1.11076422
+CAMERA_Y = -0.07966290
+CAMERA_Z = 0.67947702
 # CUBE_LENGTH = 10.2/100
 # For new box 10/31/2022
 BOX_LENGTH = 9.6/100
@@ -25,13 +25,16 @@ WIDTH_BUFFER = 0.3 # Need to make the left and right bounds larger than the tabl
 PLANK_WIDTH = 36.3/100
 
 class DepthFilter:
-    def __init__(self, frame_id):
-        self.color_image_title = './rgb_data/%04i.png' % frame_id
-        self.depth_image_title = './depth_data/%04i.png' % frame_id
+    def __init__(self, frame_id, color_image_dir, depth_image_dir, cube_screen_image_dir, cube_depth_image_dir):
+        # self.color_image_title = './rgb_data/%04i.png' % frame_id
         # self.color_image_title = './filtered_data/rgb_without_robot_frame%04i.png'%frame_id
         # self.depth_image_title = './filtered_data/depth_without_robot_frame%04i.png'%frame_id
-        self.cube_screen_image_dir = "./cube_data/screen_image_frame%04i.png"%frame_id
-        self.cube_depth_image_dir = "./cube_data/depth_image_frame%04i.png"%frame_id
+        # self.cube_screen_image_dir = "./cube_data/screen_image_frame%04i.png"%frame_id
+        # self.cube_depth_image_dir = "./cube_data/depth_image_frame%04i.png"%frame_id
+        self.color_image_title = color_image_dir%frame_id
+        self.depth_image_title = depth_image_dir%frame_id
+        self.cube_screen_image_dir = cube_screen_image_dir%frame_id
+        self.cube_depth_image_dir = cube_depth_image_dir%frame_id
         self.extrinsic = self.setup_extrinsic()
         self.K = np.array([[380.2484436035156, 0, 314.2138977050781],
                     [0, 379.8265380859375, 240.59800720214844], 
@@ -178,6 +181,6 @@ def main(frame_id):
 
 if __name__ == "__main__":
     start_frame_id = 1
-    end_frame_id = 3372
+    end_frame_id = 2
     for frame_id in tqdm(range(start_frame_id, end_frame_id)):
         main(frame_id)
