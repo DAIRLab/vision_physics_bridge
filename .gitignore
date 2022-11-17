@@ -11,6 +11,7 @@
 /dilated_mask_data
 /denoise_cube_data
 /tagslam_poses
+/old
 *.ipynb
 *.gif
 *.mp4
