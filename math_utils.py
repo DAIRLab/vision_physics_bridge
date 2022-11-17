@@ -147,8 +147,10 @@ def transform_to_camera(pred_pose):
     return pred_new_world
 
 def get_extrinsic():
-    translation = np.array([[1.14164360], [0.15815239], [0.66422200]])
-    axis_vec = [-1.57165949, -1.63112887, 1.07928078]
+    # translation = np.array([[1.14164360], [0.15815239], [0.66422200]])
+    # axis_vec = [-1.57165949, -1.63112887, 1.07928078]
+    translation = np.array([[1.11076422], [-0.07966290], [0.67947702]])
+    axis_vec = [-1.61997882, -1.56988553, 0.86362178]
     angle = np.linalg.norm(axis_vec)
     axis = axis_vec / angle
     rotation = axis_angle_to_rotation_matrix(axis, angle) # directions of the world-axes in camera coordinates

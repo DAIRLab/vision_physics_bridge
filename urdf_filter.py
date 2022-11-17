@@ -30,10 +30,12 @@ Note: I installed drake from source through CMake.
 """
 
 class FrankaPlaybackSim:
-    def __init__(self, position, frame_id):
-        self.meshcat = StartMeshcat()
+    def __init__(self, meshcat, position, frame_id, object_pose, gt_pose):
+        self.meshcat = meshcat
         self.builder = DiagramBuilder()
         self.frame_id = frame_id
+        self.object_pose = object_pose
+        self.gt_pose = gt_pose
 
         # Add a cube as MultibodyPlant
         self.plant, self.scene_graph = AddMultibodyPlantSceneGraph(self.builder, time_step=0.0)
@@ -53,6 +55,19 @@ class FrankaPlaybackSim:
         self.camera_instance = self.parser.AddModelFromFile(FindResource("models/camera_box.sdf"))
         self.camera_frame = self.plant.GetFrameByName("base", self.camera_instance)    
         self.plant.WeldFrames(self.plant.world_frame(), self.camera_frame, self.X_Camera)
+    
+
+        # Add a box of bundletrack pose in the environment.
+        self.X_box = RigidTransform(self.object_pose)
+        self.box_instance = self.parser.AddModelFromFile(FindResource("/home/cnets-vision/mengti_ws/robot_filter/assets/contactnets_cube.urdf"))
+        self.box_frame = self.plant.GetFrameByName("body", self.box_instance)
+        self.plant.WeldFrames(self.plant.world_frame(), self.box_frame, self.X_box)
+
+        #Add a box of ground-truth pose in the environment.
+        self.X_gt_box = RigidTransform(self.gt_pose)
+        self.gt_instance = self.parser.AddModelFromFile(FindResource("/home/cnets-vision/mengti_ws/robot_filter/assets/contactnets_cube_gt.urdf"))
+        self.gt_frame = self.plant.GetFrameByName("body", self.gt_instance)
+        self.plant.WeldFrames(self.plant.world_frame(), self.gt_frame, self.X_gt_box)
         self.plant.Finalize()
 
         # Visualize in meshcat
@@ -82,7 +97,7 @@ class FrankaPlaybackSim:
         self.context = self.diagram.CreateDefaultContext()
         self.diagram.Publish(self.context)
         self.plant_context = self.plant.GetMyMutableContextFromRoot(self.context)
-        self.plant.SetPositions(self.plant_context, position)
+        self.plant.SetPositions(self.plant_context, self.model, position)
         self.plant.get_actuation_input_port().FixValue(self.plant_context, np.zeros(9))
         self.simulator = Simulator(self.diagram, self.context)
         self.simulator.Initialize()
@@ -98,9 +113,11 @@ class FrankaPlaybackSim:
         # self.simulator.Initialize()
 
     def setup_extrinsic(self):
+        translation = np.array([[1.14164360], [0.15815239], [0.66422200]])
+        axis_vec = [-1.57165949, -1.63112887, 1.07928078]
         # For new data 10/31/2022
-        translation = [1.11076422, -0.07966290, 0.67947702]
-        axis_vec = [-1.61997882, -1.56988553, 0.86362178]
+        # translation = [1.11076422, -0.07966290, 0.67947702]
+        # axis_vec = [-1.61997882, -1.56988553, 0.86362178]
         angle = np.linalg.norm(axis_vec)
         axis = axis_vec / angle
         return translation, angle, axis
@@ -153,7 +170,7 @@ class FrankaPlaybackSim:
         # pdb.set_trace()
         # plt.show()
 
-def dilate(frame_id, mask_image_file, dilated_mask_file):
+def dilate(frame_id, mask_image_dir, dilated_mask_dir):
     """
     Cut mask out of image with certain pixel margin since there is some small leftovers of the robot after applying urdf filter. 
     """
@@ -162,6 +179,8 @@ def dilate(frame_id, mask_image_file, dilated_mask_file):
     # mask_image_file = "./mask_data/%04i.png" % frame_id
     # dilated_mask_file = "./dilated_mask_data/%04i.png" % frame_id
     # image = cv2.imread(rgb_image_file)
+    dilated_mask_file = dilated_mask_dir%frame_id
+    mask_image_file = mask_image_dir%frame_id
     mask = cv2.imread(mask_image_file)
     # Create structuring element, dilate and bitwise-and
     kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (3,3))
@@ -182,12 +201,12 @@ def dilate(frame_id, mask_image_file, dilated_mask_file):
     # cv2.imwrite(dilated_mask_file, dilate)
 
     
-def run_urdf_filter(frame_id, positions, mask_image_file, simulated_depth_file, real_depth_file):
+def run_urdf_filter(frame_id, positions, mask_image_dir, simulated_depth_dir, real_depth_dir):
     # depth_image_file = "./depth_data/%04i.png"%frame_id
     # rgb_image_file = "./rgb_data/%04i.png"%frame_id
-    # mask_image_file = "./mask_data/%04i.png"%frame_id
-    # simulated_depth_file = "./texts/simulated_depth_frame%04i.txt"%frame_id
-    # real_depth_file =  "./texts/real_depth_frame%04i.txt"%frame_id
+    mask_image_file = mask_image_dir%frame_id
+    simulated_depth_file = simulated_depth_dir%frame_id
+    real_depth_file = real_depth_dir%frame_id
     filtered_depth_file = "./filtered_data/depth_without_robot_frame%04i.png"%frame_id
     filtered_rgb_file = "./filtered_data/rgb_without_robot_frame%04i.png"%frame_id
     system = FrankaPlaybackSim(positions[frame_id], frame_id)
@@ -207,6 +226,12 @@ def run_urdf_filter(frame_id, positions, mask_image_file, simulated_depth_file, 
     # generate_rgb_image_without_robot(rgb_image_file, mask_image_file, filtered_rgb_file) #optional, seems the point cloud looks fine with the unfiltered rgb data
 
 if __name__ == "__main__":
-    run_urdf_filter()
-    # for frame_id in tqdm(range(1, 3732)):
-    #     dilate(frame_id)
+    meshcat = StartMeshcat()
+    POSITION_FILE_PATH = "./texts/joint_position.txt"
+    GT_POSE_DIR = "/home/cnets-vision/mengti_ws/robot_filter/tagslam_poses/"
+    OUTPUT_POSE_DIR = "/home/cnets-vision/mengti_ws/poses/"
+    positions = import_data(POSITION_FILE_PATH)
+    for frame_id in range(1, 2):
+        bundletrack_pose = np.loadtxt(OUTPUT_POSE_DIR+'%04i.txt'% frame_id)
+        gt_pose = np.loadtxt(GT_POSE_DIR+'%04i.txt'% frame_id)
+        system = FrankaPlaybackSim(meshcat, positions[frame_id], frame_id, bundletrack_pose, gt_pose)

@@ -83,7 +83,7 @@ def write_real_depth_as_txt(start_frame, end_frame, img_dir, real_depth_dir):
     load_original_arr = loaded_arr.reshape(
     loaded_arr.shape[0], loaded_arr.shape[1] // 640, 640)
     print("Done loading images.")
-    for frame_id in tqdm(range(start_frame, end_frame)):
+    for frame_id in tqdm(range(start_frame, end_frame+1)):
         depth_dir = real_depth_dir%frame_id
         print("frame_id", frame_id)
         real = load_original_arr[frame_id]*0.001

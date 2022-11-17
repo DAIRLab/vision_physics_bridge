@@ -1,10 +1,12 @@
+"""Process the box data.
+"""
 import argparse
 
 from tqdm import tqdm
 from depth_filter import DepthFilter
 from file_utils import create_annotated_poses, denoise, generate_depth_img_without_robot, generate_rgb_image_without_robot, import_data, write_real_depth_as_txt
 
-from rosbag_processor import bag_to_depth_images, extract_cube_pose, extract_gt_poses_from_tagslam, extract_poses_with_timestamps
+from rosbag_processor import bag_to_depth_images, extract_cube_pose, extract_gt_poses_from_tagslam, extract_poses_from_odom, extract_poses_with_timestamps
 import rospy
 from urdf_filter import dilate, run_urdf_filter
 import os, os.path
@@ -57,4 +59,4 @@ if __name__=='__main__':
     denoise(frame_id)
     create_annotated_poses(output_dir=ANNOTATED_POSES_DIR, frame_id=frame_id)
 
-extract_gt_poses_from_tagslam(start_time, end_time, depth_bag_file=ROSBAG_NAME, odom_bag_file=ODOM_ROSBAG_NAME, depth_topic=DEPTH_ROS_TOPIC, odom_topic=ODOM_ROS_TOPIC, output_dir=TAGSLAM_POSES_DIR)
+  extract_gt_poses_from_tagslam(start_time, end_time, depth_bag_file=ROSBAG_NAME, odom_bag_file=ODOM_ROSBAG_NAME, depth_topic=DEPTH_ROS_TOPIC, odom_topic=ODOM_ROS_TOPIC, output_dir=TAGSLAM_POSES_DIR)
