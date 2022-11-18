@@ -17,8 +17,8 @@
             <geometry>
                 <box size="0.1048 0.1048 0.1048"/>
             </geometry>
-            <material name="pennred">
-                <color rgba="0.6 0 0 1.0" />
+            <material name="blue">
+                <color rgba="0 0 0.8 1" />
             </material>
         </visual>
         <collision>
