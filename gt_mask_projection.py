@@ -58,7 +58,6 @@ class Projection:
         points = []
         for vert in cube_vertices:
             point = world_to_image(vert, self.K, R, T)
-            # print(point)
             points.append(point)
         print(points)
         img = Image.new("L", (640, 480), 0)

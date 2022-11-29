@@ -2,7 +2,7 @@ from copy import deepcopy
 import numpy as np
 import math
 from PIL import Image
-import matplotlib.pyplot as plt 
+import matplotlib.pyplot as plt
 import imageio
 from tqdm import tqdm
 from PIL import Image
@@ -11,7 +11,8 @@ import cv2
 import glob
 import shutil
 import os
-import re 
+import re
+
 
 def filter(real_img, sim_img):
     """
@@ -19,6 +20,7 @@ def filter(real_img, sim_img):
     """
     masked_img = np.subtract(real_img, sim_img)
     return masked_img
+
 
 def generate_depth_img_without_robot(depth_dir, mask_dir, filtered_depth_dir):
     """
@@ -32,7 +34,7 @@ def generate_depth_img_without_robot(depth_dir, mask_dir, filtered_depth_dir):
     mask_img = Image.open(mask_dir)
     depth_array = np.array(depth_img)
     mask_array = np.array(mask_img)
-    filtered_depth = deepcopy(depth_array*1000)
+    filtered_depth = deepcopy(depth_array * 1000)
     for i in range(mask_array.shape[0]):
         for j in range(mask_array.shape[1]):
             if mask_array[i][j] == 255:
@@ -42,6 +44,7 @@ def generate_depth_img_without_robot(depth_dir, mask_dir, filtered_depth_dir):
     # plt.show()
     imageio.imwrite(filtered_depth_dir, filtered_depth.astype(np.uint16))
     return filtered_depth
+
 
 def generate_rgb_image_without_robot(rgb_dir, mask_dir, filtered_rgb_dir):
     """
@@ -66,6 +69,7 @@ def generate_rgb_image_without_robot(rgb_dir, mask_dir, filtered_rgb_dir):
     imageio.imwrite(filtered_rgb_dir, filtered_rgb)
     return filtered_rgb
 
+
 def import_data(position_file):
     """
     Load data generated from rosbag.
@@ -74,20 +78,23 @@ def import_data(position_file):
     print("joint position imported!")
     return positions
 
+
 def write_real_depth_as_txt(start_frame, end_frame, img_dir, real_depth_dir):
     """
-    Save real depth txt at once since image I/O is very slow. 
+    Save real depth txt at once since image I/O is very slow.
     """
     loaded_arr = np.loadtxt(img_dir)
     print(loaded_arr.shape)
     load_original_arr = loaded_arr.reshape(
-    loaded_arr.shape[0], loaded_arr.shape[1] // 640, 640)
+        loaded_arr.shape[0], loaded_arr.shape[1] // 640, 640
+    )
     print("Done loading images.")
-    for frame_id in tqdm(range(start_frame, end_frame+1)):
-        depth_dir = real_depth_dir%frame_id
+    for frame_id in tqdm(range(start_frame, end_frame + 1)):
+        depth_dir = real_depth_dir % frame_id
         print("frame_id", frame_id)
-        real = load_original_arr[frame_id]*0.001
+        real = load_original_arr[frame_id - 1] * 0.001
         np.savetxt(depth_dir, real)
+
 
 def check_empty_img():
     """
@@ -95,27 +102,37 @@ def check_empty_img():
     """
     empty_list = []
     for frame_id in range(1, 3372):
-        denoise_mask_dir = "./denoise_cube_data/frame%04i.png"%frame_id
+        denoise_mask_dir = (
+            "/home/cnets-vision/mengti_ws/BundleTrack/Data/YCBINEOAT/contact_nets_new_full/masks/%04i.png"
+            % frame_id
+        )
         image = cv2.imread(denoise_mask_dir)
-        
-        if np.sum(image)==0:
+
+        if np.sum(image) == 0:
             empty_list.append(frame_id)
         else:
             continue
     return empty_list
 
-def denoise(frame_id, img_dir, denoise_mask_dir, region=(10,10), show=False,):
+
+def denoise(
+    frame_id,
+    img_dir,
+    denoise_mask_dir,
+    region=(10, 10),
+    show=False,
+):
     """
-    Filter out small pieces of noise from depth images. 
+    Filter out small pieces of noise from depth images.
     """
     # img_dir = "./cube_data/depth_image_frame%04i.png" % frame_id
-    img_dir = img_dir%frame_id
+    img_dir = img_dir % frame_id
     # denoise_mask_dir = "/home/cnets-vision/mengti_ws/BundleTrack/Data/YCBINEOAT/contact_nets/masks/%04i.png"%frame_id
-    denoise_mask_dir = denoise_mask_dir%frame_id
+    denoise_mask_dir = os.path.join(denoise_mask_dir, "%04i.png" % frame_id)
     # Load image, convert to grayscale, Gaussian blur, Otsu's threshold
     image = cv2.imread(img_dir)
     gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
-    blur = cv2.GaussianBlur(gray, (3,3), 0)
+    blur = cv2.GaussianBlur(gray, (3, 3), 0)
     thresh = cv2.threshold(blur, 0, 255, cv2.THRESH_BINARY_INV + cv2.THRESH_OTSU)[1]
 
     # Filter using contour area and remove small noise
@@ -124,7 +141,7 @@ def denoise(frame_id, img_dir, denoise_mask_dir, region=(10,10), show=False,):
     for c in cnts:
         area = cv2.contourArea(c)
         if area < 50:
-            cv2.drawContours(thresh, [c], -1, (0,0,0), -1)
+            cv2.drawContours(thresh, [c], -1, (0, 0, 0), -1)
 
     # Morph close and invert image
     kernel = cv2.getStructuringElement(cv2.MORPH_RECT, region)
@@ -135,12 +152,13 @@ def denoise(frame_id, img_dir, denoise_mask_dir, region=(10,10), show=False,):
     # cv2.waitKey()
     # cv2.destroyAllWindows()
     im = Image.fromarray(close)
-    if im.mode != 'L':
-        im = im.convert('L')
+    if im.mode != "L":
+        im = im.convert("L")
     im.save(denoise_mask_dir)
     if show:
         plt.imshow(im)
         plt.show()
+
 
 def render_gif():
     """
@@ -152,10 +170,15 @@ def render_gif():
         new_frame = Image.open(name)
         frames.append(new_frame)
     # Save into a GIF file that loops forever
-    frames[0].save('./png_to_gif.gif', format='GIF',
-                append_images=frames[1:],
-                save_all=True,
-                duration=300, loop=0)
+    frames[0].save(
+        "./png_to_gif.gif",
+        format="GIF",
+        append_images=frames[1:],
+        save_all=True,
+        duration=300,
+        loop=0,
+    )
+
 
 def render_video():
     """
@@ -167,36 +190,43 @@ def render_video():
         filename = "./denoise_cube_data/frame00000{}.png".format(frame_id)
         fileList.append(filename)
 
-    writer = imageio.get_writer('new_depth.mp4', fps=20)
+    writer = imageio.get_writer("new_depth.mp4", fps=20)
 
     for im in fileList:
         writer.append_data(imageio.imread(im))
     writer.close()
 
+
 """
 Data preparation for running BundleTrack on our own RGBD data. 
 """
+
+
 def copy():
     """
     For copying images from robot_filter folder to BundleTrack folder.
     """
     src_dir = "/home/cnets-vision/mengti_ws/robot_filter/depth_data"
-    dst_dir = "/home/cnets-vision/mengti_ws/BundleTrack/Data/YCBINEOAT/contact_nets/depth"
+    dst_dir = (
+        "/home/cnets-vision/mengti_ws/BundleTrack/Data/YCBINEOAT/contact_nets/depth"
+    )
     for jpgfile in glob.iglob(os.path.join(src_dir, "*.png")):
         shutil.copy(jpgfile, dst_dir)
 
+
 def create_annotated_poses(output_dir, frame_id):
     """
-    Create annotated_poses folder. First txt is the transformation matrix from camera to object. 
+    Create annotated_poses folder. First txt is the transformation matrix from camera to object.
     Others are identity matrices solely for evaluation.
     """
     filename = os.path.join(output_dir, "%04i.txt" % frame_id)
-    pose = np.array([[1,0,0,0],[0,1,0,0],[0,0,1,0],[0,0,0,1]])
+    pose = np.array([[1, 0, 0, 0], [0, 1, 0, 0], [0, 0, 1, 0], [0, 0, 0, 1]])
     np.savetxt(filename, pose)
+
 
 def rename():
     """
-    Currently, all data are named as frame00000{frame_id}.png. Need to rename to {frame_id}.png 
+    Currently, all data are named as frame00000{frame_id}.png. Need to rename to {frame_id}.png
     to match the required format of BundleTrack.
     Go to the directory and run rename().
     """
@@ -205,38 +235,43 @@ def rename():
         if filename.startswith("frame"):
             os.rename(filename, filename[-8:])
 
+
 def removed_files(num):
-    """Remove the first num frames from data folder.
-    """
+    """Remove the first num frames from data folder."""
     for filename in os.listdir("."):
-        name = re.findall(r'\d+', filename)[0]
+        name = re.findall(r"\d+", filename)[0]
         new_name = int(name)
         new_name = new_name - num
         new_filename = "%04i.txt" % new_name
         print(filename, new_filename)
         os.rename(filename, new_filename)
 
+
 def main():
     for frame_id in tqdm(range(1, 3372)):
-    #     real_depth_file = "./depth_data/real_depth_frame00000{}.txt".format(frame_id)
-    #     mask_image_file = "./mask_data/mask_frame00000{}.png".format(frame_id)
-    #     filtered_depth_file = "./filtered_data/depth_without_robot_frame00000{}.png".format(frame_id)
-    #     generate_depth_img_without_robot(real_depth_file, mask_image_file, filtered_depth_file)
-    #     rgb_image_file = "./rgb_data/frame%06i.png" % frame_id
-    #     filtered_rgb_file = "./filtered_data/rgb_without_robot_frame00000{}.png".format(frame_id)
-    #     generate_rgb_image_without_robot(rgb_image_file, mask_image_file, filtered_rgb_file)
-        real_depth_file = "./depth_data/real_depth_frame%04i.txt"%frame_id
-        mask_image_file = "./dilated_mask_data/%04i.png"%frame_id
-        filtered_depth_file = "./filtered_data/depth_without_robot_frame%04i.png"%frame_id
-        generate_depth_img_without_robot(real_depth_file, mask_image_file, filtered_depth_file)
+        #     real_depth_file = "./depth_data/real_depth_frame00000{}.txt".format(frame_id)
+        #     mask_image_file = "./mask_data/mask_frame00000{}.png".format(frame_id)
+        #     filtered_depth_file = "./filtered_data/depth_without_robot_frame00000{}.png".format(frame_id)
+        #     generate_depth_img_without_robot(real_depth_file, mask_image_file, filtered_depth_file)
+        #     rgb_image_file = "./rgb_data/frame%06i.png" % frame_id
+        #     filtered_rgb_file = "./filtered_data/rgb_without_robot_frame00000{}.png".format(frame_id)
+        #     generate_rgb_image_without_robot(rgb_image_file, mask_image_file, filtered_rgb_file)
+        real_depth_file = "./depth_data/real_depth_frame%04i.txt" % frame_id
+        mask_image_file = "./dilated_mask_data/%04i.png" % frame_id
+        filtered_depth_file = (
+            "./filtered_data/depth_without_robot_frame%04i.png" % frame_id
+        )
+        generate_depth_img_without_robot(
+            real_depth_file, mask_image_file, filtered_depth_file
+        )
         rgb_image_file = "./rgb_data/%04i.png" % frame_id
-        filtered_rgb_file = "./filtered_data/rgb_without_robot_frame%04i.png"%frame_id
-        generate_rgb_image_without_robot(rgb_image_file, mask_image_file, filtered_rgb_file)
+        filtered_rgb_file = "./filtered_data/rgb_without_robot_frame%04i.png" % frame_id
+        generate_rgb_image_without_robot(
+            rgb_image_file, mask_image_file, filtered_rgb_file
+        )
+
 
 if __name__ == "__main__":
     # main()
-#    create_annotated_poses("/home/cnets-vision/mengti_ws/BundleTrack/Data/YCBINEOAT/contact_nets_reduced/annotated_poses", 1, 3732)
-    # check_empty_img()
-   
-    for frame in range(61, 77):
-        denoise(frame,(11,11))
+    #    create_annotated_poses("/home/cnets-vision/mengti_ws/BundleTrack/Data/YCBINEOAT/contact_nets_reduced/annotated_poses", 1, 3732)
+    print(check_empty_img())

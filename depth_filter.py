@@ -45,8 +45,7 @@ class DepthFilter:
         self.depth_image_title = depth_image_dir % frame_id
         self.cube_screen_image_dir = cube_screen_image_dir % frame_id
         self.cube_depth_image_dir = cube_depth_image_dir % frame_id
-        self.translation = translation
-        self.axis_vec = axis_vec
+        self.extrinsic = self.setup_extrinsic(translation, axis_vec)
         self.K = np.array(
             [
                 [380.2484436035156, 0, 314.2138977050781],
@@ -57,7 +56,7 @@ class DepthFilter:
         self.pcd = self.generate_pcd()
         self.cropped_pcd = self.crop()
 
-    def setup_extrinsic(translation, axis_vec):
+    def setup_extrinsic(self, translation, axis_vec):
         # Setup camera extrinsic
         angle = np.linalg.norm(axis_vec)
         axis = axis_vec / angle
@@ -250,7 +249,7 @@ class DepthFilter:
     def visualize_depth_image(self):
         w = 640
         h = 480
-        window_visible = True
+        window_visible = False
         vis = VisOpen3D(width=w, height=h, visible=window_visible)
         vis.add_geometry(self.cropped_pcd)
         intrinsic_matrix = self.K

@@ -19,7 +19,7 @@ A package that prepares images and pose data for 6D pose tracking.
 `/tagslam_poses`: 4 by 4 transformation matrix of the object retrieved from odom.bag and timestamps.txt for duration calculation.
 
 ### Data generation procedure
-Right now all the procedures below are implemented in `example.py`. You may simply run `example.py` to finish data generation. 
+Right now all the procedures below are implemented in `example.py`. You may replace the paths with correct ones, replace `CAMERA_CONFIG` with correct extrinsic parameters and simply run `example.py` to finish data generation.
 * Generate depth data: In `rosbag_processor.py`, run `bag_to_depth_images()` to extract depth images from rosbag and write `images.txt`
 * Generate rgb data and joint positions: In `rosbag_processor.py`, run `extract_poses_with_timestamps()` to extract joint positions and rgb images at matched timestamps with depth topic from rosbag
 * In `file_utils.py`, run `write_real_depth_as_txt()` to save real depth txt at once 

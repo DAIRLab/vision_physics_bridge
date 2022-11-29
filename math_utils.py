@@ -149,17 +149,19 @@ def camera_to_world(m, translation, axis_vec):
     return np.vstack((np.hstack((R_w, T_w)), np.array([0, 0, 0, 1])))
 
 
-def transform_bundletrack_output_to_world(pred_pose, cam_translation, cam_axis_vec):
+def transform_bundletrack_output_to_world(
+    pred_pose, cam_translation, cam_axis_vec, output_pose_dir, odom_file_dir
+):
     """
     https://github.com/wenbowen123/BundleTrack/issues/38
     """
-    OUTPUT_POSE_DIR = "/home/cnets-vision/mengti_ws/poses/"
-    ODOM_FILE_PATH = "/home/cnets-vision/mengti_ws/BundleTrack/Data/YCBINEOAT/contact_nets/annotated_poses/"
+    # OUTPUT_POSE_DIR = "/home/cnets-vision/mengti_ws/poses/"
+    # ODOM_FILE_PATH = "/home/cnets-vision/mengti_ws/BundleTrack/Data/YCBINEOAT/contact_nets/annotated_poses/"
     init_pose = np.loadtxt(
-        OUTPUT_POSE_DIR + "%04i.txt" % 1
+        output_pose_dir + "%04i.txt" % 1
     )  # initial cube pose in camera frame, bundletrack's internal coordinate system
     init_pose_new = np.loadtxt(
-        ODOM_FILE_PATH + "%04i.txt" % 0
+        odom_file_dir + "%04i.txt" % 0
     )  # initial cube pose represented in camera frame, matching tagslam
     pred_new = (pred_pose @ np.linalg.inv(init_pose)) @ init_pose_new
     pred_new_world = camera_to_world(pred_new, cam_translation, cam_axis_vec)

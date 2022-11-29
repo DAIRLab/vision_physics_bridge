@@ -48,8 +48,8 @@ class FrankaPlaybackSim:
         meshcat,
         position,
         frame_id,
-        object_pose,
-        gt_pose,
+        # object_pose,
+        # gt_pose,
         translation,
         axis_vec,
         show=False,
@@ -57,8 +57,8 @@ class FrankaPlaybackSim:
         self.meshcat = meshcat
         self.builder = DiagramBuilder()
         self.frame_id = frame_id
-        self.object_pose = object_pose
-        self.gt_pose = gt_pose
+        # self.object_pose = object_pose
+        # self.gt_pose = gt_pose
 
         # Add a cube as MultibodyPlant
         self.plant, self.scene_graph = AddMultibodyPlantSceneGraph(
@@ -90,24 +90,24 @@ class FrankaPlaybackSim:
         )
 
         # Add a box of bundletrack pose in the environment.
-        self.X_box = RigidTransform(self.object_pose)
-        self.box_instance = self.parser.AddModelFromFile(
-            FindResource(
-                "/home/cnets-vision/mengti_ws/robot_filter/assets/contactnets_cube.urdf"
-            )
-        )
-        self.box_frame = self.plant.GetFrameByName("body", self.box_instance)
-        self.plant.WeldFrames(self.camera_frame, self.box_frame, self.X_box)
+        # self.X_box = RigidTransform(self.object_pose)
+        # self.box_instance = self.parser.AddModelFromFile(
+        #     FindResource(
+        #         "/home/cnets-vision/mengti_ws/robot_filter/assets/contactnets_cube.urdf"
+        #     )
+        # )
+        # self.box_frame = self.plant.GetFrameByName("body", self.box_instance)
+        # self.plant.WeldFrames(self.camera_frame, self.box_frame, self.X_box)
 
         # Add a box of ground-truth pose in the environment.
-        self.X_gt_box = RigidTransform(self.gt_pose)
-        self.gt_instance = self.parser.AddModelFromFile(
-            FindResource(
-                "/home/cnets-vision/mengti_ws/robot_filter/assets/contactnets_cube_gt.urdf"
-            )
-        )
-        self.gt_frame = self.plant.GetFrameByName("body", self.gt_instance)
-        self.plant.WeldFrames(self.plant.world_frame(), self.gt_frame, self.X_gt_box)
+        # self.X_gt_box = RigidTransform(self.gt_pose)
+        # self.gt_instance = self.parser.AddModelFromFile(
+        #     FindResource(
+        #         "/home/cnets-vision/mengti_ws/robot_filter/assets/contactnets_cube_gt.urdf"
+        #     )
+        # )
+        # self.gt_frame = self.plant.GetFrameByName("body", self.gt_instance)
+        # self.plant.WeldFrames(self.plant.world_frame(), self.gt_frame, self.X_gt_box)
         self.plant.Finalize()
 
         # Visualize in meshcat
@@ -245,7 +245,7 @@ def dilate(frame_id, mask_image_dir, dilated_mask_dir):
     # result = cv2.bitwise_and(image, dilate)
     # print("Finished bitwise.")
 
-    cv2.imshow("dilate", dilate)
+    # cv2.imshow("dilate", dilate)
     # cv2.imshow('result', result)
     # cv2.waitKey()
     im = Image.fromarray(dilate)
@@ -257,14 +257,30 @@ def dilate(frame_id, mask_image_dir, dilated_mask_dir):
 
 
 def run_urdf_filter(
-    frame_id, positions, mask_image_dir, simulated_depth_dir, real_depth_dir
+    meshcat,
+    frame_id,
+    positions,
+    mask_image_dir,
+    simulated_depth_dir,
+    real_depth_dir,
+    cam_translation,
+    cam_axis_vec,
 ):
     mask_image_file = mask_image_dir % frame_id
     simulated_depth_file = simulated_depth_dir % frame_id
     real_depth_file = real_depth_dir % frame_id
     filtered_depth_file = "./filtered_data/depth_without_robot_frame%04i.png" % frame_id
     filtered_rgb_file = "./filtered_data/rgb_without_robot_frame%04i.png" % frame_id
-    system = FrankaPlaybackSim(positions[frame_id], frame_id)
+    system = FrankaPlaybackSim(
+        meshcat,
+        positions[frame_id - 1],
+        frame_id,
+        # bundletrack_pose,
+        # gt_pose,
+        cam_translation,
+        cam_axis_vec,
+        show=False,
+    )
     system.plot_camera_images(real_depth_file, simulated_depth_file)
     simulated_image = np.loadtxt(simulated_depth_file)
     real_image = np.loadtxt(real_depth_file)

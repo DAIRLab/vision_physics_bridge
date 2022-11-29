@@ -36,7 +36,9 @@ class DatasetManagement:
         self.state = self.transform()
 
     def transform(self):
-        """State vector is 4 quaternion + 3 xyz position + 3 angular velocity + 3 linear velocity."""
+        """
+        State vector is 4 quaternion + 3 xyz position + 3 angular velocity + 3 linear velocity.
+        """
         q = rotation_matrix_to_quaternion(self.pose)
         q = q.reshape(1, -1)
         dt = self.get_duration()
