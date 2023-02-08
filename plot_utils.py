@@ -12,9 +12,19 @@ from math_utils import (
 )
 from rosbag_processor import extract_time_versus_poses
 
-GT_POSE_DIR = "/home/cnets-vision/mengti_ws/robot_filter/dataset/split/1/tagslam_poses/"
-OUTPUT_POSE_DIR = "/home/cnets-vision/mengti_ws/results/poses_1/"
-ODOM_FILE_PATH = "/home/cnets-vision/mengti_ws/BundleTrack/Data/YCBINEOAT/contact_nets_new_split/1/annotated_poses/"
+TOSS_IDX = 2
+GT_POSE_DIR = (
+    "/home/cnets-vision/mengti_ws/robot_filter/dataset/old_split/%i/tagslam_poses/"
+    % TOSS_IDX
+)
+OUTPUT_POSE_DIR = "/home/cnets-vision/mengti_ws/old_results/poses_%i/" % TOSS_IDX
+ODOM_FILE_PATH = (
+    "/home/cnets-vision/mengti_ws/BundleTrack/Data/YCBINEOAT/contact_nets_old_split/%i/annotated_poses/"
+    % TOSS_IDX
+)
+# GT_POSE_DIR = "/home/cnets-vision/mengti_ws/robot_filter/dataset/old/tagslam_poses/"
+# OUTPUT_POSE_DIR = "/home/cnets-vision/mengti_ws/poses_old_full/"
+# ODOM_FILE_PATH = "/home/cnets-vision/mengti_ws/BundleTrack/Data/YCBINEOAT/contact_nets_old_first_toss/annotated_poses/"
 
 
 def get_cosine_sim(frame_id):
@@ -125,8 +135,6 @@ def plot_ground_truth(start_frame, end_frame):
 def plot_with_time(bundletrack_time, gt_time, bundletrack_pose_dir, gt_pose_dir):
     """Plot the x, y, z of BundleTrack output versus ground-truth poses of tagslam."""
     bundletrack_time = np.array(bundletrack_time)
-    # gt_time_pad = np.zeros_like(bundletrack_time)
-    # gt_time_pad[:len(gt_time)] = gt_time
     output_x, output_y, output_z = [], [], []  # translation
     gt_x, gt_y, gt_z = [], [], []
     output_alpha, output_beta, output_gamma = [], [], []
@@ -134,11 +142,10 @@ def plot_with_time(bundletrack_time, gt_time, bundletrack_pose_dir, gt_pose_dir)
     frame_num = len([name for name in os.listdir(bundletrack_pose_dir)])
     for frame_id in range(1, frame_num + 1):
         output_pose = np.loadtxt(bundletrack_pose_dir + "%04i.txt" % frame_id)
-        # output_pose = transform_to_camera(output_pose)
         output_pose = transform_bundletrack_output_to_world(
             output_pose,
-            CAMERA_CONFIG["new"]["translation"],
-            CAMERA_CONFIG["new"]["axis_vec"],
+            CAMERA_CONFIG["old"]["translation"],
+            CAMERA_CONFIG["old"]["axis_vec"],
             bundletrack_pose_dir,
             ODOM_FILE_PATH,
         )
@@ -168,19 +175,17 @@ def plot_with_time(bundletrack_time, gt_time, bundletrack_pose_dir, gt_pose_dir)
     )
     gt_x, gt_y, gt_z = np.array(gt_x), np.array(gt_y), np.array(gt_z)
 
-    # fig = plt.figure()
     fig, axs = plt.subplots(2, 3)
+    # fig.suptitle("Toss %i" % TOSS_IDX)
     axs[0, 0].plot(bundletrack_time, output_x, label="BundleTrack")
     axs[0, 0].plot(gt_time, gt_x, label="ground-truth")
     axs[0, 0].set_title("Position x")
     axs[0, 0].legend()
-    # plt.show()
 
     axs[0, 1].plot(bundletrack_time, output_y, label="BundleTrack")
     axs[0, 1].plot(gt_time, gt_y, label="ground-truth")
     axs[0, 1].set_title("Position y")
     axs[0, 1].legend()
-    # plt.show()
 
     axs[0, 2].plot(bundletrack_time, output_z, label="BundleTrack")
     axs[0, 2].plot(gt_time, gt_z, label="ground-truth")
@@ -189,7 +194,7 @@ def plot_with_time(bundletrack_time, gt_time, bundletrack_pose_dir, gt_pose_dir)
 
     axs[1, 0].plot(bundletrack_time, output_alpha, label="BundleTrack")
     axs[1, 0].plot(gt_time, gt_alpha, label="ground-truth")
-    axs[1, 0].set_title("Raw")
+    axs[1, 0].set_title("Roll")
 
     axs[1, 1].plot(bundletrack_time, output_beta, label="BundleTrack")
     axs[1, 1].plot(gt_time, gt_beta, label="ground-truth")
@@ -206,14 +211,59 @@ def plot_with_time(bundletrack_time, gt_time, bundletrack_pose_dir, gt_pose_dir)
 
 if __name__ == "__main__":
     # plot_xyz(1, 950)
-    depth_bag_file = "./raw_19.bag"
-    odom_bag_file = "./odom_19.bag"
+    depth_bag_file = "./raw_10.bag"
+    odom_bag_file = "./odom_10.bag"
     DEPTH_ROS_TOPIC = "/camera/aligned_depth_to_color/image_raw"
-    ODOM_ROS_TOPIC = "/tagslam/odom/body_box"
+    ODOM_ROS_TOPIC = "/tagslam/odom/body_cube"
     # start_time = rospy.rostime.Time(secs=1667330345, nsecs=22710468)
     # end_time = rospy.rostime.Time(secs=1667330357, nsecs=228116)
-    start_time = rospy.rostime.Time(secs=1667330342, nsecs=959312)
-    end_time = rospy.rostime.Time(secs=1667330357, nsecs=453744)
+    start_time = None
+    end_time = None
+    ##### NEW DATA ######
+    # start time
+    # start_time = rospy.rostime.Time(secs=1667330342, nsecs=959312)  # toss 1
+    # start_time = rospy.rostime.Time(secs=1667330357, nsecs=453744)  # toss 2
+    # start_time = rospy.rostime.Time(secs=1667330379, nsecs=657584)  # toss 3
+    # start_time = rospy.rostime.Time(secs=1667330401, nsecs=359995)  # toss 4
+    # start_time = rospy.rostime.Time(secs=1667330422, nsecs=301875)  # toss 5
+    # start_time = rospy.rostime.Time(secs=1667330442, nsecs=284764)  # toss 6
+    # start_time = rospy.rostime.Time(secs=1667330465, nsecs=216068)  # toss 7
+    # start_time = rospy.rostime.Time(secs=1667330490, nsecs=318756)  # toss 8
+
+    # end time
+    # end_time = rospy.rostime.Time(secs=1667330357, nsecs=453744)  # toss 1
+    # end_time = rospy.rostime.Time(secs=1667330379, nsecs=657584)  # toss 2
+    # end_time = rospy.rostime.Time(secs=1667330401, nsecs=359995)  # toss 3
+    # end_time = rospy.rostime.Time(secs=1667330422, nsecs=301875)  # toss 4
+    # end_time = rospy.rostime.Time(secs=1667330442, nsecs=284764)  # toss 5
+    # end_time = rospy.rostime.Time(secs=1667330465, nsecs=216068)  # toss 6
+    # end_time = rospy.rostime.Time(secs=1667330490, nsecs=318756)  # toss 7
+    # end_time = rospy.rostime.Time(secs=1667330509, nsecs=187270)  # toss 8
+
+    #### OLD DATA #####
+    # start time
+    # start_time = rospy.rostime.Time(secs=1655404893, nsecs=899137)  # toss 1
+    start_time = rospy.rostime.Time(secs=1655404906, nsecs=156495)  # toss 2
+    # start_time = rospy.rostime.Time(secs=1655404918, nsecs=435741)  # toss 3
+    # start_time = rospy.rostime.Time(secs=1655404930, nsecs=306306)  # toss 4
+    # start_time = rospy.rostime.Time(secs=1655404944, nsecs=447914)  # toss 5
+    # start_time=rospy.rostime.Time(secs=1655404955, nsecs=272877)  # toss 6
+    # start_time=rospy.rostime.Time(secs=1655404966, nsecs=698458)  # toss 7
+    # start_time=rospy.rostime.Time(secs=1655404977, nsecs=941630)  # toss 8
+    # start_time=rospy.rostime.Time(secs=1655404991, nsecs=641514) # toss 9
+    # start_time=rospy.rostime.Time(secs=1655405008, nsecs=720921) # toss 10
+
+    # end time
+    # end_time = rospy.rostime.Time(secs=1655404906, nsecs=156495)  # toss 1
+    end_time = rospy.rostime.Time(secs=1655404918, nsecs=435741)  # toss 2
+    # end_time = rospy.rostime.Time(secs=1655404930, nsecs=306306)  # toss 3
+    # end_time = rospy.rostime.Time(secs=1655404944, nsecs=447914)  # toss 4
+    # end_time = rospy.rostime.Time(secs=1655404955, nsecs=272877)  # toss 5
+    # end_time=rospy.rostime.Time(secs=1655404966, nsecs=698458)  # toss 6
+    # end_time=rospy.rostime.Time(secs=1655404977, nsecs=941630)  # toss 7
+    # end_time=rospy.rostime.Time(secs=1655404991, nsecs=641514)  # toss 8
+    # end_time=rospy.rostime.Time(secs=1655405008, nsecs=720921)  # toss 9
+    # end_time=rospy.rostime.Time(secs=1655405022, nsecs=942549)  # toss 10
     bundletrack_time, gt_time = extract_time_versus_poses(
         start_time,
         end_time,

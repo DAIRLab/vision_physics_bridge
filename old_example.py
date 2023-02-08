@@ -31,7 +31,34 @@ JOINT_STATE_ROS_TOPIC = "/joint_states"
 RGB_ROS_TOPIC = "/camera/color/image_raw"
 ODOM_ROS_TOPIC = "/tagslam/odom/body_cube"
 
-ROOT_DIR = "./dataset/old"
+ROOT_DIR = "./dataset/old_split_new_separation/2/"
+BUNDLETRACK_DATA_DIR = "contact_nets_old_split_new_separation/2/"
+BUNDLETRACK_DIR = "/home/cnets-vision/mengti_ws/BundleTrack/Data/YCBINEOAT/"
+# Create folders
+if not os.path.exists(ROOT_DIR + "texts"):
+    os.makedirs(ROOT_DIR + "texts")
+if not os.path.exists(ROOT_DIR + "depth_data"):
+    os.makedirs(ROOT_DIR + "depth_data")
+if not os.path.exists(ROOT_DIR + "rgb_data"):
+    os.makedirs(ROOT_DIR + "rgb_data")
+if not os.path.exists(ROOT_DIR + "cube_data"):
+    os.makedirs(ROOT_DIR + "cube_data")
+if not os.path.exists(ROOT_DIR + "mask_data"):
+    os.makedirs(ROOT_DIR + "mask_data")
+if not os.path.exists(ROOT_DIR + "dilated_mask_data"):
+    os.makedirs(ROOT_DIR + "dilated_mask_data")
+if not os.path.exists(ROOT_DIR + "filtered_data"):
+    os.makedirs(ROOT_DIR + "filtered_data")
+if not os.path.exists(ROOT_DIR + "tagslam_poses"):
+    os.makedirs(ROOT_DIR + "tagslam_poses")
+if not os.path.exists(BUNDLETRACK_DIR + BUNDLETRACK_DATA_DIR + "annotated_poses"):
+    os.makedirs(BUNDLETRACK_DIR + BUNDLETRACK_DATA_DIR + "annotated_poses")
+if not os.path.exists(BUNDLETRACK_DIR + BUNDLETRACK_DATA_DIR + "depth"):
+    os.makedirs(BUNDLETRACK_DIR + BUNDLETRACK_DATA_DIR + "depth")
+if not os.path.exists(BUNDLETRACK_DIR + BUNDLETRACK_DATA_DIR + "masks"):
+    os.makedirs(BUNDLETRACK_DIR + BUNDLETRACK_DATA_DIR + "masks")
+if not os.path.exists(BUNDLETRACK_DIR + BUNDLETRACK_DATA_DIR + "rgb"):
+    os.makedirs(BUNDLETRACK_DIR + BUNDLETRACK_DATA_DIR + "rgb")
 
 POSITION_FILE_PATH = ROOT_DIR + "texts/joint_position.txt"
 REAL_DEPTH_FILE = ROOT_DIR + "texts/real_depth_frame%04i.txt"
@@ -49,15 +76,26 @@ FILTERED_RGB_FILE = ROOT_DIR + "filtered_data/rgb_without_robot_frame%04i.png"
 TAGSLAM_POSES_DIR = ROOT_DIR + "tagslam_poses/"
 
 # BundleTrack data paths
-ANNOTATED_POSES_DIR = "/home/cnets-vision/mengti_ws/BundleTrack/Data/YCBINEOAT/contact_nets_old/annotated_poses/"
-DENOISE_MASK_DIR = "/home/cnets-vision/mengti_ws/BundleTrack/Data/YCBINEOAT/contact_nets_old/masks/%04i.png"
+DENOISE_MASK_DIR = (
+    "/home/cnets-vision/mengti_ws/BundleTrack/Data/YCBINEOAT/"
+    + BUNDLETRACK_DATA_DIR
+    + "masks"
+)
+ANNOTATED_POSES_DIR = (
+    "/home/cnets-vision/mengti_ws/BundleTrack/Data/YCBINEOAT/"
+    + BUNDLETRACK_DATA_DIR
+    + "annotated_poses"
+)
 BUNDLETRACK_DEPTH = (
-    "/home/cnets-vision/mengti_ws/BundleTrack/Data/YCBINEOAT/contact_nets_old/depth"
+    "/home/cnets-vision/mengti_ws/BundleTrack/Data/YCBINEOAT/"
+    + BUNDLETRACK_DATA_DIR
+    + "depth"
 )
 BUNDLETRACK_RGB = (
-    "/home/cnets-vision/mengti_ws/BundleTrack/Data/YCBINEOAT/contact_nets_old/rgb"
+    "/home/cnets-vision/mengti_ws/BundleTrack/Data/YCBINEOAT/"
+    + BUNDLETRACK_DATA_DIR
+    + "rgb"
 )
-TAGSLAM_POSES_DIR = "./old/tagslam_poses/"
 
 # For camera extrinsics
 CAMERA_CONFIG = {
@@ -72,27 +110,63 @@ CAMERA_CONFIG = {
 }
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
+    # parser.add_argument(
+    #     "--start_time",
+    #     type=rospy.rostime.Time,
+    # required=False,
+    # default=rospy.rostime.Time(secs=1655404893, nsecs=899137),  # toss 1
+    # default=rospy.rostime.Time(secs=1655404906, nsecs=156495),  # toss 2
+    # default=rospy.rostime.Time(secs=1655404918, nsecs=435741),  # toss 3
+    # default=rospy.rostime.Time(secs=1655404930, nsecs=306306),  # toss 4
+    # default=rospy.rostime.Time(secs=1655404944, nsecs=447914),  # toss 5
+    # default=rospy.rostime.Time(secs=1655404955, nsecs=272877),  # toss 6
+    # default=rospy.rostime.Time(secs=1655404966, nsecs=698458),  # toss 7
+    # default=rospy.rostime.Time(secs=1655404977, nsecs=941630),  # toss 8
+    # default=rospy.rostime.Time(secs=1655404991, nsecs=641514),  # toss 9
+    # default=rospy.rostime.Time(secs=1655405008, nsecs=720921),  # toss 10
+    # )
+    # parser.add_argument(
+    #     "--end_time",
+    #     type=rospy.rostime.Time,
+    # required=False,
+    # default=rospy.rostime.Time(secs=1655404906, nsecs=156495),  # toss 1
+    # default=rospy.rostime.Time(secs=1655404918, nsecs=435741),  # toss 2
+    # default=rospy.rostime.Time(secs=1655404930, nsecs=306306),  # toss 3
+    # default=rospy.rostime.Time(secs=1655404944, nsecs=447914),  # toss 4
+    # default=rospy.rostime.Time(secs=1655404955, nsecs=272877),  # toss 5
+    # default=rospy.rostime.Time(secs=1655404966, nsecs=698458),  # toss 6
+    # default=rospy.rostime.Time(secs=1655404977, nsecs=941630),  # toss 7
+    # default=rospy.rostime.Time(secs=1655404991, nsecs=641514),  # toss 8
+    # default=rospy.rostime.Time(secs=1655405008, nsecs=720921),  # toss 9
+    # default=rospy.rostime.Time(secs=1655405022, nsecs=942549),  # toss 10
+    # )
+
+    # <------------------------------- Redo toss separation 1/31/23 --------------------------------
     parser.add_argument(
         "--start_time",
         type=rospy.rostime.Time,
         required=False,
-        # default=rospy.rostime.Time(secs=1667330345, nsecs=22710468),
-    )  # the first timestamp of odombag
+        # default=rospy.rostime.Time(secs=1655404893, nsecs=899137),  # toss 1
+        default=rospy.rostime.Time(secs=1655404908, nsecs=279948),  # toss 2
+        # default=rospy.rostime.Time(secs=1655404920, nsecs=470680), # toss 3
+    )
     parser.add_argument(
         "--end_time",
         type=rospy.rostime.Time,
         required=False,
-        # default=rospy.rostime.Time(secs=1667330357, nsecs=228116),
+        # default=rospy.rostime.Time(secs=1655404908, nsecs=279948),  # toss 1
+        default=rospy.rostime.Time(secs=1655404920, nsecs=470680),  # toss 2
+        # default=rospy.rostime.Time(secs=1655404932, nsecs=647236), # toss 3
     )
     parser.add_argument(
         "--translation",
         type=np.array,
-        default=CAMERA_CONFIG["new"]["translation"],
+        default=CAMERA_CONFIG["old"]["translation"],
     )
     parser.add_argument(
         "--axis_vec",
         type=np.array,
-        default=CAMERA_CONFIG["new"]["axis_vec"],
+        default=CAMERA_CONFIG["old"]["axis_vec"],
     )
 
     args = parser.parse_args()
@@ -110,7 +184,7 @@ if __name__ == "__main__":
         ANNOTATED_POSES_DIR,
         translation,
         axis_vec,
-    )  # Get the box pose for the first frame
+    )  # Get the cube pose for the first frame
     bag_to_depth_images(
         ROSBAG_NAME,
         DEPTH_ROS_TOPIC,
@@ -143,7 +217,7 @@ if __name__ == "__main__":
     )  # TODO: The last frame is cropped
     print("Finished writing %i real depth text files." % frame_num)
     meshcat = StartMeshcat()
-    for frame_id in tqdm(range(2465, 2466)):
+    for frame_id in tqdm(range(1, frame_num + 1)):
         run_urdf_filter(
             meshcat,
             frame_id,
@@ -177,7 +251,7 @@ if __name__ == "__main__":
             frame_id,
             img_dir=CUBE_DEPTH_DIR,
             denoise_mask_dir=DENOISE_MASK_DIR,
-            region=(11, 11),
+            region=(10, 10),
         )
         create_annotated_poses(output_dir=ANNOTATED_POSES_DIR, frame_id=frame_id)
 

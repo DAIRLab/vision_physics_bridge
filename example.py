@@ -32,7 +32,7 @@ JOINT_STATE_ROS_TOPIC = "/joint_states"
 RGB_ROS_TOPIC = "/camera/color/image_raw"
 ODOM_ROS_TOPIC = "/tagslam/odom/body_box"
 
-ROOT_DIR = "./dataset/new/"
+ROOT_DIR = "./dataset/new_split/"
 
 POSITION_FILE_PATH = ROOT_DIR + "texts/joint_position.txt"
 REAL_DEPTH_FILE = ROOT_DIR + "texts/real_depth_frame%04i.txt"
@@ -99,49 +99,49 @@ if __name__ == "__main__":
     translation = args.translation
     axis_vec = args.axis_vec
 
-    # extract_cube_pose(
-    #     start_time,
-    #     end_time,
-    #     ROSBAG_NAME,
-    #     ODOM_ROSBAG_NAME,
-    #     ODOM_ROS_TOPIC,
-    #     ANNOTATED_POSES_DIR,
-    #     translation,
-    #     axis_vec,
-    # )  # Get the box pose for the first frame
-    # bag_to_depth_images(
-    #     ROSBAG_NAME,
-    #     DEPTH_ROS_TOPIC,
-    #     DEPTH_DATA_DIR,
-    #     start_time,
-    #     end_time,
-    #     img_dir=IMAGE_TXT_PATH,
-    #     bundletrack_depth_dir=BUNDLETRACK_DEPTH,
-    # )
-    # print("Depth images generated")
-    # extract_poses_with_timestamps(
-    #     ROSBAG_NAME,
-    #     DEPTH_ROS_TOPIC,
-    #     RGB_ROS_TOPIC,
-    #     JOINT_STATE_ROS_TOPIC,
-    #     POSITION_FILE_PATH,
-    #     RGB_DATA_DIR,
-    #     start_time,
-    #     end_time,
-    #     bundletrack_rgb_dir=BUNDLETRACK_RGB,
-    # )
+    extract_cube_pose(
+        start_time,
+        end_time,
+        ROSBAG_NAME,
+        ODOM_ROSBAG_NAME,
+        ODOM_ROS_TOPIC,
+        ANNOTATED_POSES_DIR,
+        translation,
+        axis_vec,
+    )  # Get the box pose for the first frame
+    bag_to_depth_images(
+        ROSBAG_NAME,
+        DEPTH_ROS_TOPIC,
+        DEPTH_DATA_DIR,
+        start_time,
+        end_time,
+        img_dir=IMAGE_TXT_PATH,
+        bundletrack_depth_dir=BUNDLETRACK_DEPTH,
+    )
+    print("Depth images generated")
+    extract_poses_with_timestamps(
+        ROSBAG_NAME,
+        DEPTH_ROS_TOPIC,
+        RGB_ROS_TOPIC,
+        JOINT_STATE_ROS_TOPIC,
+        POSITION_FILE_PATH,
+        RGB_DATA_DIR,
+        start_time,
+        end_time,
+        bundletrack_rgb_dir=BUNDLETRACK_RGB,
+    )
     frame_num = len([name for name in os.listdir(RGB_DATA_DIR)])
     print("There are %i frames in total!" % frame_num)
     positions = import_data(POSITION_FILE_PATH)
-    # write_real_depth_as_txt(
-    #     start_frame=1,
-    #     end_frame=frame_num,
-    #     img_dir=IMAGE_TXT_PATH,
-    #     real_depth_dir=REAL_DEPTH_FILE,
-    # )  # TODO: The last frame is cropped
+    write_real_depth_as_txt(
+        start_frame=1,
+        end_frame=frame_num,
+        img_dir=IMAGE_TXT_PATH,
+        real_depth_dir=REAL_DEPTH_FILE,
+    )  # TODO: The last frame is cropped
     print("Finished writing %i real depth text files." % frame_num)
     meshcat = StartMeshcat()
-    for frame_id in tqdm(range(2465, 2466)):
+    for frame_id in tqdm(range(1, frame_num + 1)):
         run_urdf_filter(
             meshcat,
             frame_id,

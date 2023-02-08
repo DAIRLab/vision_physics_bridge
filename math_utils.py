@@ -25,10 +25,24 @@ def axis_angle_to_rotation_matrix(axis, theta):
 
 
 def rotation_matrix_to_euler(R):
-    beta = -np.arcsin(R[2, 0])
-    alpha = np.arctan2(R[2, 1] / np.cos(beta), R[2, 2] / np.cos(beta))
-    gamma = np.arctan2(R[1, 0] / np.cos(beta), R[0, 0] / np.cos(beta))
-    return np.array((alpha, beta, gamma))
+    # beta = -np.arcsin(R[2, 0])
+    # alpha = np.arctan2(R[2, 1] / np.cos(beta), R[2, 2] / np.cos(beta))
+    # gamma = np.arctan2(R[1, 0] / np.cos(beta), R[0, 0] / np.cos(beta))
+    # return np.array((alpha, beta, gamma))
+    sy = math.sqrt(R[0, 0] * R[0, 0] + R[1, 0] * R[1, 0])
+
+    singular = sy < 1e-6
+
+    if not singular:
+        x = math.atan2(R[2, 1], R[2, 2])
+        y = math.atan2(-R[2, 0], sy)
+        z = math.atan2(R[1, 0], R[0, 0])
+    else:
+        x = math.atan2(-R[1, 2], R[1, 1])
+        y = math.atan2(-R[2, 0], sy)
+        z = 0
+
+    return np.array([x, y, z])
 
 
 def quaternion_to_rotation_matrix(Q):
@@ -142,9 +156,6 @@ def camera_to_world(m, translation, axis_vec):
     pos_camera_vector = m[:, 3]
     pos_world_vector = np.linalg.inv(extrinsic) @ pos_camera_vector
     T_w = pos_world_vector[:3]
-
-    # T_c = m[:3, 3]
-    # T_w = -Rw2c.T @ T_c
     T_w = T_w.reshape(-1, 1)
     return np.vstack((np.hstack((R_w, T_w)), np.array([0, 0, 0, 1])))
 

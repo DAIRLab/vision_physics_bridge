@@ -460,22 +460,26 @@ def extract_gt_poses_from_tagslam(
                 odom_timestamps[msg.header.stamp.secs] = []
             odom_timestamps[msg.header.stamp.secs].append(msg.header.stamp.nsecs)
     print("The length of the odom_timestamps is {}".format(getDictLen(odom_timestamps)))
+    id = 1
     for secs in tqdm(depth_timestamps.keys()):
         if secs not in final_odom_timestamps.keys():
             final_odom_timestamps[secs] = []
         for nsecs in depth_timestamps[secs]:
             closest_nsecs = math.inf
             result_nsecs = nsecs
-            if secs not in odom_timestamps.keys():
-                continue
+            # if secs not in odom_timestamps.keys():
+            #     continue
             for odom_nsecs in odom_timestamps[secs]:
                 if abs(odom_nsecs - nsecs) < closest_nsecs:
                     # print("Updating ...")
                     result_nsecs = odom_nsecs
                     closest_nsecs = abs(odom_nsecs - nsecs)
             if result_nsecs in final_odom_timestamps[secs]:
+                print("Skipping...", id)
+                id += 1
                 continue
             final_odom_timestamps[secs].append(result_nsecs)
+            id += 1
     print(
         "The length of the final_odom_timestamps is {}".format(
             getDictLen(final_odom_timestamps)
@@ -528,10 +532,11 @@ def extract_time_versus_poses(
 
     frame_id = 1
     for (topic, msg, ts) in odom_bag.read_messages(topics=str(odom_topic)):
-        if checkStarttime(msg.header.stamp, start_time):
-            continue
-        if checkEndtime(msg.header.stamp, end_time):
-            break
+        if start_time and end_time:
+            if checkStarttime(msg.header.stamp, start_time):
+                continue
+            if checkEndtime(msg.header.stamp, end_time):
+                break
         odom_time.append(msg.header.stamp.to_nsec())
         Q = np.zeros((4, 1))
         Q[0] = msg.pose.pose.orientation.x

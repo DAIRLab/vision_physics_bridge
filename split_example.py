@@ -32,8 +32,8 @@ JOINT_STATE_ROS_TOPIC = "/joint_states"
 RGB_ROS_TOPIC = "/camera/color/image_raw"
 ODOM_ROS_TOPIC = "/tagslam/odom/body_box"
 
-ROOT_DIR = "./dataset/split/8/"
-BUNDLETRACK_DATA_DIR = "contact_nets_new_split/8/"
+ROOT_DIR = "./dataset/split/6/"
+BUNDLETRACK_DATA_DIR = "contact_nets_new_split/6/"
 
 # Create folders
 if not os.path.exists(ROOT_DIR + "texts"):
@@ -112,9 +112,9 @@ if __name__ == "__main__":
         # default=rospy.rostime.Time(secs=1667330379, nsecs=657584),  # toss 3
         # default=rospy.rostime.Time(secs=1667330401, nsecs=359995),  # toss 4
         # default=rospy.rostime.Time(secs=1667330422, nsecs=301875),  # toss 5
-        # default=rospy.rostime.Time(secs=1667330442, nsecs=284764),  # toss 6
+        default=rospy.rostime.Time(secs=1667330442, nsecs=284764),  # toss 6
         # default=rospy.rostime.Time(secs=1667330465, nsecs=216068),  # toss 7
-        default=rospy.rostime.Time(secs=1667330489, nsecs=993267),  # toss 8
+        # default=rospy.rostime.Time(secs=1667330490, nsecs=318756),  # toss 8
     )  # the first timestamp of odombag
     parser.add_argument(
         "--end_time",
@@ -125,9 +125,9 @@ if __name__ == "__main__":
         # default=rospy.rostime.Time(secs=1667330401, nsecs=359995),  # toss 3
         # default=rospy.rostime.Time(secs=1667330422, nsecs=301875),  # toss 4
         # default=rospy.rostime.Time(secs=1667330442, nsecs=284764),  # toss 5
-        # default=rospy.rostime.Time(secs=1667330465, nsecs=216068),  # toss 6
-        # default=rospy.rostime.Time(secs=1667330489, nsecs=993267),  # toss 7
-        default=rospy.rostime.Time(secs=1667330509, nsecs=187270),  # toss 8
+        default=rospy.rostime.Time(secs=1667330465, nsecs=216068),  # toss 6
+        # default=rospy.rostime.Time(secs=1667330490, nsecs=318756),  # toss 7
+        # default=rospy.rostime.Time(secs=1667330509, nsecs=187270),  # toss 8
     )
     parser.add_argument(
         "--translation",
@@ -146,37 +146,37 @@ if __name__ == "__main__":
     translation = args.translation
     axis_vec = args.axis_vec
 
-    # extract_cube_pose(
-    #     start_time,
-    #     end_time,
-    #     ROSBAG_NAME,
-    #     ODOM_ROSBAG_NAME,
-    #     ODOM_ROS_TOPIC,
-    #     ANNOTATED_POSES_DIR,
-    #     translation,
-    #     axis_vec,
-    # )  # Get the box pose for the first frame
-    # bag_to_depth_images(
-    #     ROSBAG_NAME,
-    #     DEPTH_ROS_TOPIC,
-    #     DEPTH_DATA_DIR,
-    #     start_time,
-    #     end_time,
-    #     img_dir=IMAGE_TXT_PATH,
-    #     bundletrack_depth_dir=BUNDLETRACK_DEPTH,
-    # )
-    # print("Depth images generated")
-    # extract_poses_with_timestamps(
-    #     ROSBAG_NAME,
-    #     DEPTH_ROS_TOPIC,
-    #     RGB_ROS_TOPIC,
-    #     JOINT_STATE_ROS_TOPIC,
-    #     POSITION_FILE_PATH,
-    #     RGB_DATA_DIR,
-    #     start_time,
-    #     end_time,
-    #     bundletrack_rgb_dir=BUNDLETRACK_RGB,
-    # )
+    extract_cube_pose(
+        start_time,
+        end_time,
+        ROSBAG_NAME,
+        ODOM_ROSBAG_NAME,
+        ODOM_ROS_TOPIC,
+        ANNOTATED_POSES_DIR,
+        translation,
+        axis_vec,
+    )  # Get the box pose for the first frame
+    bag_to_depth_images(
+        ROSBAG_NAME,
+        DEPTH_ROS_TOPIC,
+        DEPTH_DATA_DIR,
+        start_time,
+        end_time,
+        img_dir=IMAGE_TXT_PATH,
+        bundletrack_depth_dir=BUNDLETRACK_DEPTH,
+    )
+    print("Depth images generated")
+    extract_poses_with_timestamps(
+        ROSBAG_NAME,
+        DEPTH_ROS_TOPIC,
+        RGB_ROS_TOPIC,
+        JOINT_STATE_ROS_TOPIC,
+        POSITION_FILE_PATH,
+        RGB_DATA_DIR,
+        start_time,
+        end_time,
+        bundletrack_rgb_dir=BUNDLETRACK_RGB,
+    )
     frame_num = len([name for name in os.listdir(RGB_DATA_DIR)])
     print("There are %i frames in total!" % frame_num)
     positions = import_data(POSITION_FILE_PATH)
@@ -188,7 +188,7 @@ if __name__ == "__main__":
     )  # TODO: The last frame is cropped
     print("Finished writing %i real depth text files." % frame_num)
     meshcat = StartMeshcat()
-    for frame_id in tqdm(range(1, frame_num + 1)):
+    for frame_id in tqdm(range(524, 525)):
         run_urdf_filter(
             meshcat,
             frame_id,
@@ -222,7 +222,7 @@ if __name__ == "__main__":
             frame_id,
             img_dir=CUBE_DEPTH_DIR,
             denoise_mask_dir=DENOISE_MASK_DIR,
-            region=(10, 10),
+            region=(8, 8),
         )
         create_annotated_poses(output_dir=ANNOTATED_POSES_DIR, frame_id=frame_id)
 

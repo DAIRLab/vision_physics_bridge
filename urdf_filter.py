@@ -248,7 +248,8 @@ def dilate(frame_id, mask_image_dir, dilated_mask_dir):
     # cv2.imshow("dilate", dilate)
     # cv2.imshow('result', result)
     # cv2.waitKey()
-    im = Image.fromarray(dilate)
+    im = Image.fromarray(dilate)  ##TODO
+    # im = Image.fromarray(mask)
     if im.mode != "L":
         im = im.convert("L")
     print("Saving mask frame ", frame_id)
