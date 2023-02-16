@@ -32,7 +32,36 @@ JOINT_STATE_ROS_TOPIC = "/joint_states"
 RGB_ROS_TOPIC = "/camera/color/image_raw"
 ODOM_ROS_TOPIC = "/tagslam/odom/body_box"
 
-ROOT_DIR = "./dataset/new_split/"
+ROOT_DIR = "./dataset/new_split/1/"
+BUNDLETRACK_DATA_DIR = "./contact_nets_new_split/1/"
+BUNDLETRACK_DIR = "/home/cnets-vision/mengti_ws/BundleTrack/Data/YCBINEOAT/"
+
+# Create folders
+if not os.path.exists(ROOT_DIR + "texts"):
+    os.makedirs(ROOT_DIR + "texts")
+if not os.path.exists(ROOT_DIR + "depth_data"):
+    os.makedirs(ROOT_DIR + "depth_data")
+if not os.path.exists(ROOT_DIR + "rgb_data"):
+    os.makedirs(ROOT_DIR + "rgb_data")
+if not os.path.exists(ROOT_DIR + "cube_data"):
+    os.makedirs(ROOT_DIR + "cube_data")
+if not os.path.exists(ROOT_DIR + "mask_data"):
+    os.makedirs(ROOT_DIR + "mask_data")
+if not os.path.exists(ROOT_DIR + "dilated_mask_data"):
+    os.makedirs(ROOT_DIR + "dilated_mask_data")
+if not os.path.exists(ROOT_DIR + "filtered_data"):
+    os.makedirs(ROOT_DIR + "filtered_data")
+if not os.path.exists(ROOT_DIR + "tagslam_poses"):
+    os.makedirs(ROOT_DIR + "tagslam_poses")
+if not os.path.exists(BUNDLETRACK_DIR + BUNDLETRACK_DATA_DIR + "annotated_poses"):
+    os.makedirs(BUNDLETRACK_DIR + BUNDLETRACK_DATA_DIR + "annotated_poses")
+if not os.path.exists(BUNDLETRACK_DIR + BUNDLETRACK_DATA_DIR + "depth"):
+    os.makedirs(BUNDLETRACK_DIR + BUNDLETRACK_DATA_DIR + "depth")
+if not os.path.exists(BUNDLETRACK_DIR + BUNDLETRACK_DATA_DIR + "masks"):
+    os.makedirs(BUNDLETRACK_DIR + BUNDLETRACK_DATA_DIR + "masks")
+if not os.path.exists(BUNDLETRACK_DIR + BUNDLETRACK_DATA_DIR + "rgb"):
+    os.makedirs(BUNDLETRACK_DIR + BUNDLETRACK_DATA_DIR + "rgb")
+
 
 POSITION_FILE_PATH = ROOT_DIR + "texts/joint_position.txt"
 REAL_DEPTH_FILE = ROOT_DIR + "texts/real_depth_frame%04i.txt"
@@ -50,11 +79,25 @@ FILTERED_RGB_FILE = ROOT_DIR + "filtered_data/rgb_without_robot_frame%04i.png"
 TAGSLAM_POSES_DIR = ROOT_DIR + "tagslam_poses/"
 
 # BundleTrack data paths
-DENOISE_MASK_DIR = "/home/cnets-vision/mengti_ws/BundleTrack/Data/YCBINEOAT/contact_nets_new_full/masks"
-ANNOTATED_POSES_DIR = "/home/cnets-vision/mengti_ws/BundleTrack/Data/YCBINEOAT/contact_nets_new_full/annotated_poses"
-BUNDLETRACK_DEPTH = "/home/cnets-vision/mengti_ws/BundleTrack/Data/YCBINEOAT/contact_nets_new_full/depth"
+DENOISE_MASK_DIR = (
+    "/home/cnets-vision/mengti_ws/BundleTrack/Data/YCBINEOAT/"
+    + BUNDLETRACK_DATA_DIR
+    + "masks"
+)
+ANNOTATED_POSES_DIR = (
+    "/home/cnets-vision/mengti_ws/BundleTrack/Data/YCBINEOAT/"
+    + BUNDLETRACK_DATA_DIR
+    + "annotated_poses"
+)
+BUNDLETRACK_DEPTH = (
+    "/home/cnets-vision/mengti_ws/BundleTrack/Data/YCBINEOAT/"
+    + BUNDLETRACK_DATA_DIR
+    + "depth"
+)
 BUNDLETRACK_RGB = (
-    "/home/cnets-vision/mengti_ws/BundleTrack/Data/YCBINEOAT/contact_nets_new_full/rgb"
+    "/home/cnets-vision/mengti_ws/BundleTrack/Data/YCBINEOAT/"
+    + BUNDLETRACK_DATA_DIR
+    + "rgb"
 )
 
 # For camera extrinsics
@@ -74,13 +117,27 @@ if __name__ == "__main__":
         "--start_time",
         type=rospy.rostime.Time,
         required=False,
-        # default=rospy.rostime.Time(secs=1667330345, nsecs=22710468),
+        default=rospy.rostime.Time(secs=1667330342, nsecs=959312)  # toss 1
+        # default = rospy.rostime.Time(secs=1667330357, nsecs=453744)  # toss 2
+        # default = rospy.rostime.Time(secs=1667330379, nsecs=657584)  # toss 3
+        # default = rospy.rostime.Time(secs=1667330401, nsecs=359995)  # toss 4
+        # default = rospy.rostime.Time(secs=1667330422, nsecs=301875)  # toss 5
+        # default = rospy.rostime.Time(secs=1667330442, nsecs=284764)  # toss 6
+        # default = rospy.rostime.Time(secs=1667330465, nsecs=216068)  # toss 7
+        # default = rospy.rostime.Time(secs=1667330490, nsecs=318756)  # toss 8
     )  # the first timestamp of odombag
     parser.add_argument(
         "--end_time",
         type=rospy.rostime.Time,
         required=False,
-        # default=rospy.rostime.Time(secs=1667330357, nsecs=228116),
+        default=rospy.rostime.Time(secs=1667330357, nsecs=453744)  # toss 1
+        # default = rospy.rostime.Time(secs=1667330379, nsecs=657584)  # toss 2
+        # default = rospy.rostime.Time(secs=1667330401, nsecs=359995)  # toss 3
+        # default = rospy.rostime.Time(secs=1667330422, nsecs=301875)  # toss 4
+        # default = rospy.rostime.Time(secs=1667330442, nsecs=284764)  # toss 5
+        # default = rospy.rostime.Time(secs=1667330465, nsecs=216068)  # toss 6
+        # default = rospy.rostime.Time(secs=1667330490, nsecs=318756)  # toss 7
+        # default = rospy.rostime.Time(secs=1667330509, nsecs=187270)  # toss 8
     )
     parser.add_argument(
         "--translation",

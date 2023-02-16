@@ -1,4 +1,4 @@
-# robot_urdf_filter
+# cnets_data_generation
 A package that prepares images and pose data for 6D pose tracking. 
 
 ### Data directory

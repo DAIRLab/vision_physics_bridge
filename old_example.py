@@ -34,6 +34,7 @@ ODOM_ROS_TOPIC = "/tagslam/odom/body_cube"
 ROOT_DIR = "./dataset/old_split_new_separation/2/"
 BUNDLETRACK_DATA_DIR = "contact_nets_old_split_new_separation/2/"
 BUNDLETRACK_DIR = "/home/cnets-vision/mengti_ws/BundleTrack/Data/YCBINEOAT/"
+
 # Create folders
 if not os.path.exists(ROOT_DIR + "texts"):
     os.makedirs(ROOT_DIR + "texts")
