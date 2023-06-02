@@ -30,11 +30,12 @@ from pydrake.common.eigen_geometry import AngleAxis
 from manipulation.scenarios import AddRgbdSensor
 from manipulation.utils import FindResource
 import numpy as np
-from math_utils import world_to_camera
+from math_utils import transform_bundletrack_output_to_world, world_to_camera
 import rospy
 from sensor_msgs.msg import JointState
 from file_utils import import_data, filter
 from tqdm import tqdm
+import os
 
 """
 Generate robot masks for every frame in mask_data.
@@ -52,7 +53,6 @@ class FrankaPlaybackSim:
         gt_pose,
         translation,
         axis_vec,
-        urdf_file,
         show=False,
     ):
         self.meshcat = meshcat
@@ -92,9 +92,16 @@ class FrankaPlaybackSim:
 
         # Add a box of bundletrack pose in the environment.
         self.X_box = RigidTransform(self.object_pose)
-        self.box_instance = self.parser.AddModelFromFile(FindResource(urdf_file))
+        self.box_instance = self.parser.AddModelFromFile(
+            FindResource(
+                "/home/cnets-vision/mengti_ws/robot_filter/assets/contactnets_cube_new.urdf"
+            )
+        )
         self.box_frame = self.plant.GetFrameByName("body", self.box_instance)
-        self.plant.WeldFrames(self.camera_frame, self.box_frame, self.X_box)
+        # self.plant.WeldFrames(self.camera_frame, self.box_frame, self.X_box) #in camera frame
+        self.plant.WeldFrames(
+            self.plant.world_frame(), self.box_frame, self.X_box
+        )  # in world frame
 
         # Add a box of ground-truth pose in the environment.
         self.X_gt_box = RigidTransform(self.gt_pose)
@@ -103,7 +110,7 @@ class FrankaPlaybackSim:
                 "/home/cnets-vision/mengti_ws/robot_filter/assets/contactnets_cube_gt.urdf"
             )
         )
-        self.gt_frame = self.plant.GetFrameByName("body", self.gt_instance)
+        self.gt_frame = self.plant.GetFrameByName("body_gt", self.gt_instance)
         self.plant.WeldFrames(self.plant.world_frame(), self.gt_frame, self.X_gt_box)
         self.plant.Finalize()
 
@@ -301,7 +308,6 @@ if __name__ == "__main__":
     POSITION_FILE_PATH = ROOT_DIR + "texts/joint_position.txt"
     OUTPUT_POSE_DIR = "/home/cnets-vision/mengti_ws/results/poses_1/"
     GT_POSE_DIR = ROOT_DIR + "tagslam_poses/"
-    # OUTPUT_POSE_DIR = "/home/cnets-vision/mengti_ws/poses/"
     CAMERA_CONFIG = {
         "old": {
             "translation": np.array([[1.14164360], [0.15815239], [0.66422200]]),
@@ -312,24 +318,35 @@ if __name__ == "__main__":
             "axis_vec": np.array([-1.61997882, -1.56988553, 0.86362178]),
         },
     }
+    ODOM_FILE_PATH = "/home/cnets-vision/mengti_ws/BundleTrack/Data/YCBINEOAT/contact_nets_new_split/1/annotated_poses/"
+
     positions = import_data(POSITION_FILE_PATH)
+    frame_num = len([name for name in os.listdir(GT_POSE_DIR)])
+    print(f"Total frame is {frame_num}")
     for frame_id in range(1, 2):
-        bundletrack_pose = np.loadtxt(OUTPUT_POSE_DIR + "%04i.txt" % frame_id)
-        # gt_pose = np.loadtxt(GT_POSE_DIR + "%04i.txt" % frame_id)
+        bundletrack_pose = np.loadtxt(OUTPUT_POSE_DIR + "%04i.txt" % 438)
+        pose = transform_bundletrack_output_to_world(
+            bundletrack_pose,
+            CAMERA_CONFIG["new"]["translation"],
+            CAMERA_CONFIG["new"]["axis_vec"],
+            OUTPUT_POSE_DIR,
+            ODOM_FILE_PATH,
+        )
+        gt_pose = np.loadtxt(GT_POSE_DIR + "%04i.txt" % 201)
         # bundletrack_pose = np.array(
         #     [[1, 0, 0, 0.2], [0, 1, 0, 0], [0, 0, 1, 0], [0, 0, 0, 1]]
         # )
-        gt_pose = np.array([[1, 0, 0, 0.3], [0, 1, 0, 0], [0, 0, 1, 0], [0, 0, 0, 1]])
+        # gt_pose = np.array([[1, 0, 0, 0.3], [0, 1, 0, 0], [0, 0, 1, 0], [0, 0, 0, 1]])
         # bundletrack_pose = world_to_camera(gt_pose)
         # gt_pose = camera_to_world(bundletrack_pose)
+        print(f"processing frame {frame_id}")
         system = FrankaPlaybackSim(
             meshcat,
             positions[frame_id],
             frame_id,
-            bundletrack_pose,
+            pose,
             gt_pose,
             translation=CAMERA_CONFIG["new"]["translation"],
             axis_vec=CAMERA_CONFIG["new"]["axis_vec"],
-            urdf_file="/home/cnets-vision/mengti_ws/robot_filter/assets/contactnets_cube_new.urdf",
             show=True,
         )

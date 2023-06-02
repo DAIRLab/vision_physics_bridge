@@ -1,6 +1,6 @@
 <?xml version="1.0"?>
 <robot name="ground_truth_cube">
-    <link name="body">
+    <link name="body_gt">
         <inertial>
             <origin xyz="0 0 0" rpy="0 0 0"/>
             <mass value="0.37" />
@@ -15,7 +15,7 @@
         <visual>
             <origin xyz="0 0 0" rpy="0 0 0" />
             <geometry>
-                <box size="0.1048 0.1048 0.1048"/>
+                <box size="0.096 0.061 0.096"/>
             </geometry>
             <material name="blue">
                 <color rgba="0 0 0.8 1" />
@@ -23,7 +23,7 @@
         </visual>
         <collision>
             <geometry>
-                <box size="0.1048 0.1048 0.1048"/>
+                <box size="0.096 0.061 0.096"/>
             </geometry>
             <origin xyz="0 0 0" rpy="0 0 0" />
             <drake:proximity_properties>
