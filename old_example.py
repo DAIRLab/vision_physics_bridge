@@ -31,9 +31,9 @@ JOINT_STATE_ROS_TOPIC = "/joint_states"
 RGB_ROS_TOPIC = "/camera/color/image_raw"
 ODOM_ROS_TOPIC = "/tagslam/odom/body_cube"
 
-ROOT_DIR = "./dataset/old_split_new_separation/2/"
-BUNDLETRACK_DATA_DIR = "contact_nets_old_split_new_separation/2/"
-BUNDLETRACK_DIR = "/home/cnets-vision/mengti_ws/BundleTrack/Data/YCBINEOAT/"
+ROOT_DIR = "./dataset/old_dataset/"
+BUNDLETRACK_DATA_DIR = "old_dataset/"
+BUNDLETRACK_DIR = "/home/cnets-vision/mengti_ws/BundleTrack2.0/Data/"
 
 # Create folders
 if not os.path.exists(ROOT_DIR + "texts"):
@@ -78,24 +78,18 @@ TAGSLAM_POSES_DIR = ROOT_DIR + "tagslam_poses/"
 
 # BundleTrack data paths
 DENOISE_MASK_DIR = (
-    "/home/cnets-vision/mengti_ws/BundleTrack/Data/YCBINEOAT/"
-    + BUNDLETRACK_DATA_DIR
-    + "masks"
+    "/home/cnets-vision/mengti_ws/BundleTrack2.0/Data/" + BUNDLETRACK_DATA_DIR + "masks"
 )
 ANNOTATED_POSES_DIR = (
-    "/home/cnets-vision/mengti_ws/BundleTrack/Data/YCBINEOAT/"
+    "/home/cnets-vision/mengti_ws/BundleTrack2.0/Data/"
     + BUNDLETRACK_DATA_DIR
     + "annotated_poses"
 )
 BUNDLETRACK_DEPTH = (
-    "/home/cnets-vision/mengti_ws/BundleTrack/Data/YCBINEOAT/"
-    + BUNDLETRACK_DATA_DIR
-    + "depth"
+    "/home/cnets-vision/mengti_ws/BundleTrack2.0/Data/" + BUNDLETRACK_DATA_DIR + "depth"
 )
 BUNDLETRACK_RGB = (
-    "/home/cnets-vision/mengti_ws/BundleTrack/Data/YCBINEOAT/"
-    + BUNDLETRACK_DATA_DIR
-    + "rgb"
+    "/home/cnets-vision/mengti_ws/BundleTrack2.0/Data/" + BUNDLETRACK_DATA_DIR + "rgb"
 )
 
 # For camera extrinsics
@@ -111,52 +105,21 @@ CAMERA_CONFIG = {
 }
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    # parser.add_argument(
-    #     "--start_time",
-    #     type=rospy.rostime.Time,
-    # required=False,
-    # default=rospy.rostime.Time(secs=1655404893, nsecs=899137),  # toss 1
-    # default=rospy.rostime.Time(secs=1655404906, nsecs=156495),  # toss 2
-    # default=rospy.rostime.Time(secs=1655404918, nsecs=435741),  # toss 3
-    # default=rospy.rostime.Time(secs=1655404930, nsecs=306306),  # toss 4
-    # default=rospy.rostime.Time(secs=1655404944, nsecs=447914),  # toss 5
-    # default=rospy.rostime.Time(secs=1655404955, nsecs=272877),  # toss 6
-    # default=rospy.rostime.Time(secs=1655404966, nsecs=698458),  # toss 7
-    # default=rospy.rostime.Time(secs=1655404977, nsecs=941630),  # toss 8
-    # default=rospy.rostime.Time(secs=1655404991, nsecs=641514),  # toss 9
-    # default=rospy.rostime.Time(secs=1655405008, nsecs=720921),  # toss 10
-    # )
-    # parser.add_argument(
-    #     "--end_time",
-    #     type=rospy.rostime.Time,
-    # required=False,
-    # default=rospy.rostime.Time(secs=1655404906, nsecs=156495),  # toss 1
-    # default=rospy.rostime.Time(secs=1655404918, nsecs=435741),  # toss 2
-    # default=rospy.rostime.Time(secs=1655404930, nsecs=306306),  # toss 3
-    # default=rospy.rostime.Time(secs=1655404944, nsecs=447914),  # toss 4
-    # default=rospy.rostime.Time(secs=1655404955, nsecs=272877),  # toss 5
-    # default=rospy.rostime.Time(secs=1655404966, nsecs=698458),  # toss 6
-    # default=rospy.rostime.Time(secs=1655404977, nsecs=941630),  # toss 7
-    # default=rospy.rostime.Time(secs=1655404991, nsecs=641514),  # toss 8
-    # default=rospy.rostime.Time(secs=1655405008, nsecs=720921),  # toss 9
-    # default=rospy.rostime.Time(secs=1655405022, nsecs=942549),  # toss 10
-    # )
 
-    # <------------------------------- Redo toss separation 1/31/23 --------------------------------
     parser.add_argument(
         "--start_time",
         type=rospy.rostime.Time,
         required=False,
-        # default=rospy.rostime.Time(secs=1655404893, nsecs=899137),  # toss 1
-        default=rospy.rostime.Time(secs=1655404908, nsecs=279948),  # toss 2
+        default=rospy.rostime.Time(secs=1655404893, nsecs=899137),  # toss 1
+        # default=rospy.rostime.Time(secs=1655404908, nsecs=279948),  # toss 2
         # default=rospy.rostime.Time(secs=1655404920, nsecs=470680), # toss 3
     )
     parser.add_argument(
         "--end_time",
         type=rospy.rostime.Time,
         required=False,
-        # default=rospy.rostime.Time(secs=1655404908, nsecs=279948),  # toss 1
-        default=rospy.rostime.Time(secs=1655404920, nsecs=470680),  # toss 2
+        default=rospy.rostime.Time(secs=1655404908, nsecs=279948),  # toss 1
+        # default=rospy.rostime.Time(secs=1655404920, nsecs=470680),  # toss 2
         # default=rospy.rostime.Time(secs=1655404932, nsecs=647236), # toss 3
     )
     parser.add_argument(
@@ -176,47 +139,47 @@ if __name__ == "__main__":
     translation = args.translation
     axis_vec = args.axis_vec
 
-    extract_cube_pose(
-        start_time,
-        end_time,
-        ROSBAG_NAME,
-        ODOM_ROSBAG_NAME,
-        ODOM_ROS_TOPIC,
-        ANNOTATED_POSES_DIR,
-        translation,
-        axis_vec,
-    )  # Get the cube pose for the first frame
-    bag_to_depth_images(
-        ROSBAG_NAME,
-        DEPTH_ROS_TOPIC,
-        DEPTH_DATA_DIR,
-        start_time,
-        end_time,
-        img_dir=IMAGE_TXT_PATH,
-        bundletrack_depth_dir=BUNDLETRACK_DEPTH,
-    )
-    print("Depth images generated")
-    extract_poses_with_timestamps(
-        ROSBAG_NAME,
-        DEPTH_ROS_TOPIC,
-        RGB_ROS_TOPIC,
-        JOINT_STATE_ROS_TOPIC,
-        POSITION_FILE_PATH,
-        RGB_DATA_DIR,
-        start_time,
-        end_time,
-        bundletrack_rgb_dir=BUNDLETRACK_RGB,
-    )
+    # extract_cube_pose(
+    #     start_time,
+    #     end_time,
+    #     ROSBAG_NAME,
+    #     ODOM_ROSBAG_NAME,
+    #     ODOM_ROS_TOPIC,
+    #     ANNOTATED_POSES_DIR,
+    #     translation,
+    #     axis_vec,
+    # )  # Get the cube pose for the first frame
+    # bag_to_depth_images(
+    #     ROSBAG_NAME,
+    #     DEPTH_ROS_TOPIC,
+    #     DEPTH_DATA_DIR,
+    #     start_time,
+    #     end_time,
+    #     img_dir=IMAGE_TXT_PATH,
+    #     bundletrack_depth_dir=BUNDLETRACK_DEPTH,
+    # )
+    # print("Depth images generated")
+    # extract_poses_with_timestamps(
+    #     ROSBAG_NAME,
+    #     DEPTH_ROS_TOPIC,
+    #     RGB_ROS_TOPIC,
+    #     JOINT_STATE_ROS_TOPIC,
+    #     POSITION_FILE_PATH,
+    #     RGB_DATA_DIR,
+    #     start_time,
+    #     end_time,
+    #     bundletrack_rgb_dir=BUNDLETRACK_RGB,
+    # )
     frame_num = len([name for name in os.listdir(RGB_DATA_DIR)])
     print("There are %i frames in total!" % frame_num)
     positions = import_data(POSITION_FILE_PATH)
-    write_real_depth_as_txt(
-        start_frame=1,
-        end_frame=frame_num,
-        img_dir=IMAGE_TXT_PATH,
-        real_depth_dir=REAL_DEPTH_FILE,
-    )  # TODO: The last frame is cropped
-    print("Finished writing %i real depth text files." % frame_num)
+    # write_real_depth_as_txt(
+    #     start_frame=1,
+    #     end_frame=frame_num,
+    #     img_dir=IMAGE_TXT_PATH,
+    #     real_depth_dir=REAL_DEPTH_FILE,
+    # )  # TODO: The last frame is cropped
+    # print("Finished writing %i real depth text files." % frame_num)
     meshcat = StartMeshcat()
     for frame_id in tqdm(range(1, frame_num + 1)):
         run_urdf_filter(

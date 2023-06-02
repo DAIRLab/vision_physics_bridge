@@ -49,8 +49,6 @@ class FrankaPlaybackSim:
         meshcat,
         position,
         frame_id,
-        object_pose,
-        gt_pose,
         translation,
         axis_vec,
         show=False,
@@ -58,8 +56,6 @@ class FrankaPlaybackSim:
         self.meshcat = meshcat
         self.builder = DiagramBuilder()
         self.frame_id = frame_id
-        self.object_pose = object_pose
-        self.gt_pose = gt_pose
 
         # Add a cube as MultibodyPlant
         self.plant, self.scene_graph = AddMultibodyPlantSceneGraph(
@@ -90,28 +86,6 @@ class FrankaPlaybackSim:
             self.plant.world_frame(), self.camera_frame, self.X_Camera
         )
 
-        # Add a box of bundletrack pose in the environment.
-        self.X_box = RigidTransform(self.object_pose)
-        self.box_instance = self.parser.AddModelFromFile(
-            FindResource(
-                "/home/cnets-vision/mengti_ws/robot_filter/assets/contactnets_cube_new.urdf"
-            )
-        )
-        self.box_frame = self.plant.GetFrameByName("body", self.box_instance)
-        # self.plant.WeldFrames(self.camera_frame, self.box_frame, self.X_box) #in camera frame
-        self.plant.WeldFrames(
-            self.plant.world_frame(), self.box_frame, self.X_box
-        )  # in world frame
-
-        # Add a box of ground-truth pose in the environment.
-        self.X_gt_box = RigidTransform(self.gt_pose)
-        self.gt_instance = self.parser.AddModelFromFile(
-            FindResource(
-                "/home/cnets-vision/mengti_ws/robot_filter/assets/contactnets_cube_gt.urdf"
-            )
-        )
-        self.gt_frame = self.plant.GetFrameByName("body_gt", self.gt_instance)
-        self.plant.WeldFrames(self.plant.world_frame(), self.gt_frame, self.X_gt_box)
         self.plant.Finalize()
 
         # Visualize in meshcat
@@ -274,14 +248,10 @@ def run_urdf_filter(
     mask_image_file = mask_image_dir % frame_id
     simulated_depth_file = simulated_depth_dir % frame_id
     real_depth_file = real_depth_dir % frame_id
-    filtered_depth_file = "./filtered_data/depth_without_robot_frame%04i.png" % frame_id
-    filtered_rgb_file = "./filtered_data/rgb_without_robot_frame%04i.png" % frame_id
     system = FrankaPlaybackSim(
         meshcat,
         positions[frame_id - 1],
         frame_id,
-        # bundletrack_pose,
-        # gt_pose,
         cam_translation,
         cam_axis_vec,
         show=False,
