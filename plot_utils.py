@@ -39,6 +39,24 @@ def get_angle(P, Q):
     theta = (np.trace(R) - 1) / 2
     return np.arccos(theta) * (180 / np.pi)
 
+def calculate_translation_error(estimated_pose, ground_truth_pose):
+    est_translation = estimated_pose[:3, 3]
+    gt_translation = ground_truth_pose[:3, 3]
+    translation_error = np.linalg.norm(est_translation - gt_translation)
+    return translation_error
+
+def calculate_rotation_error(estimated_pose, ground_truth_pose):
+    est_rotation = estimated_pose[:3, :3]
+    gt_rotation = ground_truth_pose[:3, :3]
+    rotation_error = np.arccos((np.trace(np.dot(est_rotation.T, gt_rotation)) - 1) / 2)
+    return rotation_error
+
+def calculate_success_rate(translation_errors, rotation_errors, translation_threshold, rotation_threshold):
+    num_frames = len(translation_errors)
+    success_count = sum(te <= translation_threshold and re <= rotation_threshold for te, re in zip(translation_errors, rotation_errors))
+    success_rate = (success_count / num_frames) * 100
+    return success_rate
+
 
 def plot_xyz(start_frame, end_frame):
     """Plot the x, y, z of BundleTrack output versus ground-truth poses of tagslam."""
@@ -140,6 +158,7 @@ def plot_with_time(bundletrack_time, gt_time, bundletrack_pose_dir, gt_pose_dir)
     output_alpha, output_beta, output_gamma = [], [], []
     gt_alpha, gt_beta, gt_gamma = [], [], []
     frame_num = len([name for name in os.listdir(bundletrack_pose_dir)])
+    estimated_poses, ground_truth_poses = [], []
     for frame_id in range(1, frame_num + 1):
         output_pose = np.loadtxt(bundletrack_pose_dir + "%04i.txt" % frame_id)
         output_pose = transform_bundletrack_output_to_world(
@@ -149,6 +168,7 @@ def plot_with_time(bundletrack_time, gt_time, bundletrack_pose_dir, gt_pose_dir)
             bundletrack_pose_dir,
             ODOM_FILE_PATH,
         )
+        estimated_poses.append(output_pose)
         output_x.append(output_pose[0, 3])
         output_y.append(output_pose[1, 3])
         output_z.append(output_pose[2, 3])
@@ -160,6 +180,7 @@ def plot_with_time(bundletrack_time, gt_time, bundletrack_pose_dir, gt_pose_dir)
     for frame_id in range(1, len(gt_time) + 1):
         gt_frame = frame_id
         gt_pose = np.loadtxt(gt_pose_dir + "%04i.txt" % gt_frame)
+        ground_truth_poses.append(gt_pose)
         gt_x.append(gt_pose[0, 3])
         gt_y.append(gt_pose[1, 3])
         gt_z.append(gt_pose[2, 3])
@@ -174,6 +195,20 @@ def plot_with_time(bundletrack_time, gt_time, bundletrack_pose_dir, gt_pose_dir)
         np.array(output_z),
     )
     gt_x, gt_y, gt_z = np.array(gt_x), np.array(gt_y), np.array(gt_z)
+
+    # Evaluate based on 5deg5cm metric
+    translation_errors = [calculate_translation_error(est_pose, gt_pose) for est_pose, gt_pose in zip(estimated_poses, ground_truth_poses)]
+    rotation_errors = [calculate_rotation_error(est_pose, gt_pose) for est_pose, gt_pose in zip(estimated_poses, ground_truth_poses)]
+
+    # Set error thresholds for successful pose estimation
+    translation_threshold = 0.05
+    rotation_threshold = 5.0
+    
+    # Calculate success rate
+    success_rate = calculate_success_rate(translation_errors, rotation_errors, translation_threshold, np.radians(rotation_threshold))
+    print(f"Translation Error: {np.mean(translation_errors):.4f}")
+    print(f"Rotation Error: {np.degrees(np.mean(rotation_errors)):.4f} degrees")
+    print(f"Success Rate: {success_rate:.2f}%")
 
     fig, axs = plt.subplots(2, 3)
     # fig.suptitle("Toss %i" % TOSS_IDX)
