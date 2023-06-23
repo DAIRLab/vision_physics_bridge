@@ -172,7 +172,7 @@ if __name__ == "__main__":
     # )
     frame_num = len([name for name in os.listdir(RGB_DATA_DIR)])
     print("There are %i frames in total!" % frame_num)
-    positions = import_data(POSITION_FILE_PATH)
+    # positions = import_data(POSITION_FILE_PATH)
     # write_real_depth_as_txt(
     #     start_frame=1,
     #     end_frame=frame_num,
@@ -180,44 +180,44 @@ if __name__ == "__main__":
     #     real_depth_dir=REAL_DEPTH_FILE,
     # )  # TODO: The last frame is cropped
     # print("Finished writing %i real depth text files." % frame_num)
-    meshcat = StartMeshcat()
-    for frame_id in tqdm(range(1, frame_num + 1)):
-        run_urdf_filter(
-            meshcat,
-            frame_id,
-            positions,
-            MASK_IAMGE_FILE,
-            SIMULATED_DEPTH_FILE,
-            REAL_DEPTH_FILE,
-            translation,
-            axis_vec,
-        )
-        dilate(
-            frame_id, mask_image_dir=MASK_IAMGE_FILE, dilated_mask_dir=DILATED_MASK_FILE
-        )
-        generate_depth_img_without_robot(
-            REAL_DEPTH_FILE % frame_id,
-            MASK_IAMGE_FILE % frame_id,
-            FILTERED_DEPTH_FILE % frame_id,
-        )
-        # generate_rgb_image_without_robot(RGB_IMAGE_FILE, MASK_IAMGE_FILE, FILTERED_RGB_FILE) #optional, seems the point cloud looks fine with the unfiltered rgb data
-        depth_filter = DepthFilter(
-            frame_id,
-            RGB_DATA_DIR + "%04i.png",
-            FILTERED_DEPTH_FILE,
-            CUBE_SCREEN_DIR,
-            CUBE_DEPTH_DIR,
-            translation,
-            axis_vec,
-        )
-        depth_filter.visualize_depth_image()
-        denoise(
-            frame_id,
-            img_dir=CUBE_DEPTH_DIR,
-            denoise_mask_dir=DENOISE_MASK_DIR,
-            region=(10, 10),
-        )
-        create_annotated_poses(output_dir=ANNOTATED_POSES_DIR, frame_id=frame_id)
+    # meshcat = StartMeshcat()
+    # for frame_id in tqdm(range(1, frame_num + 1)):
+    #     run_urdf_filter(
+    #         meshcat,
+    #         frame_id,
+    #         positions,
+    #         MASK_IAMGE_FILE,
+    #         SIMULATED_DEPTH_FILE,
+    #         REAL_DEPTH_FILE,
+    #         translation,
+    #         axis_vec,
+    #     )
+    #     dilate(
+    #         frame_id, mask_image_dir=MASK_IAMGE_FILE, dilated_mask_dir=DILATED_MASK_FILE
+    #     )
+    #     generate_depth_img_without_robot(
+    #         REAL_DEPTH_FILE % frame_id,
+    #         MASK_IAMGE_FILE % frame_id,
+    #         FILTERED_DEPTH_FILE % frame_id,
+    #     )
+        # # generate_rgb_image_without_robot(RGB_IMAGE_FILE, MASK_IAMGE_FILE, FILTERED_RGB_FILE) #optional, seems the point cloud looks fine with the unfiltered rgb data
+        # depth_filter = DepthFilter(
+        #     frame_id,
+        #     RGB_DATA_DIR + "%04i.png",
+        #     FILTERED_DEPTH_FILE,
+        #     CUBE_SCREEN_DIR,
+        #     CUBE_DEPTH_DIR,
+        #     translation,
+        #     axis_vec,
+        # )
+        # depth_filter.visualize_depth_image()
+        # denoise(
+        #     frame_id,
+        #     img_dir=CUBE_DEPTH_DIR,
+        #     denoise_mask_dir=DENOISE_MASK_DIR,
+        #     region=(10, 10),
+        # )
+        # create_annotated_poses(output_dir=ANNOTATED_POSES_DIR, frame_id=frame_id)
 
     extract_gt_poses_from_tagslam(
         start_time,

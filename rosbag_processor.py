@@ -12,8 +12,10 @@ from cv_bridge import CvBridge
 import numpy as np
 import matplotlib.pyplot as plt
 from tqdm import tqdm
-
-from math_utils import quaternion_to_rotation_matrix, world_to_camera
+import tf
+from math_utils import world_to_camera
+from dataclasses import dataclass
+from nav_msgs.msg import Odometry
 
 DEPTH_ROS_TOPIC = "/camera/aligned_depth_to_color/image_raw"
 JOINT_STATE_ROS_TOPIC = "/joint_states"
@@ -392,11 +394,11 @@ def extract_cube_pose(
             Q[1] = msg.pose.pose.orientation.y
             Q[2] = msg.pose.pose.orientation.z
             Q[3] = msg.pose.pose.orientation.w
-            rotation_matrix = quaternion_to_rotation_matrix(Q)[:, :, 0]
+            rotation_matrix_tf = tf.transformations.quaternion_matrix([msg.pose.pose.orientation.x, msg.pose.pose.orientation.y, msg.pose.pose.orientation.z, msg.pose.pose.orientation.w])[:3, :3]
             position = msg.pose.pose.position
             translation = np.array([[position.x], [position.y], [position.z]])
             result = np.vstack(
-                (np.hstack((rotation_matrix, translation)), np.array([0, 0, 0, 1]))
+                (np.hstack((rotation_matrix_tf, translation)), np.array([0, 0, 0, 1]))
             )
             result = world_to_camera(result, cam_translation, cam_axis_vec)
             np.savetxt(
@@ -494,19 +496,108 @@ def extract_gt_poses_from_tagslam(
                 Q[1] = msg.pose.pose.orientation.y
                 Q[2] = msg.pose.pose.orientation.z
                 Q[3] = msg.pose.pose.orientation.w
-                rotation_matrix = quaternion_to_rotation_matrix(Q)[:, :, 0]
+                rotation_matrix_tf = tf.transformations.quaternion_matrix([msg.pose.pose.orientation.x, msg.pose.pose.orientation.y, msg.pose.pose.orientation.z, msg.pose.pose.orientation.w])[:3, :3]
+                # rotation_matrix = quaternion_to_rotation_matrix(Q)[:, :, 0]
+                # print("1: ", rotation_matrix)
+                # print("2: ", rotation_matrix_tf)
                 position = msg.pose.pose.position
                 translation = np.array([[position.x], [position.y], [position.z]])
                 result = np.vstack(
-                    (np.hstack((rotation_matrix, translation)), np.array([0, 0, 0, 1]))
+                    (np.hstack((rotation_matrix_tf, translation)), np.array([0, 0, 0, 1]))
                 )
-                np.savetxt(output_dir + "%04i.txt" % frame_id, result)
+                # np.savetxt(output_dir + "%04i.txt" % frame_id, result)
                 frame_id += 1
     print("Recorded %i frames" % frame_id)
     depth_bag.close()
     odom_bag.close()
     return
+    
+@dataclass
+class BagInfo:
+    rostime: rospy.rostime.Time
+    msg: Odometry()
 
+def extract_gt_poses_from_tagslam_with_missing_frames(start_time,
+    end_time,
+    depth_bag_file,
+    odom_bag_file,
+    depth_topic,
+    odom_topic,
+    output_dir):
+    """Extract the pose information of the cube from tagslam to testify the results of BuddleTrack. 
+       Assuming odometry is incomplete.
+    """
+    depth_bag = rosbag.Bag(depth_bag_file, "r")
+    odom_bag = rosbag.Bag(odom_bag_file, "r")
+    depth_timestamps = {}
+    global odom_timestamps_
+    odom_timestamps_ = {}
+    gt_timestamps = []
+    frame_id = 1
+    record = 0
+    for (topic, msg, ts) in odom_bag.read_messages(topics=str(odom_topic)):
+        if start_time and end_time:
+            if checkStarttime(msg.header.stamp, start_time):
+                continue
+            if checkEndtime(msg.header.stamp, end_time):
+                break
+        if msg.header.stamp.secs not in odom_timestamps_.keys():
+            odom_timestamps_[msg.header.stamp.secs] = []
+        odom_timestamps_[msg.header.stamp.secs].append(BagInfo(msg.header.stamp, msg.pose.pose))
+    for (topic, msg, ts) in depth_bag.read_messages(topics=str(depth_topic)):
+        if start_time and end_time:
+            if checkStarttime(msg.header.stamp, start_time):
+                continue
+            if checkEndtime(msg.header.stamp, end_time):
+                break
+        nearest_neighbor = find_nearest_neighbor(msg.header.stamp)
+        if nearest_neighbor != None:
+            Q = np.zeros((4, 1))
+            Q[0] = nearest_neighbor.orientation.x
+            Q[1] = nearest_neighbor.orientation.y
+            Q[2] = nearest_neighbor.orientation.z
+            Q[3] = nearest_neighbor.orientation.w
+            rotation_matrix_tf = tf.transformations.quaternion_matrix([nearest_neighbor.orientation.x, nearest_neighbor.orientation.y, nearest_neighbor.orientation.z, nearest_neighbor.orientation.w])[:3, :3]
+            # rotation_matrix = quaternion_to_rotation_matrix(Q)[:, :, 0]
+            # print("1: ", rotation_matrix)
+            # print("2: ", rotation_matrix_tf)
+            position = nearest_neighbor.position
+            translation = np.array([[position.x], [position.y], [position.z]])
+            result = np.vstack(
+                (np.hstack((rotation_matrix_tf, translation)), np.array([0, 0, 0, 1]))
+            )
+            np.savetxt(output_dir + "%04i.txt" % frame_id, result)
+            frame_id += 1
+            record+=1
+            gt_timestamps.append(msg.header.stamp)
+        # else:
+        #     np.savetxt(output_dir + "%04i.txt" % frame_id, np.identity(4))
+        #     frame_id += 1
+    print(f'record is {record}')
+    depth_bag.close()
+    odom_bag.close()
+    return gt_timestamps
+
+def find_nearest_neighbor(depth_timestamp):
+    closest_diff = np.inf
+    closest_nsecs = None
+    closest_secs = None
+    msg = None
+    for i, odom_secs in enumerate(odom_timestamps_):
+        for odom in odom_timestamps_[odom_secs]:
+            if odom_secs == depth_timestamp.secs:
+                diff = abs(depth_timestamp.nsecs - odom.rostime.nsecs)
+                if diff < closest_diff:
+                    closest_diff = diff
+                    closest_nsecs = odom.rostime.nsecs
+                    closest_secs = odom_secs
+                    msg = odom.msg
+    if closest_nsecs != None:
+        my_list = odom_timestamps_[closest_secs]
+        element_to_remove = BagInfo(rospy.rostime.Time(closest_secs, closest_nsecs), msg)
+        odom_timestamps_[closest_secs] = [item for item in my_list if item != element_to_remove]
+        # print('Element removed!')
+    return msg
 
 def extract_time_versus_poses(
     start_time,
@@ -543,13 +634,14 @@ def extract_time_versus_poses(
         Q[1] = msg.pose.pose.orientation.y
         Q[2] = msg.pose.pose.orientation.z
         Q[3] = msg.pose.pose.orientation.w
-        rotation_matrix = quaternion_to_rotation_matrix(Q)[:, :, 0]
+        # rotation_matrix = quaternion_to_rotation_matrix(Q)[:, :, 0]
+        rotation_matrix_tf = tf.transformations.quaternion_matrix([msg.pose.pose.orientation.x, msg.pose.pose.orientation.y, msg.pose.pose.orientation.z, msg.pose.pose.orientation.w])[:3, :3]
         position = msg.pose.pose.position
         translation = np.array([[position.x], [position.y], [position.z]])
         result = np.vstack(
-            (np.hstack((rotation_matrix, translation)), np.array([0, 0, 0, 1]))
+            (np.hstack((rotation_matrix_tf, translation)), np.array([0, 0, 0, 1]))
         )
-        np.savetxt(output_dir + "%04i.txt" % frame_id, result)
+        # np.savetxt(output_dir + "%04i.txt" % frame_id, result)
         frame_id += 1
     depth_bag.close()
     odom_bag.close()

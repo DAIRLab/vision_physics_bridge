@@ -17,6 +17,7 @@ from rosbag_processor import (
     extract_cube_pose,
     extract_gt_poses_from_tagslam,
     extract_poses_with_timestamps,
+    extract_gt_poses_from_tagslam_with_missing_frames
 )
 import rospy
 from urdf_filter import dilate, run_urdf_filter
@@ -32,8 +33,8 @@ JOINT_STATE_ROS_TOPIC = "/joint_states"
 RGB_ROS_TOPIC = "/camera/color/image_raw"
 ODOM_ROS_TOPIC = "/tagslam/odom/body_box"
 
-ROOT_DIR = "./dataset/new_split/1/"
-BUNDLETRACK_DATA_DIR = "./contact_nets_new_split/1/"
+ROOT_DIR = "/home/cnets-vision/mengti_ws/BundleTrack/Data/YCBINEOAT/contact_nets_new_first_toss/"
+BUNDLETRACK_DATA_DIR = "contact_nets_new_first_toss/"
 BUNDLETRACK_DIR = "/home/cnets-vision/mengti_ws/BundleTrack/Data/YCBINEOAT/"
 
 # Create folders
@@ -69,7 +70,7 @@ SIMULATED_DEPTH_FILE = ROOT_DIR + "texts/simulated_depth_frame%04i.txt"
 IMAGE_TXT_PATH = ROOT_DIR + "texts/images.txt"  # depth image in the form of txt
 
 DEPTH_DATA_DIR = ROOT_DIR + "depth_data/"
-RGB_DATA_DIR = ROOT_DIR + "rgb_data/"
+RGB_DATA_DIR = ROOT_DIR + "rgb/"
 CUBE_SCREEN_DIR = ROOT_DIR + "cube_data/screen_image_frame%04i.png"
 CUBE_DEPTH_DIR = ROOT_DIR + "cube_data/depth_image_frame%04i.png"
 MASK_IAMGE_FILE = ROOT_DIR + "mask_data/%04i.png"
@@ -156,87 +157,96 @@ if __name__ == "__main__":
     translation = args.translation
     axis_vec = args.axis_vec
 
-    extract_cube_pose(
-        start_time,
-        end_time,
-        ROSBAG_NAME,
-        ODOM_ROSBAG_NAME,
-        ODOM_ROS_TOPIC,
-        ANNOTATED_POSES_DIR,
-        translation,
-        axis_vec,
-    )  # Get the box pose for the first frame
-    bag_to_depth_images(
-        ROSBAG_NAME,
-        DEPTH_ROS_TOPIC,
-        DEPTH_DATA_DIR,
-        start_time,
-        end_time,
-        img_dir=IMAGE_TXT_PATH,
-        bundletrack_depth_dir=BUNDLETRACK_DEPTH,
-    )
-    print("Depth images generated")
-    extract_poses_with_timestamps(
-        ROSBAG_NAME,
-        DEPTH_ROS_TOPIC,
-        RGB_ROS_TOPIC,
-        JOINT_STATE_ROS_TOPIC,
-        POSITION_FILE_PATH,
-        RGB_DATA_DIR,
-        start_time,
-        end_time,
-        bundletrack_rgb_dir=BUNDLETRACK_RGB,
-    )
+    # extract_cube_pose(
+    #     start_time,
+    #     end_time,
+    #     ROSBAG_NAME,
+    #     ODOM_ROSBAG_NAME,
+    #     ODOM_ROS_TOPIC,
+    #     ANNOTATED_POSES_DIR,
+    #     translation,
+    #     axis_vec,
+    # )  # Get the box pose for the first frame
+    # bag_to_depth_images(
+    #     ROSBAG_NAME,
+    #     DEPTH_ROS_TOPIC,
+    #     DEPTH_DATA_DIR,
+    #     start_time,
+    #     end_time,
+    #     img_dir=IMAGE_TXT_PATH,
+    #     bundletrack_depth_dir=BUNDLETRACK_DEPTH,
+    # )
+    # print("Depth images generated")
+    # extract_poses_with_timestamps(
+    #     ROSBAG_NAME,
+    #     DEPTH_ROS_TOPIC,
+    #     RGB_ROS_TOPIC,
+    #     JOINT_STATE_ROS_TOPIC,
+    #     POSITION_FILE_PATH,
+    #     RGB_DATA_DIR,
+    #     start_time,
+    #     end_time,
+    #     bundletrack_rgb_dir=BUNDLETRACK_RGB,
+    # )
     frame_num = len([name for name in os.listdir(RGB_DATA_DIR)])
     print("There are %i frames in total!" % frame_num)
-    positions = import_data(POSITION_FILE_PATH)
-    write_real_depth_as_txt(
-        start_frame=1,
-        end_frame=frame_num,
-        img_dir=IMAGE_TXT_PATH,
-        real_depth_dir=REAL_DEPTH_FILE,
-    )  # TODO: The last frame is cropped
-    print("Finished writing %i real depth text files." % frame_num)
-    meshcat = StartMeshcat()
-    for frame_id in tqdm(range(1, frame_num + 1)):
-        run_urdf_filter(
-            meshcat,
-            frame_id,
-            positions,
-            MASK_IAMGE_FILE,
-            SIMULATED_DEPTH_FILE,
-            REAL_DEPTH_FILE,
-            translation,
-            axis_vec,
-        )
-        dilate(
-            frame_id, mask_image_dir=MASK_IAMGE_FILE, dilated_mask_dir=DILATED_MASK_FILE
-        )
-        generate_depth_img_without_robot(
-            REAL_DEPTH_FILE % frame_id,
-            MASK_IAMGE_FILE % frame_id,
-            FILTERED_DEPTH_FILE % frame_id,
-        )
-        # generate_rgb_image_without_robot(RGB_IMAGE_FILE, MASK_IAMGE_FILE, FILTERED_RGB_FILE) #optional, seems the point cloud looks fine with the unfiltered rgb data
-        depth_filter = DepthFilter(
-            frame_id,
-            RGB_DATA_DIR + "%04i.png",
-            FILTERED_DEPTH_FILE,
-            CUBE_SCREEN_DIR,
-            CUBE_DEPTH_DIR,
-            translation,
-            axis_vec,
-        )
-        depth_filter.visualize_depth_image()
-        denoise(
-            frame_id,
-            img_dir=CUBE_DEPTH_DIR,
-            denoise_mask_dir=DENOISE_MASK_DIR,
-            region=(11, 11),
-        )
-        create_annotated_poses(output_dir=ANNOTATED_POSES_DIR, frame_id=frame_id)
+    # positions = import_data(POSITION_FILE_PATH)
+    # write_real_depth_as_txt(
+    #     start_frame=1,
+    #     end_frame=frame_num,
+    #     img_dir=IMAGE_TXT_PATH,
+    #     real_depth_dir=REAL_DEPTH_FILE,
+    # )  # TODO: The last frame is cropped
+    # print("Finished writing %i real depth text files." % frame_num)
+    # meshcat = StartMeshcat()
+    # for frame_id in tqdm(range(1, frame_num + 1)):
+    #     run_urdf_filter(
+    #         meshcat,
+    #         frame_id,
+    #         positions,
+    #         MASK_IAMGE_FILE,
+    #         SIMULATED_DEPTH_FILE,
+    #         REAL_DEPTH_FILE,
+    #         translation,
+    #         axis_vec,
+    #     )
+    #     dilate(
+    #         frame_id, mask_image_dir=MASK_IAMGE_FILE, dilated_mask_dir=DILATED_MASK_FILE
+    #     )
+    #     generate_depth_img_without_robot(
+    #         REAL_DEPTH_FILE % frame_id,
+    #         MASK_IAMGE_FILE % frame_id,
+    #         FILTERED_DEPTH_FILE % frame_id,
+    #     )
+    #     # generate_rgb_image_without_robot(RGB_IMAGE_FILE, MASK_IAMGE_FILE, FILTERED_RGB_FILE) #optional, seems the point cloud looks fine with the unfiltered rgb data
+    #     depth_filter = DepthFilter(
+    #         frame_id,
+    #         RGB_DATA_DIR + "%04i.png",
+    #         FILTERED_DEPTH_FILE,
+    #         CUBE_SCREEN_DIR,
+    #         CUBE_DEPTH_DIR,
+    #         translation,
+    #         axis_vec,
+    #     )
+    #     depth_filter.visualize_depth_image()
+    #     denoise(
+    #         frame_id,
+    #         img_dir=CUBE_DEPTH_DIR,
+    #         denoise_mask_dir=DENOISE_MASK_DIR,
+    #         region=(11, 11),
+    #     )
+        # create_annotated_poses(output_dir=ANNOTATED_POSES_DIR, frame_id=frame_id)
 
-    extract_gt_poses_from_tagslam(
+    # extract_gt_poses_from_tagslam(
+    #     start_time,
+    #     end_time,
+    #     depth_bag_file=ROSBAG_NAME,
+    #     odom_bag_file=ODOM_ROSBAG_NAME,
+    #     depth_topic=DEPTH_ROS_TOPIC,
+    #     odom_topic=ODOM_ROS_TOPIC,
+    #     output_dir=TAGSLAM_POSES_DIR,
+    # )
+    extract_gt_poses_from_tagslam_with_missing_frames(
         start_time,
         end_time,
         depth_bag_file=ROSBAG_NAME,
@@ -245,8 +255,3 @@ if __name__ == "__main__":
         odom_topic=ODOM_ROS_TOPIC,
         output_dir=TAGSLAM_POSES_DIR,
     )
-
-# Problematic frames:
-# 2384
-# 3505 - 3547
-# 4467
