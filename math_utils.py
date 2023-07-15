@@ -1,6 +1,7 @@
 import numpy as np
 import math
 import tf.transformations as tr
+from scipy.spatial.transform import Rotation as R
 
 
 def axis_angle_to_rotation_matrix(axis, theta):
@@ -148,15 +149,16 @@ def camera_to_world(m, translation, axis_vec):
     :param axis_vec: camera axis vector in world frame
     """
     extrinsic = setup_extrinsic(translation, axis_vec)
-    Rw2c = extrinsic[:3, :3]
-    R_c = m[:3, :3]
-    R_w = Rw2c.T @ R_c
+    # Rw2c = extrinsic[:3, :3]
+    # R_c = m[:3, :3]
+    # R_w = Rw2c.T @ R_c
 
-    pos_camera_vector = m[:, 3]
-    pos_world_vector = np.linalg.inv(extrinsic) @ pos_camera_vector
-    T_w = pos_world_vector[:3]
-    T_w = T_w.reshape(-1, 1)
-    return np.vstack((np.hstack((R_w, T_w)), np.array([0, 0, 0, 1])))
+    # pos_camera_vector = m[:, 3]
+    # pos_world_vector = np.linalg.inv(extrinsic) @ pos_camera_vector
+    # T_w = pos_world_vector[:3]
+    # T_w = T_w.reshape(-1, 1)
+    # return np.vstack((np.hstack((R_w, T_w)), np.array([0, 0, 0, 1])))
+    return np.linalg.inv(extrinsic) @ m
 
 
 def transform_bundletrack_output_to_world(
@@ -174,8 +176,9 @@ def transform_bundletrack_output_to_world(
         odom_file_dir + "%04i.txt" % 0
     )  # initial cube pose represented in camera frame, matching tagslam
     pred_new = (pred_pose @ np.linalg.inv(init_pose)) @ init_pose_new
-    pred_new_world = camera_to_world(pred_new, cam_translation, cam_axis_vec)
-    return pred_new_world
+    # pred_new_world = camera_to_world(pred_new, cam_translation, cam_axis_vec)
+    # return pred_new_world
+    return pred_new
 
 
 def setup_extrinsic(translation, axis_vec):
@@ -206,3 +209,16 @@ def get_angular_velocity(curr_state, next_state, dt):
 
 def get_linear_velocity(curr_state, next_state, dt):
     return (next_state - curr_state) / dt
+
+
+def pos_quat_to_trans_mat(pos_quat):
+    quat = pos_quat[3:]
+    rot = R.from_quat(quat).as_matrix()
+    trans = pos_quat[:3].reshape(-1, 1)
+    return np.vstack((np.hstack((rot, trans)), np.array([0, 0, 0, 1])))
+
+
+def trans_mat_to_pos_quat(trans):
+    quat = R.from_matrix(trans[:3, :3]).as_quat().reshape(-1, 1)
+    pos = trans[:3, 3].reshape(-1, 1)
+    return np.vstack((pos, quat))

@@ -15,7 +15,9 @@ from rosbag_processor import (
     bag_to_depth_images,
     extract_cube_pose,
     extract_gt_poses_from_tagslam,
+    extract_gt_poses_from_tagslam_with_quat,
     extract_poses_with_timestamps,
+    extract_gt_poses_from_tagslam_with_missing_frames,
 )
 import rospy
 from urdf_filter import dilate, run_urdf_filter
@@ -139,16 +141,16 @@ if __name__ == "__main__":
     translation = args.translation
     axis_vec = args.axis_vec
 
-    # extract_cube_pose(
-    #     start_time,
-    #     end_time,
-    #     ROSBAG_NAME,
-    #     ODOM_ROSBAG_NAME,
-    #     ODOM_ROS_TOPIC,
-    #     ANNOTATED_POSES_DIR,
-    #     translation,
-    #     axis_vec,
-    # )  # Get the cube pose for the first frame
+    extract_cube_pose(
+        start_time,
+        end_time,
+        ROSBAG_NAME,
+        ODOM_ROSBAG_NAME,
+        ODOM_ROS_TOPIC,
+        ANNOTATED_POSES_DIR,
+        translation,
+        axis_vec,
+    )  # Get the cube pose for the first frame
     # bag_to_depth_images(
     #     ROSBAG_NAME,
     #     DEPTH_ROS_TOPIC,
@@ -170,8 +172,8 @@ if __name__ == "__main__":
     #     end_time,
     #     bundletrack_rgb_dir=BUNDLETRACK_RGB,
     # )
-    frame_num = len([name for name in os.listdir(RGB_DATA_DIR)])
-    print("There are %i frames in total!" % frame_num)
+    # frame_num = len([name for name in os.listdir(RGB_DATA_DIR)])
+    # print("There are %i frames in total!" % frame_num)
     # positions = import_data(POSITION_FILE_PATH)
     # write_real_depth_as_txt(
     #     start_frame=1,
@@ -181,7 +183,7 @@ if __name__ == "__main__":
     # )  # TODO: The last frame is cropped
     # print("Finished writing %i real depth text files." % frame_num)
     # meshcat = StartMeshcat()
-    # for frame_id in tqdm(range(1, frame_num + 1)):
+    # for frame_id in tqdm(range(478, frame_num + 1)):
     #     run_urdf_filter(
     #         meshcat,
     #         frame_id,
@@ -200,31 +202,52 @@ if __name__ == "__main__":
     #         MASK_IAMGE_FILE % frame_id,
     #         FILTERED_DEPTH_FILE % frame_id,
     #     )
-        # # generate_rgb_image_without_robot(RGB_IMAGE_FILE, MASK_IAMGE_FILE, FILTERED_RGB_FILE) #optional, seems the point cloud looks fine with the unfiltered rgb data
-        # depth_filter = DepthFilter(
-        #     frame_id,
-        #     RGB_DATA_DIR + "%04i.png",
-        #     FILTERED_DEPTH_FILE,
-        #     CUBE_SCREEN_DIR,
-        #     CUBE_DEPTH_DIR,
-        #     translation,
-        #     axis_vec,
-        # )
-        # depth_filter.visualize_depth_image()
-        # denoise(
-        #     frame_id,
-        #     img_dir=CUBE_DEPTH_DIR,
-        #     denoise_mask_dir=DENOISE_MASK_DIR,
-        #     region=(10, 10),
-        # )
-        # create_annotated_poses(output_dir=ANNOTATED_POSES_DIR, frame_id=frame_id)
+    #     # generate_rgb_image_without_robot(RGB_IMAGE_FILE, MASK_IAMGE_FILE, FILTERED_RGB_FILE) #optional, seems the point cloud looks fine with the unfiltered rgb data
+    #     depth_filter = DepthFilter(
+    #         frame_id,
+    #         RGB_DATA_DIR + "%04i.png",
+    #         FILTERED_DEPTH_FILE,
+    #         CUBE_SCREEN_DIR,
+    #         CUBE_DEPTH_DIR,
+    #         translation,
+    #         axis_vec,
+    #     )
+    #     depth_filter.visualize_depth_image()
+    #     denoise(
+    #         frame_id,
+    #         img_dir=CUBE_DEPTH_DIR,
+    #         denoise_mask_dir=DENOISE_MASK_DIR,
+    #         region=(10, 10),
+    #     )
+    #     create_annotated_poses(output_dir=ANNOTATED_POSES_DIR, frame_id=frame_id)
 
-    extract_gt_poses_from_tagslam(
-        start_time,
-        end_time,
-        depth_bag_file=ROSBAG_NAME,
-        odom_bag_file=ODOM_ROSBAG_NAME,
-        depth_topic=DEPTH_ROS_TOPIC,
-        odom_topic=ODOM_ROS_TOPIC,
-        output_dir=TAGSLAM_POSES_DIR,
-    )
+    # extract_gt_poses_from_tagslam(
+    #     start_time,
+    #     end_time,
+    #     depth_bag_file=ROSBAG_NAME,
+    #     odom_bag_file=ODOM_ROSBAG_NAME,
+    #     depth_topic=DEPTH_ROS_TOPIC,
+    #     odom_topic=ODOM_ROS_TOPIC,
+    #     output_dir=TAGSLAM_POSES_DIR,
+    # )
+    # print("Extracting gt poses...")
+    # extract_gt_poses_from_tagslam_with_quat(
+    #     start_time,
+    #     end_time,
+    #     depth_bag_file=ROSBAG_NAME,
+    #     odom_bag_file=ODOM_ROSBAG_NAME,
+    #     depth_topic=DEPTH_ROS_TOPIC,
+    #     odom_topic=ODOM_ROS_TOPIC,
+    #     output_dir=ROOT_DIR + "tagslam_poses_quat/",
+    # )
+
+    # DEPRECATED
+    # extract_gt_poses_from_tagslam_with_missing_frames(
+    #     start_time,
+    #     end_time,
+    #     depth_bag_file=ROSBAG_NAME,
+    #     odom_bag_file=ODOM_ROSBAG_NAME,
+    #     depth_topic=DEPTH_ROS_TOPIC,
+    #     odom_topic=ODOM_ROS_TOPIC,
+    #     output_dir=TAGSLAM_POSES_DIR,
+    # )
