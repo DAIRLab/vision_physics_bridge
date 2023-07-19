@@ -18,6 +18,7 @@ from rosbag_processor import (
     extract_time_versus_poses,
     extract_gt_poses_from_tagslam_with_missing_frames,
 )
+from sync_data import Synchronizer
 
 # TOSS_IDX = 2
 # GT_POSE_DIR = (
@@ -30,7 +31,7 @@ from rosbag_processor import (
 #     % TOSS_IDX
 # )
 GT_POSE_DIR = (
-    "/home/cnets-vision/mengti_ws/robot_filter/dataset/old_dataset/tagslam_poses_quat/"
+    "/home/cnets-vision/mengti_ws/robot_filter/dataset/old_dataset/tagslam_poses/"
 )
 # OUTPUT_POSE_DIR = "/home/cnets-vision/mengti_ws/results/poses_reversed_order/"
 OUTPUT_POSE_DIR = (
@@ -39,7 +40,7 @@ OUTPUT_POSE_DIR = (
 ODOM_FILE_PATH = (
     "/home/cnets-vision/mengti_ws/BundleTrack2.0/Data/old_dataset/annotated_poses/"
 )
-FIG_NAME = "result_poses_tmp.png"
+FIG_NAME = "result_poses_bundlesdf_tuned.png"
 
 
 def get_cosine_sim(frame_id):
@@ -334,28 +335,32 @@ if __name__ == "__main__":
     # end_time=rospy.rostime.Time(secs=1655404991, nsecs=641514)  # toss 8
     # end_time=rospy.rostime.Time(secs=1655405008, nsecs=720921)  # toss 9
     # end_time=rospy.rostime.Time(secs=1655405022, nsecs=942549)  # toss 10
-    bundletrack_time, gt_time = extract_time_versus_poses(
-        start_time,
-        end_time,
-        depth_bag_file,
-        odom_bag_file,
-        DEPTH_ROS_TOPIC,
-        ODOM_ROS_TOPIC,
-        GT_POSE_DIR,
-    )
+    ######################### DEPRECATED ###########################
+    # bundletrack_time, gt_time = extract_time_versus_poses(
+    #     start_time,
+    #     end_time,
+    #     depth_bag_file,
+    #     odom_bag_file,
+    #     DEPTH_ROS_TOPIC,
+    #     ODOM_ROS_TOPIC,
+    #     GT_POSE_DIR,
+    # )
 
-    gt_time_ = extract_gt_poses_from_tagslam_with_missing_frames(
-        start_time,
-        end_time,
-        depth_bag_file=depth_bag_file,
-        odom_bag_file=odom_bag_file,
-        depth_topic=DEPTH_ROS_TOPIC,
-        odom_topic=ODOM_ROS_TOPIC,
-        output_dir=GT_POSE_DIR,
-        write=False,
-    )
-    print(len(bundletrack_time[:446]), len(gt_time), len(gt_time_[:446]))
-    plot_with_time(bundletrack_time[:446], gt_time_[:446], OUTPUT_POSE_DIR, GT_POSE_DIR)
+    # gt_time_ = extract_gt_poses_from_tagslam_with_missing_frames(
+    #     start_time,
+    #     end_time,
+    #     depth_bag_file=depth_bag_file,
+    #     odom_bag_file=odom_bag_file,
+    #     depth_topic=DEPTH_ROS_TOPIC,
+    #     odom_topic=ODOM_ROS_TOPIC,
+    #     output_dir=GT_POSE_DIR,
+    #     write=False,
+    # )
+    ################################################################
+    sync = Synchronizer()
+    bundletrack_time, gt_time = sync.bundletrack_time, sync.gt_time
+    print(len(bundletrack_time), len(gt_time))
+    plot_with_time(bundletrack_time, gt_time, OUTPUT_POSE_DIR, GT_POSE_DIR)
 
     ###TEST
     # camera_pos = np.array([[1, 0, 0, 0], [0, 1, 0, 0], [0, 0, 1, 1], [0, 0, 0, 1]])

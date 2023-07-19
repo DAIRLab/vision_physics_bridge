@@ -221,16 +221,6 @@ if __name__ == "__main__":
     #     )
     #     create_annotated_poses(output_dir=ANNOTATED_POSES_DIR, frame_id=frame_id)
 
-    # extract_gt_poses_from_tagslam(
-    #     start_time,
-    #     end_time,
-    #     depth_bag_file=ROSBAG_NAME,
-    #     odom_bag_file=ODOM_ROSBAG_NAME,
-    #     depth_topic=DEPTH_ROS_TOPIC,
-    #     odom_topic=ODOM_ROS_TOPIC,
-    #     output_dir=TAGSLAM_POSES_DIR,
-    # )
-    # print("Extracting gt poses...")
     # extract_gt_poses_from_tagslam_with_quat(
     #     start_time,
     #     end_time,

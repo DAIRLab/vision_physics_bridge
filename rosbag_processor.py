@@ -737,18 +737,18 @@ def extract_time_versus_poses(
             if checkEndtime(msg.header.stamp, end_time):
                 break
         odom_time.append(msg.header.stamp.to_nsec())
-        Q = np.zeros((4, 1))
-        Q[0] = msg.pose.pose.orientation.x
-        Q[1] = msg.pose.pose.orientation.y
-        Q[2] = msg.pose.pose.orientation.z
-        Q[3] = msg.pose.pose.orientation.w
-        rotation_matrix = quaternion_to_rotation_matrix(Q)[:, :, 0]
+        # Q = np.zeros((4, 1))
+        # Q[0] = msg.pose.pose.orientation.x
+        # Q[1] = msg.pose.pose.orientation.y
+        # Q[2] = msg.pose.pose.orientation.z
+        # Q[3] = msg.pose.pose.orientation.w
+        # rotation_matrix = quaternion_to_rotation_matrix(Q)[:, :, 0]
         # rotation_matrix_tf = tf.transformations.quaternion_matrix([msg.pose.pose.orientation.x, msg.pose.pose.orientation.y, msg.pose.pose.orientation.z, msg.pose.pose.orientation.w])[:3, :3]
-        position = msg.pose.pose.position
-        translation = np.array([[position.x], [position.y], [position.z]])
-        result = np.vstack(
-            (np.hstack((rotation_matrix, translation)), np.array([0, 0, 0, 1]))
-        )
+        # position = msg.pose.pose.position
+        # translation = np.array([[position.x], [position.y], [position.z]])
+        # result = np.vstack(
+        #     (np.hstack((rotation_matrix, translation)), np.array([0, 0, 0, 1]))
+        # )
         # np.savetxt(output_dir + "%04i.txt" % frame_id, result)
         frame_id += 1
     depth_bag.close()
