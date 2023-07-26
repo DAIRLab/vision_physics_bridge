@@ -100,7 +100,7 @@ def checkStarttime(time1, time2):
 
 
 def checkEndtime(time1, time2):
-    return time1.secs == time2.secs
+    return time1.secs == time2.secs and time1.nsecs >= time2.nsecs
 
 
 bag = rosbag.Bag(odom_bag_file)

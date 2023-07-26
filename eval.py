@@ -19,7 +19,7 @@ from rosbag_processor import (
     extract_gt_poses_from_tagslam_with_missing_frames,
 )
 from sync_data import Synchronizer
-
+from data_preparation import DatasetManagement
 # TOSS_IDX = 2
 # GT_POSE_DIR = (
 #     "/home/cnets-vision/mengti_ws/robot_filter/dataset/old_split/%i/tagslam_poses/"
@@ -31,16 +31,13 @@ from sync_data import Synchronizer
 #     % TOSS_IDX
 # )
 GT_POSE_DIR = (
-    "/home/cnets-vision/mengti_ws/robot_filter/dataset/old_dataset/tagslam_poses/"
+    "/home/cnets-vision/mengti_ws/robot_filter/dataset/old_toss_5/tagslam_poses/"
 )
-# OUTPUT_POSE_DIR = "/home/cnets-vision/mengti_ws/results/poses_reversed_order/"
-OUTPUT_POSE_DIR = (
-    "/home/cnets-vision/mengti_ws/BundleSDF/results/old_dataset/ob_in_cam/"
-)
+OUTPUT_POSE_DIR = "/home/cnets-vision/mengti_ws/BundleSDF/results/old_toss_5/ob_in_cam/"
 ODOM_FILE_PATH = (
-    "/home/cnets-vision/mengti_ws/BundleTrack2.0/Data/old_dataset/annotated_poses/"
+    "/home/cnets-vision/mengti_ws/BundleSDF/data/old_toss_5/annotated_poses/"
 )
-FIG_NAME = "result_poses_bundlesdf_tuned.png"
+FIG_NAME = "result_poses_bundlesdf_toss_5.png"
 
 
 def get_cosine_sim(frame_id):
@@ -189,8 +186,6 @@ def plot_with_time(bundletrack_time, gt_time, bundletrack_pose_dir, gt_pose_dir)
         output_pose = np.loadtxt(bundletrack_pose_dir + "%04i.txt" % frame_id)
         output_pose = transform_bundletrack_output_to_world(
             output_pose,
-            CAMERA_CONFIG["old"]["translation"],
-            CAMERA_CONFIG["old"]["axis_vec"],
             bundletrack_pose_dir,
             ODOM_FILE_PATH,
         )
@@ -306,17 +301,15 @@ if __name__ == "__main__":
     odom_bag_file = "./odom_10.bag"
     DEPTH_ROS_TOPIC = "/camera/aligned_depth_to_color/image_raw"
     ODOM_ROS_TOPIC = "/tagslam/odom/body_cube"
-    # start_time = rospy.rostime.Time(secs=1667330345, nsecs=22710468)
-    # end_time = rospy.rostime.Time(secs=1667330357, nsecs=228116)
     start_time = None
     end_time = None
     #### OLD DATA #####
     # start time
-    start_time = rospy.rostime.Time(secs=1655404893, nsecs=899137)  # toss 1
-    # start_time = rospy.rostime.Time(secs=1655404906, nsecs=156495)  # toss 2
-    # start_time = rospy.rostime.Time(secs=1655404918, nsecs=435741)  # toss 3
-    # start_time = rospy.rostime.Time(secs=1655404930, nsecs=306306)  # toss 4
-    # start_time = rospy.rostime.Time(secs=1655404944, nsecs=447914)  # toss 5
+    # start_time = rospy.rostime.Time(secs=1655404893, nsecs=899137)  # toss 1
+    # start_time = rospy.rostime.Time(secs=1655404908, nsecs=279948)  # toss 2
+    # start_time = rospy.rostime.Time(secs=1655404920, nsecs=470680)  # toss 3
+    # start_time = rospy.rostime.Time(secs=1655404932, nsecs=647236)  # toss 4
+    start_time = rospy.rostime.Time(secs=1655404945, nsecs=387903)  # toss 5
     # start_time=rospy.rostime.Time(secs=1655404955, nsecs=272877)  # toss 6
     # start_time=rospy.rostime.Time(secs=1655404966, nsecs=698458)  # toss 7
     # start_time=rospy.rostime.Time(secs=1655404977, nsecs=941630)  # toss 8
@@ -324,12 +317,11 @@ if __name__ == "__main__":
     # start_time=rospy.rostime.Time(secs=1655405008, nsecs=720921) # toss 10
 
     # end time
-    end_time = rospy.rostime.Time(secs=1655404908, nsecs=279948)
-    # end_time = rospy.rostime.Time(secs=1655404906, nsecs=156495)  # toss 1
-    # end_time = rospy.rostime.Time(secs=1655404918, nsecs=435741)  # toss 2
-    # end_time = rospy.rostime.Time(secs=1655404930, nsecs=306306)  # toss 3
-    # end_time = rospy.rostime.Time(secs=1655404944, nsecs=447914)  # toss 4
-    # end_time = rospy.rostime.Time(secs=1655404955, nsecs=272877)  # toss 5
+    # end_time = rospy.rostime.Time(secs=1655404908, nsecs=279948) # toss 1
+    # end_time = rospy.rostime.Time(secs=1655404920, nsecs=470680)  # toss 2
+    # end_time = rospy.rostime.Time(secs=1655404932, nsecs=647236)  # toss 3
+    # end_time = rospy.rostime.Time(secs=1655404945, nsecs=387903)  # toss 4
+    end_time = rospy.rostime.Time(secs=1655404955, nsecs=463919)  # toss 5
     # end_time=rospy.rostime.Time(secs=1655404966, nsecs=698458)  # toss 6
     # end_time=rospy.rostime.Time(secs=1655404977, nsecs=941630)  # toss 7
     # end_time=rospy.rostime.Time(secs=1655404991, nsecs=641514)  # toss 8
@@ -357,21 +349,17 @@ if __name__ == "__main__":
     #     write=False,
     # )
     ################################################################
-    sync = Synchronizer()
+    frame_num = len([name for name in os.listdir(OUTPUT_POSE_DIR)])
+    print(f"there are {frame_num} frames")
+    sync = Synchronizer(GT_POSE_DIR, frame_num, start_time, end_time)
     bundletrack_time, gt_time = sync.bundletrack_time, sync.gt_time
     print(len(bundletrack_time), len(gt_time))
+    bundletrack_time = [t.to_sec() for t in bundletrack_time]
+    gt_time = [t.to_sec() for t in gt_time]
     plot_with_time(bundletrack_time, gt_time, OUTPUT_POSE_DIR, GT_POSE_DIR)
 
-    ###TEST
-    # camera_pos = np.array([[1, 0, 0, 0], [0, 1, 0, 0], [0, 0, 1, 1], [0, 0, 0, 1]])
-    # print(camera_to_world(camera_pos))
-
-    # from PIL import Image
-    # import imageio
-    # img_dir = "./depth_data/0001.png"
-    # # img_dir= "/home/cnets-vision/mengti_ws/BundleTrack/Data/YCBINEOAT/bleach0/depth/1578966042136484471.png"
-    # # image = Image.open(img_dir)
-    # # pixels = list(image.getdata())
-    # image = imageio.imread(img_dir)
-    # print(image[100][100])
-    # print(image.dtype)
+    # ContactNets toss: from object leaving the gripper to the object landing on the table
+    # start_time_toss = rospy.rostime.Time(secs=1655404905, nsecs=177325)  # toss 1
+    # end_time_toss = rospy.rostime.Time(secs=1655404906, nsecs=183975)  # toss 1
+    # Convert pose data to ContactNets format
+    # dataset = DatasetManagement(frame_num, start_time_toss, end_time_toss, bundletrack_time)

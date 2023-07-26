@@ -1,5 +1,4 @@
 import os
-from example import CAMERA_CONFIG
 import rospy
 import numpy as np
 import scipy.spatial as sp
@@ -222,8 +221,6 @@ def plot_with_time(bundletrack_time, gt_time, bundletrack_pose_dir, gt_pose_dir)
         output_pose = np.loadtxt(bundletrack_pose_dir + "%04i.txt" % frame_id)
         output_pose = transform_bundletrack_output_to_world(
             output_pose,
-            CAMERA_CONFIG["new"]["translation"],
-            CAMERA_CONFIG["new"]["axis_vec"],
             bundletrack_pose_dir,
             ODOM_FILE_PATH,
         )

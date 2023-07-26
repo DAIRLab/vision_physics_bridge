@@ -44,51 +44,11 @@ def rotation_matrix_to_euler(R):
 
     return np.array([x, y, z])
 
-
-def quaternion_to_rotation_matrix(Q):
-    """
-    Covert a quaternion into a full three-dimensional rotation matrix.
-
-    Input
-    :param Q: A 4 element array representing the quaternion (q0,q1,q2,q3)
-
-    Output
-    :return: A 3x3 element matrix representing the full 3D rotation matrix.
-             This rotation matrix converts a point in the local reference
-             frame to a point in the global reference frame.
-    """
-    # Extract the values from Q
-    q0 = Q[0]
-    q1 = Q[1]
-    q2 = Q[2]
-    q3 = Q[3]
-
-    # First row of the rotation matrix
-    r00 = 2 * (q0 * q0 + q1 * q1) - 1
-    r01 = 2 * (q1 * q2 - q0 * q3)
-    r02 = 2 * (q1 * q3 + q0 * q2)
-
-    # Second row of the rotation matrix
-    r10 = 2 * (q1 * q2 + q0 * q3)
-    r11 = 2 * (q0 * q0 + q2 * q2) - 1
-    r12 = 2 * (q2 * q3 - q0 * q1)
-
-    # Third row of the rotation matrix
-    r20 = 2 * (q1 * q3 - q0 * q2)
-    r21 = 2 * (q2 * q3 + q0 * q1)
-    r22 = 2 * (q0 * q0 + q3 * q3) - 1
-
-    # 3x3 rotation matrix
-    rot_matrix = np.array([[r00, r01, r02], [r10, r11, r12], [r20, r21, r22]])
-    return rot_matrix
-
-
 def rotation_matrix_to_quaternion(R):
     """
     :param R: 4*4 transformation matrix.
     """
     return tr.quaternion_from_matrix(R)
-
 
 def world_to_image(point, K, R, T):
     """
@@ -162,7 +122,7 @@ def camera_to_world(m, translation, axis_vec):
 
 
 def transform_bundletrack_output_to_world(
-    pred_pose, cam_translation, cam_axis_vec, output_pose_dir, odom_file_dir
+    pred_pose, output_pose_dir, odom_file_dir
 ):
     """
     https://github.com/wenbowen123/BundleTrack/issues/38
@@ -194,21 +154,6 @@ def setup_extrinsic(translation, axis_vec):
         (np.hstack((rotation_prime, translation_prime)), np.array([0, 0, 0, 1]))
     )
     return extrinsic
-
-
-def get_angular_velocity(curr_state, next_state, dt):
-    R_diff = next_state @ np.linalg.inv(curr_state)
-    R = np.vstack((np.hstack((R_diff, np.zeros((3, 1)))), np.array([0, 0, 0, 1])))
-    Q = rotation_matrix_to_quaternion(R)
-    # TODO: Double check the indices meaning.
-    axis = np.linalg.norm(np.array(Q[1:]))
-    angle = 2 * np.arctan2(axis, Q[0])
-    ang_velocity = np.array(Q[1:]) * angle / dt
-    return ang_velocity.reshape(1, -1)
-
-
-def get_linear_velocity(curr_state, next_state, dt):
-    return (next_state - curr_state) / dt
 
 
 def pos_quat_to_trans_mat(pos_quat):

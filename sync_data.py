@@ -4,14 +4,15 @@ from sensor_msgs.msg import Image
 from nav_msgs.msg import Odometry
 import numpy as np
 
-start_time = rospy.rostime.Time(secs=1655404893, nsecs=899137)  # toss 1
-end_time = rospy.rostime.Time(secs=1655404908, nsecs=279948)
-tagslam_dir = "./dataset/old_dataset/tagslam_poses/"
-
 
 class Synchronizer:
-    def __init__(self) -> None:
+    def __init__(self, tagslam_dir, data_length, start_time, end_time, save=True) -> None:
         rospy.init_node("listener", anonymous=True)
+        self.tagslam_dir = tagslam_dir
+        self.data_length = data_length
+        self.start_time = start_time
+        self.end_time = end_time
+        self.save = save
         self.depth_sub = message_filters.Subscriber(
             "/camera/aligned_depth_to_color/image_raw", Image
         )
@@ -26,8 +27,7 @@ class Synchronizer:
         rospy.spin()
 
     def callback(self, depth_msg, odom_msg):
-        # print("Inside callback")
-        if start_time <= depth_msg.header.stamp <= end_time:
+        if self.start_time <= depth_msg.header.stamp < self.end_time:
             self.frame += 1
             print(self.frame)
             # print(f"odom_msg.header.time {odom_msg.header.stamp}")
@@ -40,10 +40,11 @@ class Synchronizer:
             Q[4] = odom_msg.pose.pose.orientation.y
             Q[5] = odom_msg.pose.pose.orientation.z
             Q[6] = odom_msg.pose.pose.orientation.w
-            np.savetxt(tagslam_dir + "%04i.txt" % self.frame, Q)
-            self.bundletrack_time.append(depth_msg.header.stamp.to_nsec())
-            self.gt_time.append(odom_msg.header.stamp.to_nsec())
-        if self.frame == 449:  # TODO
+            if self.save:
+                np.savetxt(self.tagslam_dir + "%04i.txt" % self.frame, Q)
+            self.bundletrack_time.append(depth_msg.header.stamp)
+            self.gt_time.append(odom_msg.header.stamp)
+        if self.frame == self.data_length:  # TODO
             rospy.signal_shutdown("Shutting down the node")
 
 

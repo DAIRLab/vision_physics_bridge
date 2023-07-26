@@ -33,9 +33,9 @@ JOINT_STATE_ROS_TOPIC = "/joint_states"
 RGB_ROS_TOPIC = "/camera/color/image_raw"
 ODOM_ROS_TOPIC = "/tagslam/odom/body_cube"
 
-ROOT_DIR = "./dataset/old_dataset/"
-BUNDLETRACK_DATA_DIR = "old_dataset/"
-BUNDLETRACK_DIR = "/home/cnets-vision/mengti_ws/BundleTrack2.0/Data/"
+ROOT_DIR = "./dataset/old_toss_7/"
+BUNDLETRACK_DATA_DIR = "old_toss_7/"
+BUNDLETRACK_DIR = "/home/cnets-vision/mengti_ws/BundleSDF/data/"
 
 # Create folders
 if not os.path.exists(ROOT_DIR + "texts"):
@@ -79,20 +79,10 @@ FILTERED_RGB_FILE = ROOT_DIR + "filtered_data/rgb_without_robot_frame%04i.png"
 TAGSLAM_POSES_DIR = ROOT_DIR + "tagslam_poses/"
 
 # BundleTrack data paths
-DENOISE_MASK_DIR = (
-    "/home/cnets-vision/mengti_ws/BundleTrack2.0/Data/" + BUNDLETRACK_DATA_DIR + "masks"
-)
-ANNOTATED_POSES_DIR = (
-    "/home/cnets-vision/mengti_ws/BundleTrack2.0/Data/"
-    + BUNDLETRACK_DATA_DIR
-    + "annotated_poses"
-)
-BUNDLETRACK_DEPTH = (
-    "/home/cnets-vision/mengti_ws/BundleTrack2.0/Data/" + BUNDLETRACK_DATA_DIR + "depth"
-)
-BUNDLETRACK_RGB = (
-    "/home/cnets-vision/mengti_ws/BundleTrack2.0/Data/" + BUNDLETRACK_DATA_DIR + "rgb"
-)
+DENOISE_MASK_DIR = BUNDLETRACK_DIR + BUNDLETRACK_DATA_DIR + "masks"
+ANNOTATED_POSES_DIR = BUNDLETRACK_DIR + BUNDLETRACK_DATA_DIR + "annotated_poses"
+BUNDLETRACK_DEPTH = BUNDLETRACK_DIR + BUNDLETRACK_DATA_DIR + "depth"
+BUNDLETRACK_RGB = BUNDLETRACK_DIR + BUNDLETRACK_DATA_DIR + "rgb"
 
 # For camera extrinsics
 CAMERA_CONFIG = {
@@ -108,21 +98,33 @@ CAMERA_CONFIG = {
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
 
+    # ContactNets toss: from object leaving the gripper to the object landing on the table
+    # start_time_ = rospy.rostime.Time(secs=1655404905, nsecs=177325)  # toss 1
+    # end_time_ = rospy.rostime.Time(secs=1655404906, nsecs=183975)  # toss 1
+
     parser.add_argument(
         "--start_time",
         type=rospy.rostime.Time,
         required=False,
-        default=rospy.rostime.Time(secs=1655404893, nsecs=899137),  # toss 1
+        # default=rospy.rostime.Time(secs=1655404893, nsecs=899137),  # toss 1
         # default=rospy.rostime.Time(secs=1655404908, nsecs=279948),  # toss 2
         # default=rospy.rostime.Time(secs=1655404920, nsecs=470680), # toss 3
+        # default=rospy.rostime.Time(secs=1655404932, nsecs=647236), # toss 4
+        # default=rospy.rostime.Time(secs=1655404945, nsecs=387903), # toss 5
+        # default=rospy.rostime.Time(secs=1655404955, nsecs=463919), # toss 6
+        default=rospy.rostime.Time(secs=1655404968, nsecs=399762), # toss 7
     )
     parser.add_argument(
         "--end_time",
         type=rospy.rostime.Time,
         required=False,
-        default=rospy.rostime.Time(secs=1655404908, nsecs=279948),  # toss 1
+        # default=rospy.rostime.Time(secs=1655404908, nsecs=279948),  # toss 1
         # default=rospy.rostime.Time(secs=1655404920, nsecs=470680),  # toss 2
         # default=rospy.rostime.Time(secs=1655404932, nsecs=647236), # toss 3
+        # default=rospy.rostime.Time(secs=1655404945, nsecs=387903), # toss 4
+        # default=rospy.rostime.Time(secs=1655404955, nsecs=463919), # toss 5
+        # default=rospy.rostime.Time(secs=1655404968, nsecs=399762), # toss 6
+        default=rospy.rostime.Time(secs=1655404978, nsecs=579412), # toss 7
     )
     parser.add_argument(
         "--translation",
@@ -151,76 +153,76 @@ if __name__ == "__main__":
         translation,
         axis_vec,
     )  # Get the cube pose for the first frame
-    # bag_to_depth_images(
-    #     ROSBAG_NAME,
-    #     DEPTH_ROS_TOPIC,
-    #     DEPTH_DATA_DIR,
-    #     start_time,
-    #     end_time,
-    #     img_dir=IMAGE_TXT_PATH,
-    #     bundletrack_depth_dir=BUNDLETRACK_DEPTH,
-    # )
-    # print("Depth images generated")
-    # extract_poses_with_timestamps(
-    #     ROSBAG_NAME,
-    #     DEPTH_ROS_TOPIC,
-    #     RGB_ROS_TOPIC,
-    #     JOINT_STATE_ROS_TOPIC,
-    #     POSITION_FILE_PATH,
-    #     RGB_DATA_DIR,
-    #     start_time,
-    #     end_time,
-    #     bundletrack_rgb_dir=BUNDLETRACK_RGB,
-    # )
-    # frame_num = len([name for name in os.listdir(RGB_DATA_DIR)])
-    # print("There are %i frames in total!" % frame_num)
-    # positions = import_data(POSITION_FILE_PATH)
-    # write_real_depth_as_txt(
-    #     start_frame=1,
-    #     end_frame=frame_num,
-    #     img_dir=IMAGE_TXT_PATH,
-    #     real_depth_dir=REAL_DEPTH_FILE,
-    # )  # TODO: The last frame is cropped
-    # print("Finished writing %i real depth text files." % frame_num)
-    # meshcat = StartMeshcat()
-    # for frame_id in tqdm(range(478, frame_num + 1)):
-    #     run_urdf_filter(
-    #         meshcat,
-    #         frame_id,
-    #         positions,
-    #         MASK_IAMGE_FILE,
-    #         SIMULATED_DEPTH_FILE,
-    #         REAL_DEPTH_FILE,
-    #         translation,
-    #         axis_vec,
-    #     )
-    #     dilate(
-    #         frame_id, mask_image_dir=MASK_IAMGE_FILE, dilated_mask_dir=DILATED_MASK_FILE
-    #     )
-    #     generate_depth_img_without_robot(
-    #         REAL_DEPTH_FILE % frame_id,
-    #         MASK_IAMGE_FILE % frame_id,
-    #         FILTERED_DEPTH_FILE % frame_id,
-    #     )
-    #     # generate_rgb_image_without_robot(RGB_IMAGE_FILE, MASK_IAMGE_FILE, FILTERED_RGB_FILE) #optional, seems the point cloud looks fine with the unfiltered rgb data
-    #     depth_filter = DepthFilter(
-    #         frame_id,
-    #         RGB_DATA_DIR + "%04i.png",
-    #         FILTERED_DEPTH_FILE,
-    #         CUBE_SCREEN_DIR,
-    #         CUBE_DEPTH_DIR,
-    #         translation,
-    #         axis_vec,
-    #     )
-    #     depth_filter.visualize_depth_image()
-    #     denoise(
-    #         frame_id,
-    #         img_dir=CUBE_DEPTH_DIR,
-    #         denoise_mask_dir=DENOISE_MASK_DIR,
-    #         region=(10, 10),
-    #     )
-    #     create_annotated_poses(output_dir=ANNOTATED_POSES_DIR, frame_id=frame_id)
+    bag_to_depth_images(
+        ROSBAG_NAME,
+        DEPTH_ROS_TOPIC,
+        DEPTH_DATA_DIR,
+        start_time,
+        end_time,
+        img_dir=IMAGE_TXT_PATH,
+        bundletrack_depth_dir=BUNDLETRACK_DEPTH,
+    )
+    print("Depth images generated")
+    extract_poses_with_timestamps(
+        ROSBAG_NAME,
+        DEPTH_ROS_TOPIC,
+        RGB_ROS_TOPIC,
+        JOINT_STATE_ROS_TOPIC,
+        POSITION_FILE_PATH,
+        RGB_DATA_DIR,
+        start_time,
+        end_time,
+        bundletrack_rgb_dir=BUNDLETRACK_RGB,
+    )
+    frame_num = len([name for name in os.listdir(RGB_DATA_DIR)])
+    print("There are %i frames in total!" % frame_num)
+    positions = import_data(POSITION_FILE_PATH)
+    write_real_depth_as_txt(
+        start_frame=1,
+        end_frame=frame_num,
+        img_dir=IMAGE_TXT_PATH,
+        real_depth_dir=REAL_DEPTH_FILE,
+    )
+    print("Finished writing %i real depth text files." % frame_num)
+    meshcat = StartMeshcat()
+    for frame_id in tqdm(range(1, frame_num + 1)):
+        run_urdf_filter(
+            meshcat,
+            frame_id,
+            positions,
+            MASK_IAMGE_FILE,
+            SIMULATED_DEPTH_FILE,
+            REAL_DEPTH_FILE,
+            translation,
+            axis_vec,
+        )
+        dilate(
+            frame_id, mask_image_dir=MASK_IAMGE_FILE, dilated_mask_dir=DILATED_MASK_FILE
+        )
+        generate_depth_img_without_robot(
+            REAL_DEPTH_FILE % frame_id,
+            MASK_IAMGE_FILE % frame_id,
+            FILTERED_DEPTH_FILE % frame_id,
+        )
+        depth_filter = DepthFilter(
+            frame_id,
+            RGB_DATA_DIR + "%04i.png",
+            FILTERED_DEPTH_FILE,
+            CUBE_SCREEN_DIR,
+            CUBE_DEPTH_DIR,
+            translation,
+            axis_vec,
+        )
+        depth_filter.visualize_depth_image()
+        denoise(
+            frame_id,
+            img_dir=CUBE_DEPTH_DIR,
+            denoise_mask_dir=DENOISE_MASK_DIR,
+            region=(11, 11),
+        )
+        create_annotated_poses(output_dir=ANNOTATED_POSES_DIR, frame_id=frame_id)
 
+    # DEPRECATED
     # extract_gt_poses_from_tagslam_with_quat(
     #     start_time,
     #     end_time,
@@ -230,8 +232,6 @@ if __name__ == "__main__":
     #     odom_topic=ODOM_ROS_TOPIC,
     #     output_dir=ROOT_DIR + "tagslam_poses_quat/",
     # )
-
-    # DEPRECATED
     # extract_gt_poses_from_tagslam_with_missing_frames(
     #     start_time,
     #     end_time,

@@ -129,7 +129,7 @@ class FrankaPlaybackSim:
         # Setup contexts
         self.diagram = self.build()
         self.context = self.diagram.CreateDefaultContext()
-        self.diagram.Publish(self.context)
+        # self.diagram.Publish(self.context)
         self.plant_context = self.plant.GetMyMutableContextFromRoot(self.context)
         self.plant.SetPositions(self.plant_context, self.model, position)
         self.plant.get_actuation_input_port().FixValue(self.plant_context, np.zeros(9))
