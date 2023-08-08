@@ -13,6 +13,7 @@ from file_utils import (
 from pydrake.all import StartMeshcat
 from rosbag_processor import (
     bag_to_depth_images,
+    bag_to_rgb_images,
     extract_cube_pose,
     extract_gt_poses_from_tagslam,
     extract_gt_poses_from_tagslam_with_quat,
@@ -92,7 +93,7 @@ with open(CAMERA_EXTRINSICS_FILE, 'r') as stream:
 print(data_loaded[cam]['pose']['position'])
 
 cam_pos_dict = data_loaded[cam]['pose']['position']
-cam_trans = np.array([cam_pos_dict['x'], cam_pos_dict['y'], cam_pos_dict['z']])
+cam_trans = np.array([cam_pos_dict['x'], cam_pos_dict['y'], cam_pos_dict['z']]).reshape(-1, 1)
 cam_rot_dict = data_loaded[cam]['pose']['rotation']
 cam_axis_vec = np.array([cam_rot_dict['x'], cam_rot_dict['y'], cam_rot_dict['z']])
 
@@ -148,62 +149,64 @@ if __name__ == "__main__":
         bundletrack_depth_dir=BUNDLETRACK_DEPTH,
     )
     print("Depth images generated")
-    extract_poses_with_timestamps(
-        ROSBAG_NAME,
-        DEPTH_ROS_TOPIC,
-        RGB_ROS_TOPIC,
-        JOINT_STATE_ROS_TOPIC,
-        POSITION_FILE_PATH,
-        RGB_DATA_DIR,
-        start_time,
-        end_time,
-        bundletrack_rgb_dir=BUNDLETRACK_RGB,
-    )
-    frame_num = len([name for name in os.listdir(RGB_DATA_DIR)])
-    print("There are %i frames in total!" % frame_num)
-    positions = import_data(POSITION_FILE_PATH)
-    write_real_depth_as_txt(
-        start_frame=1,
-        end_frame=frame_num,
-        img_dir=IMAGE_TXT_PATH,
-        real_depth_dir=REAL_DEPTH_FILE,
-    )
-    print("Finished writing %i real depth text files." % frame_num)
-    meshcat = StartMeshcat()
-    for frame_id in tqdm(range(1, frame_num + 1)):
-        run_urdf_filter(
-            meshcat,
-            frame_id,
-            positions,
-            MASK_IAMGE_FILE,
-            SIMULATED_DEPTH_FILE,
-            REAL_DEPTH_FILE,
-            translation,
-            axis_vec,
-        )
-        dilate(
-            frame_id, mask_image_dir=MASK_IAMGE_FILE, dilated_mask_dir=DILATED_MASK_FILE
-        )
-        generate_depth_img_without_robot(
-            REAL_DEPTH_FILE % frame_id,
-            MASK_IAMGE_FILE % frame_id,
-            FILTERED_DEPTH_FILE % frame_id,
-        )
-        depth_filter = DepthFilter(
-            frame_id,
-            RGB_DATA_DIR + "%04i.png",
-            FILTERED_DEPTH_FILE,
-            CUBE_SCREEN_DIR,
-            CUBE_DEPTH_DIR,
-            translation,
-            axis_vec,
-        )
-        depth_filter.visualize_depth_image()
-        denoise(
-            frame_id,
-            img_dir=CUBE_DEPTH_DIR,
-            denoise_mask_dir=DENOISE_MASK_DIR,
-            region=(11, 11),
-        )
-        create_annotated_poses(output_dir=ANNOTATED_POSES_DIR, frame_id=frame_id)
-        
+    # Since we don't need the masks for this dataset, simply use the old version of rgb processor
+    bag_to_rgb_images(ROSBAG_NAME, RGB_ROS_TOPIC, BUNDLETRACK_RGB, start_time, end_time)
+    #############################################################################################
+    # extract_poses_with_timestamps(
+    #     ROSBAG_NAME,
+    #     DEPTH_ROS_TOPIC,
+    #     RGB_ROS_TOPIC,
+    #     JOINT_STATE_ROS_TOPIC,
+    #     POSITION_FILE_PATH,
+    #     RGB_DATA_DIR,
+    #     start_time,
+    #     end_time,
+    #     bundletrack_rgb_dir=BUNDLETRACK_RGB,
+    # )
+    # frame_num = len([name for name in os.listdir(RGB_DATA_DIR)])
+    # print("There are %i frames in total!" % frame_num)
+    # positions = import_data(POSITION_FILE_PATH)
+    # write_real_depth_as_txt(
+    #     start_frame=1,
+    #     end_frame=frame_num,
+    #     img_dir=IMAGE_TXT_PATH,
+    #     real_depth_dir=REAL_DEPTH_FILE,
+    # )
+    # print("Finished writing %i real depth text files." % frame_num)
+    # meshcat = StartMeshcat()
+    # for frame_id in tqdm(range(1, frame_num + 1)):
+    #     run_urdf_filter(
+    #         meshcat,
+    #         frame_id,
+    #         positions,
+    #         MASK_IAMGE_FILE,
+    #         SIMULATED_DEPTH_FILE,
+    #         REAL_DEPTH_FILE,
+    #         translation,
+    #         axis_vec,
+    #     )
+    #     dilate(
+    #         frame_id, mask_image_dir=MASK_IAMGE_FILE, dilated_mask_dir=DILATED_MASK_FILE
+    #     )
+    #     generate_depth_img_without_robot(
+    #         REAL_DEPTH_FILE % frame_id,
+    #         MASK_IAMGE_FILE % frame_id,
+    #         FILTERED_DEPTH_FILE % frame_id,
+    #     )
+    #     depth_filter = DepthFilter(
+    #         frame_id,
+    #         RGB_DATA_DIR + "%04i.png",
+    #         FILTERED_DEPTH_FILE,
+    #         CUBE_SCREEN_DIR,
+    #         CUBE_DEPTH_DIR,
+    #         translation,
+    #         axis_vec,
+    #     )
+    #     depth_filter.visualize_depth_image()
+    #     denoise(
+    #         frame_id,
+    #         img_dir=CUBE_DEPTH_DIR,
+    #         denoise_mask_dir=DENOISE_MASK_DIR,
+    #         region=(11, 11),
+    #     )
+    #     create_annotated_poses(output_dir=ANNOTATED_POSES_DIR, frame_id=frame_id)

@@ -60,33 +60,30 @@ def getDictLen(dict):
     return length
 
 
-def bag_to_rgb_images(bag_file, image_topic, start_frame):
+def bag_to_rgb_images(bag_file, image_topic, image_dir, start_time, end_time):
     """Extract a folder of RGB images from a rosbag."""
     print(
         "Extract images from %s on topic %s into %s"
-        % (bag_file, image_topic, RGB_OUTPUT_DIR)
+        % (bag_file, image_topic, image_dir)
     )
 
     bag = rosbag.Bag(bag_file, "r")
     bridge = CvBridge()
     filename = 1
-    count = 0
     for topic, msg, t in bag.read_messages(topics=[image_topic]):
-        count += 1
-        if count < start_frame:
-            continue
+        if start_time and end_time:
+            if msg.header.stamp < start_time:
+                continue
+            if msg.header.stamp >= end_time:
+                break
         cv_img = bridge.imgmsg_to_cv2(msg, desired_encoding="passthrough")
-        cv2.imwrite(os.path.join(RGB_OUTPUT_DIR, "%04i.png" % filename), cv_img)
+        cv2.imwrite(os.path.join(image_dir, "%04i.png" % filename), cv_img)
         filename += 1
         # im = Image.fromarray(depth_array)
         # if im.mode != 'RGB':
         #     im = im.convert('RGB')
 
-        print("Wrote image %i" % count)
-
-        # Rosbag is too large, we only keep the first 10 images
-        # if count == end_frame:
-        #     break
+        print("Wrote image %i" % filename)
     bag.close()
     return
 
