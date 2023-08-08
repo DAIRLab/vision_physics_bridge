@@ -118,8 +118,8 @@ def camera_to_world(m, translation, axis_vec):
     # T_w = pos_world_vector[:3]
     # T_w = T_w.reshape(-1, 1)
     # return np.vstack((np.hstack((R_w, T_w)), np.array([0, 0, 0, 1])))
-    # return np.linalg.inv(extrinsic) @ m
-    return extrinsic @ m
+    return np.linalg.inv(extrinsic) @ m
+    # return extrinsic @ m
 
 
 CAMERA_CONFIG = {
