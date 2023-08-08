@@ -46,7 +46,7 @@ from pydrake.common import FindResourceOrThrow
 from math_utils import (
     quaternion_to_rotation_matrix,
     rotation_matrix_to_quaternion,
-    transform_bundletrack_output_to_world,
+    transform_bundletrack_output,
 )
 
 from cv_bridge import CvBridge
@@ -164,7 +164,7 @@ def get_bundletrack_results():
                 "axis_vec": np.array([-1.61997882, -1.56988553, 0.86362178]),
             },
         }
-        pose = transform_bundletrack_output_to_world(
+        pose = transform_bundletrack_output(
             pose,
             CAMERA_CONFIG["new"]["translation"],
             CAMERA_CONFIG["new"]["axis_vec"],
@@ -357,7 +357,7 @@ simulator.Initialize()
 
 for i in range(1, frame_num):
     bundletrack_pose = np.loadtxt(DATA_DIR + "%04i.txt" % i)
-    pose = transform_bundletrack_output_to_world(
+    pose = transform_bundletrack_output(
         bundletrack_pose,
         CAMERA_CONFIG["new"]["translation"],
         CAMERA_CONFIG["new"]["axis_vec"],

@@ -12,7 +12,7 @@ from math_utils import (
     trans_mat_to_pos_quat,
     world_to_camera,
     rotation_matrix_to_euler,
-    transform_bundletrack_output_to_world,
+    transform_bundletrack_output,
 )
 from rosbag_processor import (
     extract_time_versus_poses,
@@ -20,16 +20,7 @@ from rosbag_processor import (
 )
 from sync_data import Synchronizer
 from data_preparation import DatasetManagement
-# TOSS_IDX = 2
-# GT_POSE_DIR = (
-#     "/home/cnets-vision/mengti_ws/robot_filter/dataset/old_split/%i/tagslam_poses/"
-#     % TOSS_IDX
-# )
-# OUTPUT_POSE_DIR = "/home/cnets-vision/mengti_ws/old_results/poses_%i/" % TOSS_IDX
-# ODOM_FILE_PATH = (
-#     "/home/cnets-vision/mengti_ws/BundleTrack/Data/YCBINEOAT/contact_nets_old_split/%i/annotated_poses/"
-#     % TOSS_IDX
-# )
+
 GT_POSE_DIR = (
     "/home/cnets-vision/mengti_ws/robot_filter/dataset/old_toss_5/tagslam_poses/"
 )
@@ -37,7 +28,7 @@ OUTPUT_POSE_DIR = "/home/cnets-vision/mengti_ws/BundleSDF/results/old_toss_5/ob_
 ODOM_FILE_PATH = (
     "/home/cnets-vision/mengti_ws/BundleSDF/data/old_toss_5/annotated_poses/"
 )
-FIG_NAME = "result_poses_bundlesdf_toss_5.png"
+FIG_NAME = "result_poses_bundlesdf_test_transfer.png"
 
 
 def get_cosine_sim(frame_id):
@@ -184,7 +175,7 @@ def plot_with_time(bundletrack_time, gt_time, bundletrack_pose_dir, gt_pose_dir)
     estimated_poses, ground_truth_poses = [], []
     for frame_id in range(1, frame_num + 1):
         output_pose = np.loadtxt(bundletrack_pose_dir + "%04i.txt" % frame_id)
-        output_pose = transform_bundletrack_output_to_world(
+        output_pose = transform_bundletrack_output(
             output_pose,
             bundletrack_pose_dir,
             ODOM_FILE_PATH,
@@ -224,6 +215,19 @@ def plot_with_time(bundletrack_time, gt_time, bundletrack_pose_dir, gt_pose_dir)
         ground_truth_x.append(x_)
         ground_truth_y.append(y_)
         ground_truth_z.append(z_)
+        
+        # x_, y_, z_, w_ = gt_pose_[3:]
+        # print(gt_pose_[:3].shape)
+        # ground_truth_pose = np.vstack(
+        # (np.hstack((R.from_quat(gt_pose_[3:]).as_matrix(), gt_pose_[:3].reshape(-1, 1))), np.array([0, 0, 0, 1])))
+        # ground_truth_poses.append(ground_truth_pose)
+        # ground_truth_w.append(w_)
+        # ground_truth_x.append(x_)
+        # ground_truth_y.append(y_)
+        # ground_truth_z.append(z_)
+        # gt_x.append(gt_pose_[0])
+        # gt_y.append(gt_pose_[1])
+        # gt_z.append(gt_pose_[2])
 
     output_x, output_y, output_z = (
         np.array(output_x),

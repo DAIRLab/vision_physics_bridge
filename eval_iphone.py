@@ -9,7 +9,7 @@ import matplotlib.pyplot as plt
 from math_utils import (
     camera_to_world,
     rotation_matrix_to_euler,
-    transform_bundletrack_output_to_world,
+    transform_bundletrack_output,
 )
 from rosbag_processor import (
     extract_time_versus_poses,
@@ -214,7 +214,7 @@ def plot_with_time(bundletrack_time, gt_time, bundletrack_pose_dir, gt_pose_dir)
     estimated_poses, ground_truth_poses = [], []
     for frame_id in range(1, frame_num + 1):
         output_pose = np.loadtxt(bundletrack_pose_dir + "%04i.txt" % frame_id)
-        output_pose = transform_bundletrack_output_to_world(
+        output_pose = transform_bundletrack_output(
             output_pose,
             CAMERA_CONFIG["old"]["translation"],
             CAMERA_CONFIG["old"]["axis_vec"],

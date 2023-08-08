@@ -1,6 +1,6 @@
 import os
 import numpy as np
-from math_utils import transform_bundletrack_output_to_world
+from math_utils import transform_bundletrack_output
 import rospy
 import torch
 
@@ -30,8 +30,8 @@ class DatasetManagement:
                 break
             pose = np.loadtxt(BUNDLESDF_POSE_DIR + "%04i.txt" % frame_id)
             pose_ = np.loadtxt(BUNDLESDF_POSE_DIR + "%04i.txt" % (frame_id+1))
-            pose = transform_bundletrack_output_to_world(pose, BUNDLESDF_POSE_DIR, ODOM_FILE_PATH)
-            pose_ = transform_bundletrack_output_to_world(pose_, BUNDLESDF_POSE_DIR, ODOM_FILE_PATH)
+            pose = transform_bundletrack_output(pose, BUNDLESDF_POSE_DIR, ODOM_FILE_PATH)
+            pose_ = transform_bundletrack_output(pose_, BUNDLESDF_POSE_DIR, ODOM_FILE_PATH)
             rotation = pose[:3, :3]
             rotation_ = pose_[:3, :3]
             

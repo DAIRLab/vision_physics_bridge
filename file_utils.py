@@ -12,7 +12,7 @@ import glob
 import shutil
 import os
 import re
-
+import trimesh
 
 def filter(real_img, sim_img):
     """
@@ -196,6 +196,25 @@ def render_video():
         writer.append_data(imageio.imread(im))
     writer.close()
 
+def obj2urdf(obj_filename, urdf_filename):
+    mesh = trimesh.load_mesh(obj_filename)
+    vertices = mesh.vertices
+    faces = mesh.faces.reshape((-1, 3))
+
+    urdf_xml = f'''<?xml version="1.0"?>
+<robot name="mesh_robot">
+  <link name="link">
+    <visual>
+      <geometry>
+        <mesh filename="{obj_filename}" scale="1 1 1" />
+      </geometry>
+    </visual>
+  </link>
+</robot>'''
+
+    # Save the URDF XML to a file
+    with open(urdf_filename, 'w') as urdf_file:
+        urdf_file.write(urdf_xml)
 
 """
 Data preparation for running BundleTrack on our own RGBD data. 

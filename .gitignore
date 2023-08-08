@@ -4,7 +4,6 @@
 *.txt
 /__pycache__
 /dataset
-*.ipynb
 *.gif
 *.mp4
 .vscode
