@@ -151,9 +151,7 @@ def transform_bundletrack_output(
     pred_new = (pred_pose @ np.linalg.inv(init_pose)) @ init_pose_new
     if to_world:
         print("Transforming to world!!!!")
-        cam_translation = CAMERA_CONFIG['old']['translation']
-        cam_axis_vec = CAMERA_CONFIG['old']['axis_vec']
-        pred_new_world = camera_to_world(pred_new, cam_translation, cam_axis_vec)
+        pred_new_world = camera_to_world(pred_new)
         return pred_new_world
     return pred_new
 
@@ -181,6 +179,16 @@ def pos_quat_to_trans_mat(pos_quat):
 
 
 def trans_mat_to_pos_quat(trans):
-    quat = R.from_matrix(trans[:3, :3]).as_quat().reshape(-1, 1)
+    q = R.from_matrix(trans[:3, :3]).as_quat().reshape(-1, 1)
+    magnitude = np.linalg.norm(q)
+    q /= magnitude
+    if ((q[3] < 0)
+        or (q[3] == 0 and q[0] < 0)
+        or (q[3] == 0 and q[0] == 0 and q[1] < 0)
+        or (q[3] == 0 and q[0] == 0 and q[1] == 0 and q[2] < 0)):
+        q[0] *= -1.0
+        q[1] *= -1.0
+        q[2] *= -1.0
+        q[3] *= -1.0
     pos = trans[:3, 3].reshape(-1, 1)
-    return np.vstack((pos, quat))
+    return np.vstack((pos, q))
