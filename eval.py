@@ -173,13 +173,21 @@ def plot_with_time(bundletrack_time, gt_time, bundletrack_pose_dir, gt_pose_dir)
     ground_truth_w, ground_truth_x, ground_truth_y, ground_truth_z = [], [], [], []
     frame_num = len(bundletrack_time)
     estimated_poses, ground_truth_poses = [], []
+    
+    
+    ########## For Test ###########
+    estimated_x_world_pose, estimated_y_world_pose, estimated_z_world_pose = [], [], []
+    estimate_x_world_quat_list, estimate_y_world_quat_list, estimate_z_world_quat_list, estimate_w_world_quat_list = [], [], [], []
+    gt_x_world_pose, gt_y_world_pose, gt_z_world_pose = [], [], []
+    gt_x_world_test_list, gt_y_world_test_list, gt_z_world_test_list, gt_w_world_test_list = [], [], [], []
+    ###############################
     for frame_id in range(1, frame_num + 1):
         output_pose = np.loadtxt(bundletrack_pose_dir + "%04i.txt" % frame_id)
         output_pose = transform_bundletrack_output(
             output_pose,
             bundletrack_pose_dir,
             ODOM_FILE_PATH,
-        )
+        ) # camera frame
         estimated_poses.append(output_pose)
         output_x.append(output_pose[0, 3])
         output_y.append(output_pose[1, 3])
@@ -191,6 +199,19 @@ def plot_with_time(bundletrack_time, gt_time, bundletrack_pose_dir, gt_pose_dir)
         estimated_y.append(y)
         estimated_z.append(z)
 
+        ########## Transform to world again ############
+        output_pose_world_test = camera_to_world(output_pose)
+        estimated_x_world_pose.append(output_pose_world_test[0, 3])
+        estimated_y_world_pose.append(output_pose_world_test[1, 3])
+        estimated_z_world_pose.append(output_pose_world_test[2, 3])
+
+        x_test, y_test, z_test, w_test = R.from_matrix(output_pose_world_test[:3, :3]).as_quat()
+        estimate_x_world_quat_list.append(x_test)
+        estimate_y_world_quat_list.append(y_test)
+        estimate_z_world_quat_list.append(z_test)
+        estimate_w_world_quat_list.append(w_test)
+        ################################################
+        
     for frame_id in range(1, len(gt_time) + 1):
         gt_frame = frame_id
         gt_pose = np.loadtxt(gt_pose_dir + "%04i.txt" % gt_frame)
@@ -216,18 +237,23 @@ def plot_with_time(bundletrack_time, gt_time, bundletrack_pose_dir, gt_pose_dir)
         ground_truth_y.append(y_)
         ground_truth_z.append(z_)
         
-        # x_, y_, z_, w_ = gt_pose_[3:]
-        # print(gt_pose_[:3].shape)
-        # ground_truth_pose = np.vstack(
-        # (np.hstack((R.from_quat(gt_pose_[3:]).as_matrix(), gt_pose_[:3].reshape(-1, 1))), np.array([0, 0, 0, 1])))
-        # ground_truth_poses.append(ground_truth_pose)
-        # ground_truth_w.append(w_)
-        # ground_truth_x.append(x_)
-        # ground_truth_y.append(y_)
-        # ground_truth_z.append(z_)
-        # gt_x.append(gt_pose_[0])
-        # gt_y.append(gt_pose_[1])
-        # gt_z.append(gt_pose_[2])
+        ########## Transform to world again ############
+        
+        gt_pose_world_test = camera_to_world(gt_pose_trans_cam)
+        gt_pose_world_quat = trans_mat_to_pos_quat(gt_pose_world_test)
+        gt_x_quat_test, gt_y_quat_test, gt_z_quat_test, gt_w_quat_test = (gt_pose_world_quat[3], 
+                                           gt_pose_world_quat[4], 
+                                           gt_pose_world_quat[5], 
+                                           gt_pose_world_quat[6]
+                                        )
+        gt_x_world_pose.append(gt_pose_world_quat[0]) 
+        gt_y_world_pose.append(gt_pose_world_quat[1])
+        gt_z_world_pose.append(gt_pose_world_quat[2])
+        gt_x_world_test_list.append(gt_x_quat_test)
+        gt_y_world_test_list.append(gt_y_quat_test)
+        gt_z_world_test_list.append(gt_z_quat_test)
+        gt_w_world_test_list.append(gt_w_quat_test)
+        ################################################
 
     output_x, output_y, output_z = (
         np.array(output_x),
@@ -297,6 +323,45 @@ def plot_with_time(bundletrack_time, gt_time, bundletrack_pose_dir, gt_pose_dir)
     fig.subplots_adjust(bottom=spacing)
     plt.savefig(FIG_NAME)
     plt.show()
+    
+    ################### TEST TEST ################################
+    fig, axs = plt.subplots(2, 4)
+    # fig.suptitle("Toss %i" % TOSS_IDX)
+    axs[0, 0].plot(bundletrack_time, estimated_x_world_pose, label="BundleTrack")
+    axs[0, 0].plot(gt_time, gt_x_world_pose, label="ground-truth")
+    axs[0, 0].set_title("Position x")
+    axs[0, 0].legend()
+
+    axs[0, 1].plot(bundletrack_time, estimated_y_world_pose, label="BundleTrack")
+    axs[0, 1].plot(gt_time, gt_y_world_pose, label="ground-truth")
+    axs[0, 1].set_title("Position y")
+
+    axs[0, 2].plot(bundletrack_time, estimated_z_world_pose, label="BundleTrack")
+    axs[0, 2].plot(gt_time, gt_z_world_pose, label="ground-truth")
+    axs[0, 2].set_title("Position z")
+
+    axs[1, 0].plot(bundletrack_time, estimate_w_world_quat_list, label="BundleTrack")
+    axs[1, 0].plot(gt_time, gt_w_world_test_list, label="ground-truth")
+    axs[1, 0].set_title("w")
+
+    axs[1, 1].plot(bundletrack_time, estimate_x_world_quat_list, label="BundleTrack")
+    axs[1, 1].plot(gt_time, gt_x_world_test_list, label="ground-truth")
+    axs[1, 1].set_title("x")
+
+    axs[1, 2].plot(bundletrack_time, estimate_y_world_quat_list, label="BundleTrack")
+    axs[1, 2].plot(gt_time, gt_y_world_test_list, label="ground-truth")
+    axs[1, 2].set_title("y")
+
+    axs[1, 3].plot(bundletrack_time, estimate_z_world_quat_list, label="BundleTrack")
+    axs[1, 3].plot(gt_time, gt_z_world_test_list, label="ground-truth")
+    axs[1, 3].set_title("z")
+
+    spacing = 0.100
+    fig.subplots_adjust(hspace=0.5)
+    fig.subplots_adjust(bottom=spacing)
+    plt.savefig('TESTEST.png')
+    plt.show()
+    ####################################################
 
 
 if __name__ == "__main__":

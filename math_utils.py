@@ -101,13 +101,15 @@ def world_to_camera(m, translation, axis_vec):
     return np.vstack((np.hstack((R_c, T_c)), np.array([0, 0, 0, 1])))
 
 
-def camera_to_world(m, translation, axis_vec):
+def camera_to_world(m):
     """
     Transform camera coordinates to world coordinates.
     :param m: 4*4 transformation matrix in camera frame
     :param translation: camera translation in world frame
     :param axis_vec: camera axis vector in world frame
     """
+    translation = CAMERA_CONFIG["old"]["translation"]
+    axis_vec = CAMERA_CONFIG["old"]["axis_vec"]
     extrinsic = setup_extrinsic(translation, axis_vec)
     # Rw2c = extrinsic[:3, :3]
     # R_c = m[:3, :3]
@@ -135,7 +137,7 @@ CAMERA_CONFIG = {
 
 
 def transform_bundletrack_output(
-    pred_pose, output_pose_dir, odom_file_dir
+    pred_pose, output_pose_dir, odom_file_dir, to_world=False
 ):
     """
     https://github.com/wenbowen123/BundleTrack/issues/38
@@ -147,11 +149,12 @@ def transform_bundletrack_output(
         odom_file_dir + "%04i.txt" % 0
     )  # initial cube pose represented in camera frame, matching tagslam
     pred_new = (pred_pose @ np.linalg.inv(init_pose)) @ init_pose_new
-    
-    # cam_translation = CAMERA_CONFIG['old']['translation']
-    # cam_axis_vec = CAMERA_CONFIG['old']['axis_vec']
-    # pred_new_world = camera_to_world(pred_new, cam_translation, cam_axis_vec)
-    # return pred_new_world
+    if to_world:
+        print("Transforming to world!!!!")
+        cam_translation = CAMERA_CONFIG['old']['translation']
+        cam_axis_vec = CAMERA_CONFIG['old']['axis_vec']
+        pred_new_world = camera_to_world(pred_new, cam_translation, cam_axis_vec)
+        return pred_new_world
     return pred_new
 
 
