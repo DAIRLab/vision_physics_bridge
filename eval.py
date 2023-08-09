@@ -190,16 +190,15 @@ def plot_with_time(bundletrack_time, gt_time, bundletrack_pose_dir, gt_pose_dir)
             to_world=True,
         ) # camera frame
         estimated_poses.append(output_pose)
-        output_pose = trans_mat_to_pos_quat(output_pose)
-        output_x.append(output_pose[0])
-        output_y.append(output_pose[1])
-        output_z.append(output_pose[2])
-
+        output_pose_ = trans_mat_to_pos_quat(output_pose)
+        output_x.append(output_pose_[0])
+        output_y.append(output_pose_[1])
+        output_z.append(output_pose_[2])
         x, y, z, w = (
-            output_pose[3],
-            output_pose[4],
-            output_pose[5],
-            output_pose[6],
+            output_pose_[3],
+            output_pose_[4],
+            output_pose_[5],
+            output_pose_[6],
         )
         estimated_w.append(w)
         estimated_x.append(x)

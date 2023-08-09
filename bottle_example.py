@@ -163,7 +163,7 @@ if __name__ == "__main__":
     #     end_time,
     #     bundletrack_rgb_dir=BUNDLETRACK_RGB,
     # )
-    # frame_num = len([name for name in os.listdir(RGB_DATA_DIR)])
+    # frame_num = len([name for name in os.listdir(BUNDLETRACK_RGB)])
     # print("There are %i frames in total!" % frame_num)
     # positions = import_data(POSITION_FILE_PATH)
     # write_real_depth_as_txt(

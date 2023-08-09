@@ -121,7 +121,6 @@ def camera_to_world(m):
     # T_w = T_w.reshape(-1, 1)
     # return np.vstack((np.hstack((R_w, T_w)), np.array([0, 0, 0, 1])))
     return np.linalg.inv(extrinsic) @ m
-    # return extrinsic @ m
 
 
 CAMERA_CONFIG = {
@@ -150,24 +149,39 @@ def transform_bundletrack_output(
     )  # initial cube pose represented in camera frame, matching tagslam
     pred_new = (pred_pose @ np.linalg.inv(init_pose)) @ init_pose_new
     if to_world:
-        print("Transforming to world!!!!")
         pred_new_world = camera_to_world(pred_new)
         return pred_new_world
     return pred_new
 
 
 def setup_extrinsic(translation, axis_vec):
-    # Setup camera extrinsic
-    angle = np.linalg.norm(axis_vec)
-    axis = axis_vec / angle
-    rotation = axis_angle_to_rotation_matrix(
-        axis, angle
-    )  # directions of the world-axes in camera coordinates
-    rotation_prime = rotation.T  # USE THIS
-    translation_prime = -rotation_prime @ translation  # USE THIS
-    extrinsic = np.vstack(
-        (np.hstack((rotation_prime, translation_prime)), np.array([0, 0, 0, 1]))
-    )
+    """
+    Convert translation and axis-angle representation to extrinsic matrix.
+    
+    Parameters:
+    - translation: 3x1 numpy array, translation vector.
+    - axis_vec: 3x1 numpy array, rotation represented in axis-angle (rodriques) form.
+
+    Returns:
+    - 4x4 numpy array, extrinsic matrix.
+    """
+    rotation_matrix = R.from_rotvec(axis_vec.ravel()).as_matrix()
+    rotation_inverse = rotation_matrix.T
+    translation_inverse = -rotation_inverse @ translation.ravel()
+    extrinsic = np.eye(4)
+    extrinsic[:3, :3] = rotation_inverse
+    extrinsic[:3, 3] = translation_inverse
+    
+    # angle = np.linalg.norm(axis_vec)
+    # axis = axis_vec / angle
+    # rotation = axis_angle_to_rotation_matrix(
+    #     axis, angle
+    # )  # directions of the world-axes in camera coordinates
+    # rotation_prime = rotation.T  # USE THIS
+    # translation_prime = -rotation_prime @ translation  # USE THIS
+    # extrinsic = np.vstack(
+    #     (np.hstack((rotation_prime, translation_prime)), np.array([0, 0, 0, 1]))
+    # )
     return extrinsic
 
 
@@ -182,7 +196,7 @@ def trans_mat_to_pos_quat(trans):
     q = R.from_matrix(trans[:3, :3]).as_quat().reshape(-1, 1)
     magnitude = np.linalg.norm(q)
     q /= magnitude
-    if ((q[3] < 0)
+    if ((q[3] < -0.01)
         or (q[3] == 0 and q[0] < 0)
         or (q[3] == 0 and q[0] == 0 and q[1] < 0)
         or (q[3] == 0 and q[0] == 0 and q[1] == 0 and q[2] < 0)):
