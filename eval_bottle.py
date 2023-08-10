@@ -1,13 +1,15 @@
 import os
-from example import CAMERA_CONFIG
 import rospy
 import numpy as np
 import scipy.spatial as sp
 import matplotlib.pyplot as plt
-
+from scipy.spatial.transform import Rotation as R
 
 from math_utils import (
     camera_to_world,
+    pos_quat_to_trans_mat,
+    trans_mat_to_pos_quat,
+    world_to_camera,
     rotation_matrix_to_euler,
     transform_bundletrack_output,
 )
@@ -15,25 +17,27 @@ from rosbag_processor import (
     extract_time_versus_poses,
     extract_gt_poses_from_tagslam_with_missing_frames,
 )
+from sync_data import Synchronizer
+import yaml
 
-# TOSS_IDX = 2
-# GT_POSE_DIR = (
-#     "/home/cnets-vision/mengti_ws/robot_filter/dataset/old_split/%i/tagslam_poses/"
-#     % TOSS_IDX
-# )
-# OUTPUT_POSE_DIR = "/home/cnets-vision/mengti_ws/old_results/poses_%i/" % TOSS_IDX
-# ODOM_FILE_PATH = (
-#     "/home/cnets-vision/mengti_ws/BundleTrack/Data/YCBINEOAT/contact_nets_old_split/%i/annotated_poses/"
-#     % TOSS_IDX
-# )
 GT_POSE_DIR = (
-    "/home/cnets-vision/mengti_ws/robot_filter/dataset/old_dataset/tagslam_poses/"
+    "/home/cnets-vision/mengti_ws/robot_filter/dataset/bottle_toss/tagslam_poses/"
 )
-OUTPUT_POSE_DIR = "/home/cnets-vision/mengti_ws/poses_reversed_order/"
+OUTPUT_POSE_DIR = "/home/cnets-vision/mengti_ws/BundleSDF/results/bottle_toss/ob_in_cam/"
 ODOM_FILE_PATH = (
-    "/home/cnets-vision/mengti_ws/BundleTrack2.0/Data/old_dataset/annotated_poses/"
+    "/home/cnets-vision/mengti_ws/BundleSDF/data/bottle_toss/annotated_poses/"
 )
-FIG_NAME = "result_poses_reversed_order.png"
+CAMERA_EXTRINSICS_FILE = './assets/realsense_pose_bottle.yaml'
+FIG_NAME = "result_poses_bottle_world_twice.png"
+cam = 'cam0' # realsense camera name
+with open(CAMERA_EXTRINSICS_FILE, 'r') as stream:
+    data_loaded = yaml.safe_load(stream)
+print(data_loaded[cam]['pose']['position'])
+
+cam_pos_dict = data_loaded[cam]['pose']['position']
+cam_trans = np.array([cam_pos_dict['x'], cam_pos_dict['y'], cam_pos_dict['z']]).reshape(-1, 1)
+cam_rot_dict = data_loaded[cam]['pose']['rotation']
+cam_axis_vec = np.array([cam_rot_dict['x'], cam_rot_dict['y'], cam_rot_dict['z']])
 
 
 def get_cosine_sim(frame_id):
@@ -75,38 +79,6 @@ def calculate_success_rate(
     )
     success_rate = (success_count / num_frames) * 100
     return success_rate
-
-
-def matrix_to_quaternion(matrix):
-    q = np.empty((4,))
-    trace = matrix[0, 0] + matrix[1, 1] + matrix[2, 2]
-
-    if trace > 0:
-        s = 0.5 / np.sqrt(trace + 1.0)
-        q[0] = 0.25 / s
-        q[1] = (matrix[2, 1] - matrix[1, 2]) * s
-        q[2] = (matrix[0, 2] - matrix[2, 0]) * s
-        q[3] = (matrix[1, 0] - matrix[0, 1]) * s
-    else:
-        if matrix[0, 0] > matrix[1, 1] and matrix[0, 0] > matrix[2, 2]:
-            s = 2.0 * np.sqrt(1.0 + matrix[0, 0] - matrix[1, 1] - matrix[2, 2])
-            q[0] = (matrix[2, 1] - matrix[1, 2]) / s
-            q[1] = 0.25 * s
-            q[2] = (matrix[0, 1] + matrix[1, 0]) / s
-            q[3] = (matrix[0, 2] + matrix[2, 0]) / s
-        elif matrix[1, 1] > matrix[2, 2]:
-            s = 2.0 * np.sqrt(1.0 + matrix[1, 1] - matrix[0, 0] - matrix[2, 2])
-            q[0] = (matrix[0, 2] - matrix[2, 0]) / s
-            q[1] = (matrix[0, 1] + matrix[1, 0]) / s
-            q[2] = 0.25 * s
-            q[3] = (matrix[1, 2] + matrix[2, 1]) / s
-        else:
-            s = 2.0 * np.sqrt(1.0 + matrix[2, 2] - matrix[0, 0] - matrix[1, 1])
-            q[0] = (matrix[1, 0] - matrix[0, 1]) / s
-            q[1] = (matrix[0, 2] + matrix[2, 0]) / s
-            q[2] = (matrix[1, 2] + matrix[2, 1]) / s
-            q[3] = 0.25 * s
-    return q
 
 
 def plot_xyz(start_frame, end_frame):
@@ -206,52 +178,109 @@ def plot_with_time(bundletrack_time, gt_time, bundletrack_pose_dir, gt_pose_dir)
     bundletrack_time = np.array(bundletrack_time)
     output_x, output_y, output_z = [], [], []  # translation
     gt_x, gt_y, gt_z = [], [], []
-    # output_alpha, output_beta, output_gamma = [], [], []
-    # gt_alpha, gt_beta, gt_gamma = [], [], []
     estimated_w, estimated_x, estimated_y, estimated_z = [], [], [], []
     ground_truth_w, ground_truth_x, ground_truth_y, ground_truth_z = [], [], [], []
-    frame_num = len([name for name in os.listdir(bundletrack_pose_dir)])
+    frame_num = len(bundletrack_time)
     estimated_poses, ground_truth_poses = [], []
+    
     for frame_id in range(1, frame_num + 1):
         output_pose = np.loadtxt(bundletrack_pose_dir + "%04i.txt" % frame_id)
         output_pose = transform_bundletrack_output(
             output_pose,
-            CAMERA_CONFIG["old"]["translation"],
-            CAMERA_CONFIG["old"]["axis_vec"],
             bundletrack_pose_dir,
             ODOM_FILE_PATH,
-        )
+            cam_trans, 
+            cam_axis_vec,
+            to_world=True,
+        ) # camera frame
         estimated_poses.append(output_pose)
-        output_x.append(output_pose[0, 3])
-        output_y.append(output_pose[1, 3])
-        output_z.append(output_pose[2, 3])
-        # alpha, beta, gamma = rotation_matrix_to_euler(output_pose[:3, :3])
-        # output_alpha.append(alpha)
-        # output_beta.append(beta)
-        # output_gamma.append(gamma)
-        w, x, y, z = matrix_to_quaternion(output_pose)
+        output_pose_ = trans_mat_to_pos_quat(output_pose)
+        output_x.append(output_pose_[0])
+        output_y.append(output_pose_[1])
+        output_z.append(output_pose_[2])
+        x, y, z, w = (
+            output_pose_[3],
+            output_pose_[4],
+            output_pose_[5],
+            output_pose_[6],
+        )
         estimated_w.append(w)
         estimated_x.append(x)
         estimated_y.append(y)
         estimated_z.append(z)
 
+        ########## Transform to world again ############
+        # output_pose_world_test = camera_to_world(output_pose)
+        # estimated_x_world_pose.append(output_pose_world_test[0, 3])
+        # estimated_y_world_pose.append(output_pose_world_test[1, 3])
+        # estimated_z_world_pose.append(output_pose_world_test[2, 3])
+
+        # x_test, y_test, z_test, w_test = R.from_matrix(output_pose_world_test[:3, :3]).as_quat()
+        # estimate_x_world_quat_list.append(x_test)
+        # estimate_y_world_quat_list.append(y_test)
+        # estimate_z_world_quat_list.append(z_test)
+        # estimate_w_world_quat_list.append(w_test)
+        ################################################
+
     for frame_id in range(1, len(gt_time) + 1):
         gt_frame = frame_id
         gt_pose = np.loadtxt(gt_pose_dir + "%04i.txt" % gt_frame)
-        ground_truth_poses.append(gt_pose)
-        gt_x.append(gt_pose[0, 3])
-        gt_y.append(gt_pose[1, 3])
-        gt_z.append(gt_pose[2, 3])
-        # alpha, beta, gamma = rotation_matrix_to_euler(gt_pose[:3, :3])
-        # gt_alpha.append(alpha)
-        # gt_beta.append(beta)
-        # gt_gamma.append(gamma)
-        w_, x_, y_, z_ = matrix_to_quaternion(gt_pose)
+        # gt_x.append(gt_pose[0])
+        # gt_y.append(gt_pose[1])
+        # gt_z.append(gt_pose[2])
+        # x_, y_, z_, w_ = (
+        #     gt_pose[3],
+        #     gt_pose[4],
+        #     gt_pose[5],
+        #     gt_pose[6],
+        # )
+        # ground_truth_poses.append(pos_quat_to_trans_mat(gt_pose))
+        # ground_truth_w.append(w_)
+        # ground_truth_x.append(x_)
+        # ground_truth_y.append(y_)
+        # ground_truth_z.append(z_)
+        ############# Transform to camera ##############
+        gt_pose_trans = pos_quat_to_trans_mat(gt_pose)
+        gt_pose_trans_cam = world_to_camera(
+            gt_pose_trans,
+            cam_trans,
+            cam_axis_vec
+        )
+        # gt_pos_quat_cam = trans_mat_to_pos_quat(gt_pose_trans_cam)
+        # gt_x.append(gt_pos_quat_cam[0])
+        # gt_y.append(gt_pos_quat_cam[1])
+        # gt_z.append(gt_pos_quat_cam[2])
+        # x_, y_, z_, w_ = (
+        #     gt_pos_quat_cam[3],
+        #     gt_pos_quat_cam[4],
+        #     gt_pos_quat_cam[5],
+        #     gt_pos_quat_cam[6],
+        # )
+        # ground_truth_poses.append(gt_pose_trans_cam)
+        # ground_truth_w.append(w_)
+        # ground_truth_x.append(x_)
+        # ground_truth_y.append(y_)
+        # ground_truth_z.append(z_)
+        
+        ########### Transform to world again ############
+        gt_pose_world_test = camera_to_world(gt_pose_trans_cam, cam_trans, cam_axis_vec)
+        gt_pos_quat_cam = trans_mat_to_pos_quat(gt_pose_world_test)
+        ground_truth_poses.append(gt_pose_world_test)
+        gt_x.append(gt_pos_quat_cam[0])
+        gt_y.append(gt_pos_quat_cam[1])
+        gt_z.append(gt_pos_quat_cam[2])
+        x_, y_, z_, w_ = (
+                        gt_pos_quat_cam[3], 
+                        gt_pos_quat_cam[4], 
+                        gt_pos_quat_cam[5], 
+                        gt_pos_quat_cam[6]
+                    )
+        
         ground_truth_w.append(w_)
         ground_truth_x.append(x_)
         ground_truth_y.append(y_)
         ground_truth_z.append(z_)
-
+        ################################################
     output_x, output_y, output_z = (
         np.array(output_x),
         np.array(output_y),
@@ -261,12 +290,12 @@ def plot_with_time(bundletrack_time, gt_time, bundletrack_pose_dir, gt_pose_dir)
 
     # Evaluate based on 5deg5cm metric
     translation_errors = [
-        calculate_translation_error(est_pose, gt_pose)
-        for est_pose, gt_pose in zip(estimated_poses, ground_truth_poses)
+        calculate_translation_error(estimated_pose, grount_truth_pose)
+        for estimated_pose, grount_truth_pose in zip(estimated_poses, ground_truth_poses)
     ]
     rotation_errors = [
-        calculate_rotation_error(est_pose, gt_pose)
-        for est_pose, gt_pose in zip(estimated_poses, ground_truth_poses)
+        calculate_rotation_error(estimated_pose, grount_truth_pose)
+        for estimated_pose, grount_truth_pose in zip(estimated_poses, ground_truth_poses)
     ]
 
     # Set error thresholds for successful pose estimation
@@ -285,7 +314,6 @@ def plot_with_time(bundletrack_time, gt_time, bundletrack_pose_dir, gt_pose_dir)
     print(f"Success Rate: {success_rate:.2f}%")
 
     fig, axs = plt.subplots(2, 4)
-    # fig.suptitle("Toss %i" % TOSS_IDX)
     axs[0, 0].plot(bundletrack_time, output_x, label="BundleTrack")
     axs[0, 0].plot(gt_time, gt_x, label="ground-truth")
     axs[0, 0].set_title("Position x")
@@ -315,72 +343,68 @@ def plot_with_time(bundletrack_time, gt_time, bundletrack_pose_dir, gt_pose_dir)
     axs[1, 3].plot(gt_time, ground_truth_z, label="ground-truth")
     axs[1, 3].set_title("z")
 
-    # axs[1, 0].plot(bundletrack_time, output_alpha, label="BundleTrack")
-    # axs[1, 0].plot(gt_time, gt_alpha, label="ground-truth")
-    # axs[1, 0].set_title("Roll")
-
-    # axs[1, 1].plot(bundletrack_time, output_beta, label="BundleTrack")
-    # axs[1, 1].plot(gt_time, gt_beta, label="ground-truth")
-    # axs[1, 1].set_title("Pitch")
-
-    # axs[1, 2].plot(bundletrack_time, output_gamma, label="BundleTrack")
-    # axs[1, 2].plot(gt_time, gt_gamma, label="ground-truth")
-    # axs[1, 2].set_title("Yaw")
-
     spacing = 0.100
     fig.subplots_adjust(hspace=0.5)
     fig.subplots_adjust(bottom=spacing)
-    plt.show()
     plt.savefig(FIG_NAME)
+    plt.show()
+    
+    ################### TEST TEST ################################
+    # fig, axs = plt.subplots(2, 4)
+    # axs[0, 0].plot(bundletrack_time, output_x, label="BundleTrack")
+    # axs[0, 0].plot(gt_time, gt_x_world_pose, label="ground-truth")
+    # axs[0, 0].set_title("Position x")
+    # axs[0, 0].legend()
 
+    # axs[0, 1].plot(bundletrack_time, output_y, label="BundleTrack")
+    # axs[0, 1].plot(gt_time, gt_y_world_pose, label="ground-truth")
+    # axs[0, 1].set_title("Position y")
 
-def callback(image_msg, laser_msg):
-    # Process synchronized image and laser messages
-    print("callback...")
+    # axs[0, 2].plot(bundletrack_time, output_z, label="BundleTrack")
+    # axs[0, 2].plot(gt_time, gt_z_world_pose, label="ground-truth")
+    # axs[0, 2].set_title("Position z")
+
+    # axs[1, 0].plot(bundletrack_time, estimated_w, label="BundleTrack")
+    # axs[1, 0].plot(gt_time, gt_w_world_test_list, label="ground-truth")
+    # axs[1, 0].set_title("w")
+
+    # axs[1, 1].plot(bundletrack_time, estimated_x, label="BundleTrack")
+    # axs[1, 1].plot(gt_time, gt_x_world_test_list, label="ground-truth")
+    # axs[1, 1].set_title("x")
+
+    # axs[1, 2].plot(bundletrack_time, estimated_y, label="BundleTrack")
+    # axs[1, 2].plot(gt_time, gt_y_world_test_list, label="ground-truth")
+    # axs[1, 2].set_title("y")
+
+    # axs[1, 3].plot(bundletrack_time, estimated_z, label="BundleTrack")
+    # axs[1, 3].plot(gt_time, gt_z_world_test_list, label="ground-truth")
+    # axs[1, 3].set_title("z")
+
+    # spacing = 0.100
+    # fig.subplots_adjust(hspace=0.5)
+    # fig.subplots_adjust(bottom=spacing)
+    # plt.savefig('TESTEST.png')
+    # plt.show()
+    ####################################################
 
 
 if __name__ == "__main__":
-    odom_bag_file = "./odom_37.bag"
-    ODOM_ROS_TOPIC = "/tagslam/odom/body_cube"
-
+    depth_bag_file = "./raw_43.bag"
+    odom_bag_file = "./odom_43.bag"
+    DEPTH_ROS_TOPIC = "/camera/aligned_depth_to_color/image_raw"
+    ODOM_ROS_TOPIC = "/tagslam/odom/body_bottle"
     start_time = None
     end_time = None
+    # start time
+    start_time = rospy.rostime.Time(secs=1691457456, nsecs=641854)
+    # end time
+    end_time = rospy.rostime.Time(secs=1691457522, nsecs=271324)
 
-    # start_time_iphone =
-
-    # bundletrack_time, gt_time = extract_time_versus_poses(
-    #     start_time,
-    #     end_time,
-    #     depth_bag_file,
-    #     odom_bag_file,
-    #     DEPTH_ROS_TOPIC,
-    #     ODOM_ROS_TOPIC,
-    #     GT_POSE_DIR,
-    # )
-
-    # gt_time_ = extract_gt_poses_from_tagslam_with_missing_frames(
-    #     start_time,
-    #     end_time,
-    #     depth_bag_file=depth_bag_file,
-    #     odom_bag_file=odom_bag_file,
-    #     depth_topic=DEPTH_ROS_TOPIC,
-    #     odom_topic=ODOM_ROS_TOPIC,
-    #     output_dir=GT_POSE_DIR,
-    #     write=False,
-    # )
-    # print(len(bundletrack_time), len(gt_time), len(gt_time_))
-    plot_with_time(bundletrack_time, gt_time_, OUTPUT_POSE_DIR, GT_POSE_DIR)
-
-    ###TEST
-    # camera_pos = np.array([[1, 0, 0, 0], [0, 1, 0, 0], [0, 0, 1, 1], [0, 0, 0, 1]])
-    # print(camera_to_world(camera_pos))
-
-    # from PIL import Image
-    # import imageio
-    # img_dir = "./depth_data/0001.png"
-    # # img_dir= "/home/cnets-vision/mengti_ws/BundleTrack/Data/YCBINEOAT/bleach0/depth/1578966042136484471.png"
-    # # image = Image.open(img_dir)
-    # # pixels = list(image.getdata())
-    # image = imageio.imread(img_dir)
-    # print(image[100][100])
-    # print(image.dtype)
+    frame_num = len([name for name in os.listdir(OUTPUT_POSE_DIR)])
+    print(f"there are {frame_num} frames")
+    sync = Synchronizer(GT_POSE_DIR, frame_num, start_time, end_time, save=True)
+    bundletrack_time, gt_time = sync.bundletrack_time, sync.gt_time
+    print(len(bundletrack_time), len(gt_time))
+    bundletrack_time = [t.to_sec() for t in bundletrack_time]
+    gt_time = [t.to_sec() for t in gt_time]
+    plot_with_time(bundletrack_time, gt_time, OUTPUT_POSE_DIR, GT_POSE_DIR)

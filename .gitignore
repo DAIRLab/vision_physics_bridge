@@ -1,9 +1,10 @@
 /venv 
-*.bag
+/rosbags
 *.tar.gz
 *.txt
 /__pycache__
 /dataset
 *.gif
 *.mp4
+*.png
 .vscode

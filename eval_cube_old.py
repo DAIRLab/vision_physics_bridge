@@ -22,11 +22,11 @@ from sync_data import Synchronizer
 from data_preparation import DatasetManagement
 
 GT_POSE_DIR = (
-    "/home/cnets-vision/mengti_ws/robot_filter/dataset/old_toss_3/tagslam_poses/"
+    "/home/cnets-vision/mengti_ws/robot_filter/dataset/old_toss_1/tagslam_poses/"
 )
-OUTPUT_POSE_DIR = "/home/cnets-vision/mengti_ws/BundleSDF/results/old_toss_3/ob_in_cam/"
+OUTPUT_POSE_DIR = "/home/cnets-vision/mengti_ws/BundleSDF/results/old_toss_1/ob_in_cam/"
 ODOM_FILE_PATH = (
-    "/home/cnets-vision/mengti_ws/BundleSDF/data/old_toss_3/annotated_poses/"
+    "/home/cnets-vision/mengti_ws/BundleSDF/data/old_toss_1/annotated_poses/"
 )
 FIG_NAME = "result_poses_bundlesdf_test_transfer.png"
 
@@ -392,9 +392,9 @@ if __name__ == "__main__":
     end_time = None
     #### OLD DATA #####
     # start time
-    # start_time = rospy.rostime.Time(secs=1655404893, nsecs=899137)  # toss 1
+    start_time = rospy.rostime.Time(secs=1655404893, nsecs=899137)  # toss 1
     # start_time = rospy.rostime.Time(secs=1655404908, nsecs=279948)  # toss 2
-    start_time = rospy.rostime.Time(secs=1655404920, nsecs=470680)  # toss 3
+    # start_time = rospy.rostime.Time(secs=1655404920, nsecs=470680)  # toss 3
     # start_time = rospy.rostime.Time(secs=1655404932, nsecs=647236)  # toss 4
     # start_time = rospy.rostime.Time(secs=1655404945, nsecs=387903)  # toss 5
     # start_time=rospy.rostime.Time(secs=1655404955, nsecs=272877)  # toss 6
@@ -404,9 +404,9 @@ if __name__ == "__main__":
     # start_time=rospy.rostime.Time(secs=1655405008, nsecs=720921) # toss 10
 
     # end time
-    # end_time = rospy.rostime.Time(secs=1655404908, nsecs=279948) # toss 1
+    end_time = rospy.rostime.Time(secs=1655404908, nsecs=279948) # toss 1
     # end_time = rospy.rostime.Time(secs=1655404920, nsecs=470680)  # toss 2
-    end_time = rospy.rostime.Time(secs=1655404932, nsecs=647236)  # toss 3
+    # end_time = rospy.rostime.Time(secs=1655404932, nsecs=647236)  # toss 3
     # end_time = rospy.rostime.Time(secs=1655404945, nsecs=387903)  # toss 4
     # end_time = rospy.rostime.Time(secs=1655404955, nsecs=463919)  # toss 5
     # end_time=rospy.rostime.Time(secs=1655404966, nsecs=698458)  # toss 6

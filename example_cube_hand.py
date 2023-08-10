@@ -13,6 +13,7 @@ from file_utils import (
 from pydrake.all import StartMeshcat
 from rosbag_processor import (
     bag_to_depth_images,
+    bag_to_rgb_images,
     extract_cube_pose,
     extract_gt_poses_from_tagslam,
     extract_gt_poses_from_tagslam_with_quat,
@@ -22,20 +23,21 @@ from rosbag_processor import (
 import rospy
 from urdf_filter import dilate, run_urdf_filter
 import os, os.path
-
-"""Process the cube data.
+import yaml
+"""Process the cube hand-tossing data.
 """
 
-ROSBAG_NAME = "raw_10.bag"
-ODOM_ROSBAG_NAME = "odom_10.bag"
+ROSBAG_NAME = "./rosbags/raw_44.bag"
+ODOM_ROSBAG_NAME = "./rosbags/odom_44.bag"
 DEPTH_ROS_TOPIC = "/camera/aligned_depth_to_color/image_raw"
 JOINT_STATE_ROS_TOPIC = "/joint_states"
 RGB_ROS_TOPIC = "/camera/color/image_raw"
 ODOM_ROS_TOPIC = "/tagslam/odom/body_cube"
 
-ROOT_DIR = "./dataset/old_toss_7/"
-BUNDLETRACK_DATA_DIR = "old_toss_7/"
+ROOT_DIR = "./dataset/cube_hand_toss/"
+BUNDLETRACK_DATA_DIR = "cube_hand_toss/"
 BUNDLETRACK_DIR = "/home/cnets-vision/mengti_ws/BundleSDF/data/"
+CAMERA_EXTRINSICS_FILE = "./assets/realsense_pose_cube_hand.yaml"
 
 # Create folders
 if not os.path.exists(ROOT_DIR + "texts"):
@@ -84,57 +86,41 @@ ANNOTATED_POSES_DIR = BUNDLETRACK_DIR + BUNDLETRACK_DATA_DIR + "annotated_poses"
 BUNDLETRACK_DEPTH = BUNDLETRACK_DIR + BUNDLETRACK_DATA_DIR + "depth"
 BUNDLETRACK_RGB = BUNDLETRACK_DIR + BUNDLETRACK_DATA_DIR + "rgb"
 
-# For camera extrinsics
-CAMERA_CONFIG = {
-    "old": {
-        "translation": np.array([[1.14164360], [0.15815239], [0.66422200]]),
-        "axis_vec": np.array([-1.57165949, -1.63112887, 1.07928078]),
-    },
-    "new": {
-        "translation": np.array([[1.11076422], [-0.07966290], [0.67947702]]),
-        "axis_vec": np.array([-1.61997882, -1.56988553, 0.86362178]),
-    },
-}
+cam = 'cam0' # realsense camera name
+with open(CAMERA_EXTRINSICS_FILE, 'r') as stream:
+    data_loaded = yaml.safe_load(stream)
+print(data_loaded[cam]['pose']['position'])
+
+cam_pos_dict = data_loaded[cam]['pose']['position']
+cam_trans = np.array([cam_pos_dict['x'], cam_pos_dict['y'], cam_pos_dict['z']]).reshape(-1, 1)
+cam_rot_dict = data_loaded[cam]['pose']['rotation']
+cam_axis_vec = np.array([cam_rot_dict['x'], cam_rot_dict['y'], cam_rot_dict['z']])
+
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-
-    # ContactNets toss: from object leaving the gripper to the object landing on the table
-    # start_time_ = rospy.rostime.Time(secs=1655404905, nsecs=177325)  # toss 1
-    # end_time_ = rospy.rostime.Time(secs=1655404906, nsecs=183975)  # toss 1
 
     parser.add_argument(
         "--start_time",
         type=rospy.rostime.Time,
         required=False,
-        # default=rospy.rostime.Time(secs=1655404893, nsecs=899137),  # toss 1
-        # default=rospy.rostime.Time(secs=1655404908, nsecs=279948),  # toss 2
-        # default=rospy.rostime.Time(secs=1655404920, nsecs=470680), # toss 3
-        # default=rospy.rostime.Time(secs=1655404932, nsecs=647236), # toss 4
-        # default=rospy.rostime.Time(secs=1655404945, nsecs=387903), # toss 5
-        # default=rospy.rostime.Time(secs=1655404955, nsecs=463919), # toss 6
-        default=rospy.rostime.Time(secs=1655404968, nsecs=399762), # toss 7
+        default=rospy.rostime.Time(secs=1691627648, nsecs=606977),  # start time
     )
     parser.add_argument(
         "--end_time",
         type=rospy.rostime.Time,
         required=False,
-        # default=rospy.rostime.Time(secs=1655404908, nsecs=279948),  # toss 1
-        # default=rospy.rostime.Time(secs=1655404920, nsecs=470680),  # toss 2
-        # default=rospy.rostime.Time(secs=1655404932, nsecs=647236), # toss 3
-        # default=rospy.rostime.Time(secs=1655404945, nsecs=387903), # toss 4
-        # default=rospy.rostime.Time(secs=1655404955, nsecs=463919), # toss 5
-        # default=rospy.rostime.Time(secs=1655404968, nsecs=399762), # toss 6
-        default=rospy.rostime.Time(secs=1655404978, nsecs=579412), # toss 7
+        default=rospy.rostime.Time(secs=1691627704, nsecs=194652),  # end time
     )
     parser.add_argument(
         "--translation",
         type=np.array,
-        default=CAMERA_CONFIG["old"]["translation"],
+        default=cam_trans,
     )
     parser.add_argument(
         "--axis_vec",
         type=np.array,
-        default=CAMERA_CONFIG["old"]["axis_vec"],
+        default=cam_axis_vec,
     )
 
     args = parser.parse_args()
@@ -163,81 +149,64 @@ if __name__ == "__main__":
         bundletrack_depth_dir=BUNDLETRACK_DEPTH,
     )
     print("Depth images generated")
-    extract_poses_with_timestamps(
-        ROSBAG_NAME,
-        DEPTH_ROS_TOPIC,
-        RGB_ROS_TOPIC,
-        JOINT_STATE_ROS_TOPIC,
-        POSITION_FILE_PATH,
-        RGB_DATA_DIR,
-        start_time,
-        end_time,
-        bundletrack_rgb_dir=BUNDLETRACK_RGB,
-    )
-    frame_num = len([name for name in os.listdir(RGB_DATA_DIR)])
-    print("There are %i frames in total!" % frame_num)
-    positions = import_data(POSITION_FILE_PATH)
-    write_real_depth_as_txt(
-        start_frame=1,
-        end_frame=frame_num,
-        img_dir=IMAGE_TXT_PATH,
-        real_depth_dir=REAL_DEPTH_FILE,
-    )
-    print("Finished writing %i real depth text files." % frame_num)
-    meshcat = StartMeshcat()
-    for frame_id in tqdm(range(1, frame_num + 1)):
-        run_urdf_filter(
-            meshcat,
-            frame_id,
-            positions,
-            MASK_IAMGE_FILE,
-            SIMULATED_DEPTH_FILE,
-            REAL_DEPTH_FILE,
-            translation,
-            axis_vec,
-        )
-        dilate(
-            frame_id, mask_image_dir=MASK_IAMGE_FILE, dilated_mask_dir=DILATED_MASK_FILE
-        )
-        generate_depth_img_without_robot(
-            REAL_DEPTH_FILE % frame_id,
-            MASK_IAMGE_FILE % frame_id,
-            FILTERED_DEPTH_FILE % frame_id,
-        )
-        depth_filter = DepthFilter(
-            frame_id,
-            RGB_DATA_DIR + "%04i.png",
-            FILTERED_DEPTH_FILE,
-            CUBE_SCREEN_DIR,
-            CUBE_DEPTH_DIR,
-            translation,
-            axis_vec,
-        )
-        depth_filter.visualize_depth_image()
-        denoise(
-            frame_id,
-            img_dir=CUBE_DEPTH_DIR,
-            denoise_mask_dir=DENOISE_MASK_DIR,
-            region=(11, 11),
-        )
-        create_annotated_poses(output_dir=ANNOTATED_POSES_DIR, frame_id=frame_id)
-
-    # DEPRECATED
-    # extract_gt_poses_from_tagslam_with_quat(
+    # Since we don't need the masks for this dataset, simply use the old version of rgb processor
+    bag_to_rgb_images(ROSBAG_NAME, RGB_ROS_TOPIC, BUNDLETRACK_RGB, start_time, end_time)
+    #############################################################################################
+    # extract_poses_with_timestamps(
+    #     ROSBAG_NAME,
+    #     DEPTH_ROS_TOPIC,
+    #     RGB_ROS_TOPIC,
+    #     JOINT_STATE_ROS_TOPIC,
+    #     POSITION_FILE_PATH,
+    #     RGB_DATA_DIR,
     #     start_time,
     #     end_time,
-    #     depth_bag_file=ROSBAG_NAME,
-    #     odom_bag_file=ODOM_ROSBAG_NAME,
-    #     depth_topic=DEPTH_ROS_TOPIC,
-    #     odom_topic=ODOM_ROS_TOPIC,
-    #     output_dir=ROOT_DIR + "tagslam_poses_quat/",
+    #     bundletrack_rgb_dir=BUNDLETRACK_RGB,
     # )
-    # extract_gt_poses_from_tagslam_with_missing_frames(
-    #     start_time,
-    #     end_time,
-    #     depth_bag_file=ROSBAG_NAME,
-    #     odom_bag_file=ODOM_ROSBAG_NAME,
-    #     depth_topic=DEPTH_ROS_TOPIC,
-    #     odom_topic=ODOM_ROS_TOPIC,
-    #     output_dir=TAGSLAM_POSES_DIR,
+    # frame_num = len([name for name in os.listdir(RGB_DATA_DIR)])
+    # print("There are %i frames in total!" % frame_num)
+    # positions = import_data(POSITION_FILE_PATH)
+    # write_real_depth_as_txt(
+    #     start_frame=1,
+    #     end_frame=frame_num,
+    #     img_dir=IMAGE_TXT_PATH,
+    #     real_depth_dir=REAL_DEPTH_FILE,
     # )
+    # print("Finished writing %i real depth text files." % frame_num)
+    # meshcat = StartMeshcat()
+    # for frame_id in tqdm(range(1, frame_num + 1)):
+    #     run_urdf_filter(
+    #         meshcat,
+    #         frame_id,
+    #         positions,
+    #         MASK_IAMGE_FILE,
+    #         SIMULATED_DEPTH_FILE,
+    #         REAL_DEPTH_FILE,
+    #         translation,
+    #         axis_vec,
+    #     )
+    #     dilate(
+    #         frame_id, mask_image_dir=MASK_IAMGE_FILE, dilated_mask_dir=DILATED_MASK_FILE
+    #     )
+    #     generate_depth_img_without_robot(
+    #         REAL_DEPTH_FILE % frame_id,
+    #         MASK_IAMGE_FILE % frame_id,
+    #         FILTERED_DEPTH_FILE % frame_id,
+    #     )
+    #     depth_filter = DepthFilter(
+    #         frame_id,
+    #         RGB_DATA_DIR + "%04i.png",
+    #         FILTERED_DEPTH_FILE,
+    #         CUBE_SCREEN_DIR,
+    #         CUBE_DEPTH_DIR,
+    #         translation,
+    #         axis_vec,
+    #     )
+    #     depth_filter.visualize_depth_image()
+    #     denoise(
+    #         frame_id,
+    #         img_dir=CUBE_DEPTH_DIR,
+    #         denoise_mask_dir=DENOISE_MASK_DIR,
+    #         region=(11, 11),
+    #     )
+    #     create_annotated_poses(output_dir=ANNOTATED_POSES_DIR, frame_id=frame_id)
