@@ -12,7 +12,6 @@ import glob
 import shutil
 import os
 import re
-import trimesh
 
 def filter(real_img, sim_img):
     """
@@ -186,7 +185,6 @@ def render_video():
     """
     fileList = []
     for frame_id in tqdm(range(1, 4432)):
-        # filename = "./cube_data/screen_image_frame00000{}.png".format(frame_id)
         filename = "./denoise_cube_data/frame00000{}.png".format(frame_id)
         fileList.append(filename)
 
@@ -195,26 +193,6 @@ def render_video():
     for im in fileList:
         writer.append_data(imageio.imread(im))
     writer.close()
-
-def obj2urdf(obj_filename, urdf_filename):
-    mesh = trimesh.load_mesh(obj_filename)
-    vertices = mesh.vertices
-    faces = mesh.faces.reshape((-1, 3))
-
-    urdf_xml = f'''<?xml version="1.0"?>
-<robot name="mesh_robot">
-  <link name="link">
-    <visual>
-      <geometry>
-        <mesh filename="{obj_filename}" scale="1 1 1" />
-      </geometry>
-    </visual>
-  </link>
-</robot>'''
-
-    # Save the URDF XML to a file
-    with open(urdf_filename, 'w') as urdf_file:
-        urdf_file.write(urdf_xml)
 
 """
 Data preparation for running BundleTrack on our own RGBD data. 
@@ -267,30 +245,8 @@ def removed_files(num):
 
 
 def main():
-    for frame_id in tqdm(range(1, 3372)):
-        #     real_depth_file = "./depth_data/real_depth_frame00000{}.txt".format(frame_id)
-        #     mask_image_file = "./mask_data/mask_frame00000{}.png".format(frame_id)
-        #     filtered_depth_file = "./filtered_data/depth_without_robot_frame00000{}.png".format(frame_id)
-        #     generate_depth_img_without_robot(real_depth_file, mask_image_file, filtered_depth_file)
-        #     rgb_image_file = "./rgb_data/frame%06i.png" % frame_id
-        #     filtered_rgb_file = "./filtered_data/rgb_without_robot_frame00000{}.png".format(frame_id)
-        #     generate_rgb_image_without_robot(rgb_image_file, mask_image_file, filtered_rgb_file)
-        real_depth_file = "./depth_data/real_depth_frame%04i.txt" % frame_id
-        mask_image_file = "./dilated_mask_data/%04i.png" % frame_id
-        filtered_depth_file = (
-            "./filtered_data/depth_without_robot_frame%04i.png" % frame_id
-        )
-        generate_depth_img_without_robot(
-            real_depth_file, mask_image_file, filtered_depth_file
-        )
-        rgb_image_file = "./rgb_data/%04i.png" % frame_id
-        filtered_rgb_file = "./filtered_data/rgb_without_robot_frame%04i.png" % frame_id
-        generate_rgb_image_without_robot(
-            rgb_image_file, mask_image_file, filtered_rgb_file
-        )
+    pass
 
 
 if __name__ == "__main__":
-    # main()
-    #    create_annotated_poses("/home/cnets-vision/mengti_ws/BundleTrack/Data/YCBINEOAT/contact_nets_reduced/annotated_poses", 1, 3732)
-    print(check_empty_img())
+    main()

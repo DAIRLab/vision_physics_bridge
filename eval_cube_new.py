@@ -11,16 +11,7 @@ from math_utils import (
 )
 from rosbag_processor import extract_time_versus_poses, extract_gt_poses_from_tagslam_with_missing_frames
 
-# TOSS_IDX = 2
-# GT_POSE_DIR = (
-#     "/home/cnets-vision/mengti_ws/robot_filter/dataset/old_split/%i/tagslam_poses/"
-#     % TOSS_IDX
-# )
-# OUTPUT_POSE_DIR = "/home/cnets-vision/mengti_ws/old_results/poses_%i/" % TOSS_IDX
-# ODOM_FILE_PATH = (
-#     "/home/cnets-vision/mengti_ws/BundleTrack/Data/YCBINEOAT/contact_nets_old_split/%i/annotated_poses/"
-#     % TOSS_IDX
-# )
+
 GT_POSE_DIR = (
     "/home/cnets-vision/mengti_ws/BundleTrack/Data/YCBINEOAT/contact_nets_new_first_toss/tagslam_poses/"
 )
