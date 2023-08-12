@@ -96,13 +96,13 @@ cam_pos_dict = data_loaded[cam]['pose']['position']
 cam_trans = np.array([cam_pos_dict['x'], cam_pos_dict['y'], cam_pos_dict['z']]).reshape(-1, 1)
 cam_rot_dict = data_loaded[cam]['pose']['rotation']
 cam_axis_vec = np.array([cam_rot_dict['x'], cam_rot_dict['y'], cam_rot_dict['z']])
+yaml_path = './assets/config.yaml'
+toss_type = 'cube'
+start_time = load_toss_time_from_yaml(yaml_path, toss_type, TOSS_ID, 'start_time')
+end_time = load_toss_time_from_yaml(yaml_path, toss_type, TOSS_ID, 'end_time')
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    yaml_path = './assets/config.yaml'
-    toss_type = 'cube'
-    start_time = load_toss_time_from_yaml(yaml_path, toss_type, TOSS_ID, 'start_time')
-    end_time = load_toss_time_from_yaml(yaml_path, toss_type, TOSS_ID, 'end_time')
 
     parser.add_argument(
         "--start_time",

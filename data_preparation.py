@@ -377,9 +377,9 @@ def visualize_trajectory(file_path):
 #######################################################################
 if __name__ == "__main__":
     # visualize_trajectory('/home/cnets-vision/mengti_ws/dair_pll_latest/assets/contactnets_cube/250.pt')
-    toss_id = 1
+    toss_id = 10
     toss_type = 'cube'
-    filename = 'old_toss_1'
+    filename = f'old_toss_{toss_id}'
     yaml_path = './assets/config.yaml'
     BUNDLESDF_POSE_DIR = "/home/cnets-vision/mengti_ws/BundleSDF/results/"+filename+"/ob_in_cam/"
     CONTACTNETS_INPUT_DIR = ("/home/cnets-vision/mengti_ws/dair_pll_latest/assets/bundlesdf/")

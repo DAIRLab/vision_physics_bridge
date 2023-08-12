@@ -8,6 +8,7 @@ from file_utils import (
     generate_depth_img_without_robot,
     generate_rgb_image_without_robot,
     import_data,
+    load_toss_time_from_yaml,
     write_real_depth_as_txt,
 )
 from pydrake.all import StartMeshcat
@@ -18,7 +19,6 @@ from rosbag_processor import (
     extract_gt_poses_from_tagslam,
     extract_gt_poses_from_tagslam_with_quat,
     extract_poses_with_timestamps,
-    extract_gt_poses_from_tagslam_with_missing_frames,
 )
 import rospy
 from urdf_filter import dilate, run_urdf_filter
@@ -28,16 +28,16 @@ import yaml
 """Process the bottle data.
 """
 
-ROSBAG_NAME = "raw_43.bag"
-ODOM_ROSBAG_NAME = "odom_43.bag"
+ROSBAG_NAME = "./rosbags/raw_43.bag"
+ODOM_ROSBAG_NAME = "./rosbags/odom_43.bag"
 DEPTH_ROS_TOPIC = "/camera/aligned_depth_to_color/image_raw"
 JOINT_STATE_ROS_TOPIC = "/joint_states"
 RGB_ROS_TOPIC = "/camera/color/image_raw"
 ODOM_ROS_TOPIC = "/tagslam/odom/body_bottle"
 CAMERA_EXTRINSICS_FILE = './assets/realsense_pose_bottle.yaml'
-
-ROOT_DIR = "./dataset/bottle_toss/"
-BUNDLETRACK_DATA_DIR = "bottle_toss/"
+TOSS_ID = 10
+ROOT_DIR = f"./dataset/bottle_toss_{TOSS_ID}/"
+BUNDLETRACK_DATA_DIR = f"bottle_toss_{TOSS_ID}/"
 BUNDLETRACK_DIR = "/home/cnets-vision/mengti_ws/BundleSDF/data/"
 
 # Create folders
@@ -96,7 +96,10 @@ cam_pos_dict = data_loaded[cam]['pose']['position']
 cam_trans = np.array([cam_pos_dict['x'], cam_pos_dict['y'], cam_pos_dict['z']]).reshape(-1, 1)
 cam_rot_dict = data_loaded[cam]['pose']['rotation']
 cam_axis_vec = np.array([cam_rot_dict['x'], cam_rot_dict['y'], cam_rot_dict['z']])
-
+yaml_path = './assets/config.yaml'
+toss_type = 'bottle'
+start_time = load_toss_time_from_yaml(yaml_path, toss_type, TOSS_ID, 'start_time')
+end_time = load_toss_time_from_yaml(yaml_path, toss_type, TOSS_ID, 'end_time')
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
 
@@ -104,13 +107,13 @@ if __name__ == "__main__":
         "--start_time",
         type=rospy.rostime.Time,
         required=False,
-        default=rospy.rostime.Time(secs=1691457456, nsecs=641854), # Start time of all tosses
+        default=start_time,
     )
     parser.add_argument(
         "--end_time",
         type=rospy.rostime.Time,
         required=False,
-        default=rospy.rostime.Time(secs=1691457522, nsecs=271324), # End time of all tosses
+        default=end_time,
     )
     parser.add_argument(
         "--translation",
@@ -151,62 +154,7 @@ if __name__ == "__main__":
     print("Depth images generated")
     # Since we don't need the masks for this dataset, simply use the old version of rgb processor
     bag_to_rgb_images(ROSBAG_NAME, RGB_ROS_TOPIC, BUNDLETRACK_RGB, start_time, end_time)
-    #############################################################################################
-    # extract_poses_with_timestamps(
-    #     ROSBAG_NAME,
-    #     DEPTH_ROS_TOPIC,
-    #     RGB_ROS_TOPIC,
-    #     JOINT_STATE_ROS_TOPIC,
-    #     POSITION_FILE_PATH,
-    #     RGB_DATA_DIR,
-    #     start_time,
-    #     end_time,
-    #     bundletrack_rgb_dir=BUNDLETRACK_RGB,
-    # )
-    # frame_num = len([name for name in os.listdir(BUNDLETRACK_RGB)])
-    # print("There are %i frames in total!" % frame_num)
-    # positions = import_data(POSITION_FILE_PATH)
-    # write_real_depth_as_txt(
-    #     start_frame=1,
-    #     end_frame=frame_num,
-    #     img_dir=IMAGE_TXT_PATH,
-    #     real_depth_dir=REAL_DEPTH_FILE,
-    # )
-    # print("Finished writing %i real depth text files." % frame_num)
-    # meshcat = StartMeshcat()
-    # for frame_id in tqdm(range(1, frame_num + 1)):
-    #     run_urdf_filter(
-    #         meshcat,
-    #         frame_id,
-    #         positions,
-    #         MASK_IAMGE_FILE,
-    #         SIMULATED_DEPTH_FILE,
-    #         REAL_DEPTH_FILE,
-    #         translation,
-    #         axis_vec,
-    #     )
-    #     dilate(
-    #         frame_id, mask_image_dir=MASK_IAMGE_FILE, dilated_mask_dir=DILATED_MASK_FILE
-    #     )
-    #     generate_depth_img_without_robot(
-    #         REAL_DEPTH_FILE % frame_id,
-    #         MASK_IAMGE_FILE % frame_id,
-    #         FILTERED_DEPTH_FILE % frame_id,
-    #     )
-    #     depth_filter = DepthFilter(
-    #         frame_id,
-    #         RGB_DATA_DIR + "%04i.png",
-    #         FILTERED_DEPTH_FILE,
-    #         CUBE_SCREEN_DIR,
-    #         CUBE_DEPTH_DIR,
-    #         translation,
-    #         axis_vec,
-    #     )
-    #     depth_filter.visualize_depth_image()
-    #     denoise(
-    #         frame_id,
-    #         img_dir=CUBE_DEPTH_DIR,
-    #         denoise_mask_dir=DENOISE_MASK_DIR,
-    #         region=(11, 11),
-    #     )
-    #     create_annotated_poses(output_dir=ANNOTATED_POSES_DIR, frame_id=frame_id)
+    frame_num = len([name for name in os.listdir(BUNDLETRACK_RGB)])
+    print("There are %i frames in total!" % frame_num)
+    for frame_id in tqdm(range(1, frame_num + 1)):
+        create_annotated_poses(output_dir=ANNOTATED_POSES_DIR, frame_id=frame_id)
