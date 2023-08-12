@@ -1,0 +1,101 @@
+tosses:
+  cube:
+    - toss: 1
+      start_time:
+        secs: 1655404893
+        nsecs: 899137
+      end_time:
+        secs: 1655404908
+        nsecs: 279948
+      start_frame: 366
+      end_frame: 384
+
+    - toss: 2
+      start_time:
+        secs: 1655404908
+        nsecs: 279948
+      end_time:
+        secs: 1655404920
+        nsecs: 470680
+      start_frame: 284
+      end_frame: 308
+
+    - toss: 3
+      start_time:
+        secs: 1655404920
+        nsecs: 470680
+      end_time:
+        secs: 1655404932
+        nsecs: 647236
+      start_frame: 278
+      end_frame: 300
+
+    - toss: 4
+      start_time:
+        secs: 1655404932
+        nsecs: 647236
+      end_time:
+        secs: 1655404945
+        nsecs: 387903
+      start_frame: 336
+      end_frame: 358
+
+    - toss: 5
+      start_time:
+        secs: 1655404945
+        nsecs: 387903
+      end_time:
+        secs: 1655404955
+        nsecs: 463919
+      start_frame: 193
+      end_frame: 214
+
+    - toss: 6
+      start_time:
+        secs: 1655404955
+        nsecs: 463919
+      end_time:
+        secs: 1655404968
+        nsecs: 399762
+      start_frame: 328
+      end_frame: 348
+
+    - toss: 7
+      start_time:
+        secs: 1655404968
+        nsecs: 399762
+      end_time:
+        secs: 1655404978
+        nsecs: 579412
+      start_frame: 266
+      end_frame: 284
+
+    - toss: 8
+      start_time:
+        secs: 1655404978
+        nsecs: 579412
+      end_time:
+        secs: 1655404992
+        nsecs: 115224
+      start_frame: 378
+      end_frame: 398
+
+    - toss: 9
+      start_time:
+        secs: 1655404992
+        nsecs: 115224
+      end_time:
+        secs: 1655405008
+        nsecs: 637576
+      start_frame: 466
+      end_frame: 481
+
+    - toss: 10
+      start_time:
+        secs: 1655405008
+        nsecs: 637576
+      end_time:
+        secs: 1655405023
+        nsecs: 293250
+      start_frame: 407
+      end_frame: 430

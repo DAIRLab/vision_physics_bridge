@@ -1,5 +1,6 @@
 import os
 import numpy as np
+from file_utils import load_field_from_yaml, load_toss_time_from_yaml
 from math_utils import trans_mat_to_pos_quat, transform_bundletrack_output
 import rospy
 import torch
@@ -40,9 +41,10 @@ class DatasetManagement:
         self.quats = []  #(N, 4)
         self.interpolated_ang_vels = [] #(N,3)
         self.interpolated_lin_vels = [] #(N,3)
-        #### sophter
+        ###### sophter ########
         self.rot_t = None #(N, 3)
         self.p_t = None #(3, N)
+        #######################
         self.plot = plot
         self.cam_trans = cam_trans
         self.cam_axis_vec = cam_axis_vec
@@ -170,7 +172,7 @@ class DatasetManagement:
 
     def transform(self):
         """
-        State vector is 4 quaternion + 3 xyz position + 3 linear velocity + 3 angular velocity
+        State vector is 3 xyz position + 4 quaternions(w,x,y,z) + 3 linear velocity + 3 angular velocity
         """
         w_t = []
         dp_t = []
@@ -188,6 +190,7 @@ class DatasetManagement:
             translation = pose[:3, 3]
             translation_ = pose_[:3, 3]
             q = R.from_matrix(rotation).as_quat()
+            q_shuffle = np.concatenate((q[3:4], q[0:3]), axis=0)
             dt = self.timestamps[frame_id+1].to_sec() - self.timestamps[frame_id].to_sec()
             ang_velocity = self.get_angular_velocity(rotation, rotation_, dt)
             ang_velocity_body = rotation.T @ ang_velocity
@@ -197,7 +200,7 @@ class DatasetManagement:
             self.t.append(self.timestamps[frame_id].to_sec())
             ################ For Plotting ################
             self.positions.append(translation)
-            self.quats.append(q)
+            self.quats.append(q_shuffle)
             ##############################################
         filter_rot = False
         if filter_rot:
@@ -375,7 +378,9 @@ def visualize_trajectory(file_path):
 if __name__ == "__main__":
     # visualize_trajectory('/home/cnets-vision/mengti_ws/dair_pll_latest/assets/contactnets_cube/250.pt')
     toss_id = 1
+    toss_type = 'cube'
     filename = 'old_toss_1'
+    yaml_path = './assets/config.yaml'
     BUNDLESDF_POSE_DIR = "/home/cnets-vision/mengti_ws/BundleSDF/results/"+filename+"/ob_in_cam/"
     CONTACTNETS_INPUT_DIR = ("/home/cnets-vision/mengti_ws/dair_pll_latest/assets/bundlesdf/")
     ODOM_FILE_PATH = ("/home/cnets-vision/mengti_ws/BundleSDF/data/"+filename+"/annotated_poses/")
@@ -391,33 +396,11 @@ if __name__ == "__main__":
     cam_trans = np.array([cam_pos_dict['x'], cam_pos_dict['y'], cam_pos_dict['z']]).reshape(-1, 1)
     cam_rot_dict = data_loaded[cam]['pose']['rotation']
     cam_axis_vec = np.array([cam_rot_dict['x'], cam_rot_dict['y'], cam_rot_dict['z']])
-
-    start_frame = 360 # toss 1
-    # start_frame = 280 # toss 2
-    # start_frame = 270 # toss 3
-    # start_frame = 330 # toss 4
     
-    end_frame = 449 # toss 1
-    # end_frame = 310 # toss 2
-    # end_frame = 301 # toss 3
-    # end_frame = 381 # toss 4
-    
-    # Convert pose data to ContactNets format
-    start_time = rospy.rostime.Time(secs=1655404893, nsecs=899137)  # toss 1
-    # start_time = rospy.rostime.Time(secs=1655404908, nsecs=279948) # toss 2
-    # start_time=rospy.rostime.Time(secs=1655404920, nsecs=470680) # toss 3
-    # start_time=rospy.rostime.Time(secs=1655404932, nsecs=647236) # toss 4
-    # start_time=rospy.rostime.Time(secs=1655404945, nsecs=387903) # toss 5
-    # start_time=rospy.rostime.Time(secs=1655404955, nsecs=463919) # toss 6
-    # start_time=rospy.rostime.Time(secs=1655404968, nsecs=399762) # toss 7
-    
-    end_time = rospy.rostime.Time(secs=1655404908, nsecs=279948) # toss 1
-    # end_time = rospy.rostime.Time(secs=1655404920, nsecs=470680) # toss 2
-    # end_time=rospy.rostime.Time(secs=1655404932, nsecs=647236) # toss 3
-    # end_time=rospy.rostime.Time(secs=1655404945, nsecs=387903) # toss 4
-    # end_time=rospy.rostime.Time(secs=1655404955, nsecs=463919) # toss 5
-    # end_time=rospy.rostime.Time(secs=1655404968, nsecs=399762) # toss 6
-    # end_time=rospy.rostime.Time(secs=1655404978, nsecs=579412) # toss 7
+    start_time = load_toss_time_from_yaml(yaml_path, toss_type, toss_id, 'start_time')
+    end_time = load_toss_time_from_yaml(yaml_path, toss_type, toss_id, 'end_time')
+    start_frame = load_field_from_yaml(yaml_path, toss_type, toss_id, 'start_frame')
+    end_frame = load_field_from_yaml(yaml_path, toss_type, toss_id, 'end_frame')
     sync = Synchronizer(GT_POSE_DIR, frame_num, start_time, end_time, save=False)
     bundletrack_time, gt_time = sync.bundletrack_time, sync.gt_time
     print(len(bundletrack_time), len(gt_time))

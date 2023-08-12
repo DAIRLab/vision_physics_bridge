@@ -1,5 +1,5 @@
 import os
-from example import CAMERA_CONFIG
+from file_utils import load_toss_time_from_yaml
 import rospy
 import numpy as np
 import scipy.spatial as sp
@@ -14,22 +14,29 @@ from math_utils import (
     rotation_matrix_to_euler,
     transform_bundletrack_output,
 )
-from rosbag_processor import (
-    extract_time_versus_poses,
-    extract_gt_poses_from_tagslam_with_missing_frames,
-)
 from sync_data import Synchronizer
-from data_preparation import DatasetManagement
+import yaml
 
+toss_id = 1
 GT_POSE_DIR = (
-    "/home/cnets-vision/mengti_ws/robot_filter/dataset/old_toss_1/tagslam_poses/"
+    f"/home/cnets-vision/mengti_ws/robot_filter/dataset/old_toss_{toss_id}/tagslam_poses/"
 )
-OUTPUT_POSE_DIR = "/home/cnets-vision/mengti_ws/BundleSDF/results/old_toss_1/ob_in_cam/"
+OUTPUT_POSE_DIR = f"/home/cnets-vision/mengti_ws/BundleSDF/results/old_toss_{toss_id}/ob_in_cam/"
 ODOM_FILE_PATH = (
-    "/home/cnets-vision/mengti_ws/BundleSDF/data/old_toss_1/annotated_poses/"
+    f"/home/cnets-vision/mengti_ws/BundleSDF/data/old_toss_{toss_id}/annotated_poses/"
 )
-FIG_NAME = "result_poses_bundlesdf_test_transfer.png"
+FIG_NAME = f"result_poses_bundlesdf_{toss_id}.png"
+CAMERA_EXTRINSICS_FILE = "./assets/realsense_pose_cube_old.yaml"
 
+cam = 'cam0' # realsense camera name
+with open(CAMERA_EXTRINSICS_FILE, 'r') as stream:
+    data_loaded = yaml.safe_load(stream)
+print(data_loaded[cam]['pose']['position'])
+
+cam_pos_dict = data_loaded[cam]['pose']['position']
+cam_trans = np.array([cam_pos_dict['x'], cam_pos_dict['y'], cam_pos_dict['z']]).reshape(-1, 1)
+cam_rot_dict = data_loaded[cam]['pose']['rotation']
+cam_axis_vec = np.array([cam_rot_dict['x'], cam_rot_dict['y'], cam_rot_dict['z']])
 
 def get_cosine_sim(frame_id):
     """Compare the output of BundleTrack with the ground-truth poses of tagslam."""
@@ -71,99 +78,6 @@ def calculate_success_rate(
     success_rate = (success_count / num_frames) * 100
     return success_rate
 
-
-def plot_xyz(start_frame, end_frame):
-    """Plot the x, y, z of BundleTrack output versus ground-truth poses of tagslam."""
-    output_x, output_y, output_z = [], [], []  # translation
-    gt_x, gt_y, gt_z = [], [], []
-    angles = []
-
-    for frame_id in range(start_frame, end_frame + 1):
-        gt_frame = frame_id
-        gt_pose = np.loadtxt(GT_POSE_DIR + "%04i.txt" % gt_frame)
-        output_pose = np.loadtxt(OUTPUT_POSE_DIR + "%04i.txt" % frame_id)
-        # output_pose = transform_to_camera(output_pose)
-        output_pose = camera_to_world(output_pose)
-        angle = get_angle(output_pose[:3, :3], gt_pose[:3, :3])
-        angles.append(angle)
-        output_x.append(output_pose[0, 3])
-        output_y.append(output_pose[1, 3])
-        output_z.append(output_pose[2, 3])
-
-        gt_x.append(gt_pose[0, 3])
-        gt_y.append(gt_pose[1, 3])
-        gt_z.append(gt_pose[2, 3])
-    output_x, output_y, output_z = (
-        np.array(output_x),
-        np.array(output_y),
-        np.array(output_z),
-    )
-    gt_x, gt_y, gt_z = np.array(gt_x), np.array(gt_y), np.array(gt_z)
-
-    x = np.arange(0, output_x.shape[0])
-    plt.plot(x, output_x, label="Bundletrack")
-    plt.plot(x, gt_x, label="ground-truth")
-    plt.xlabel("X-axis")
-    plt.ylabel("Y-axis")
-    plt.title("Position x")
-    plt.legend()
-    plt.show()
-
-    plt.plot(x, output_y, label="BundleTrack")
-    plt.plot(x, gt_y, label="ground-truth")
-    plt.xlabel("X-axis")
-    plt.ylabel("Y-axis")
-    plt.title("Position y")
-    plt.legend()
-    plt.show()
-
-    plt.plot(x, output_z, label="BundleTrack")
-    plt.plot(x, gt_z, label="ground-truth")
-    plt.xlabel("X-axis")
-    plt.ylabel("Y-axis")
-    plt.title("Position z")
-    plt.legend()
-    plt.show()
-
-    plt.plot(x, angles)
-    plt.xlabel("X-axis")
-    plt.ylabel("angle diff (degrees)")
-    plt.title("Angle difference")
-    plt.show()
-
-
-def plot_ground_truth(start_frame, end_frame):
-    gt_x, gt_y, gt_z = [], [], []
-    for frame_id in range(start_frame, end_frame):
-        gt_pose = np.loadtxt(GT_POSE_DIR + "%04i.txt" % frame_id)
-        gt_x.append(gt_pose[0, 3])
-        gt_y.append(gt_pose[1, 3])
-        gt_z.append(gt_pose[2, 3])
-
-    gt_x, gt_y, gt_z = np.array(gt_x), np.array(gt_y), np.array(gt_z)
-    x = np.arange(0, gt_x.shape[0])
-    plt.plot(x, gt_x, label="ground-truth")
-    plt.xlabel("Frame")
-    plt.ylabel("X axis")
-    plt.title("Position x")
-    plt.legend()
-    plt.show()
-
-    plt.plot(x, gt_y, label="ground-truth")
-    plt.xlabel("Frame")
-    plt.ylabel("Y axis")
-    plt.title("Position y")
-    plt.legend()
-    plt.show()
-
-    plt.plot(x, gt_z, label="ground-truth")
-    plt.xlabel("Frame")
-    plt.ylabel("Z axis")
-    plt.title("Position z")
-    plt.legend()
-    plt.show()
-
-
 def plot_with_time(bundletrack_time, gt_time, bundletrack_pose_dir, gt_pose_dir):
     """Plot the x, y, z of BundleTrack output versus ground-truth poses of tagslam."""
     bundletrack_time = np.array(bundletrack_time)
@@ -187,6 +101,8 @@ def plot_with_time(bundletrack_time, gt_time, bundletrack_pose_dir, gt_pose_dir)
             output_pose,
             bundletrack_pose_dir,
             ODOM_FILE_PATH,
+            cam_trans,
+            cam_axis_vec,
             to_world=True,
         ) # camera frame
         estimated_poses.append(output_pose)
@@ -342,111 +258,24 @@ def plot_with_time(bundletrack_time, gt_time, bundletrack_pose_dir, gt_pose_dir)
     fig.subplots_adjust(bottom=spacing)
     plt.savefig(FIG_NAME)
     plt.show()
-    
-    ################### TEST TEST ################################
-    # fig, axs = plt.subplots(2, 4)
-    # axs[0, 0].plot(bundletrack_time, output_x, label="BundleTrack")
-    # axs[0, 0].plot(gt_time, gt_x_world_pose, label="ground-truth")
-    # axs[0, 0].set_title("Position x")
-    # axs[0, 0].legend()
-
-    # axs[0, 1].plot(bundletrack_time, output_y, label="BundleTrack")
-    # axs[0, 1].plot(gt_time, gt_y_world_pose, label="ground-truth")
-    # axs[0, 1].set_title("Position y")
-
-    # axs[0, 2].plot(bundletrack_time, output_z, label="BundleTrack")
-    # axs[0, 2].plot(gt_time, gt_z_world_pose, label="ground-truth")
-    # axs[0, 2].set_title("Position z")
-
-    # axs[1, 0].plot(bundletrack_time, estimated_w, label="BundleTrack")
-    # axs[1, 0].plot(gt_time, gt_w_world_test_list, label="ground-truth")
-    # axs[1, 0].set_title("w")
-
-    # axs[1, 1].plot(bundletrack_time, estimated_x, label="BundleTrack")
-    # axs[1, 1].plot(gt_time, gt_x_world_test_list, label="ground-truth")
-    # axs[1, 1].set_title("x")
-
-    # axs[1, 2].plot(bundletrack_time, estimated_y, label="BundleTrack")
-    # axs[1, 2].plot(gt_time, gt_y_world_test_list, label="ground-truth")
-    # axs[1, 2].set_title("y")
-
-    # axs[1, 3].plot(bundletrack_time, estimated_z, label="BundleTrack")
-    # axs[1, 3].plot(gt_time, gt_z_world_test_list, label="ground-truth")
-    # axs[1, 3].set_title("z")
-
-    # spacing = 0.100
-    # fig.subplots_adjust(hspace=0.5)
-    # fig.subplots_adjust(bottom=spacing)
-    # plt.savefig('TESTEST.png')
-    # plt.show()
-    ####################################################
 
 
 if __name__ == "__main__":
-    # plot_xyz(1, 950)
-    depth_bag_file = "./raw_10.bag"
-    odom_bag_file = "./odom_10.bag"
+    depth_bag_file = "./rosbags/raw_10.bag"
+    odom_bag_file = "./rosbags/odom_10.bag"
     DEPTH_ROS_TOPIC = "/camera/aligned_depth_to_color/image_raw"
     ODOM_ROS_TOPIC = "/tagslam/odom/body_cube"
     start_time = None
     end_time = None
-    #### OLD DATA #####
-    # start time
-    start_time = rospy.rostime.Time(secs=1655404893, nsecs=899137)  # toss 1
-    # start_time = rospy.rostime.Time(secs=1655404908, nsecs=279948)  # toss 2
-    # start_time = rospy.rostime.Time(secs=1655404920, nsecs=470680)  # toss 3
-    # start_time = rospy.rostime.Time(secs=1655404932, nsecs=647236)  # toss 4
-    # start_time = rospy.rostime.Time(secs=1655404945, nsecs=387903)  # toss 5
-    # start_time=rospy.rostime.Time(secs=1655404955, nsecs=272877)  # toss 6
-    # start_time=rospy.rostime.Time(secs=1655404966, nsecs=698458)  # toss 7
-    # start_time=rospy.rostime.Time(secs=1655404977, nsecs=941630)  # toss 8
-    # start_time=rospy.rostime.Time(secs=1655404991, nsecs=641514) # toss 9
-    # start_time=rospy.rostime.Time(secs=1655405008, nsecs=720921) # toss 10
-
-    # end time
-    end_time = rospy.rostime.Time(secs=1655404908, nsecs=279948) # toss 1
-    # end_time = rospy.rostime.Time(secs=1655404920, nsecs=470680)  # toss 2
-    # end_time = rospy.rostime.Time(secs=1655404932, nsecs=647236)  # toss 3
-    # end_time = rospy.rostime.Time(secs=1655404945, nsecs=387903)  # toss 4
-    # end_time = rospy.rostime.Time(secs=1655404955, nsecs=463919)  # toss 5
-    # end_time=rospy.rostime.Time(secs=1655404966, nsecs=698458)  # toss 6
-    # end_time=rospy.rostime.Time(secs=1655404977, nsecs=941630)  # toss 7
-    # end_time=rospy.rostime.Time(secs=1655404991, nsecs=641514)  # toss 8
-    # end_time=rospy.rostime.Time(secs=1655405008, nsecs=720921)  # toss 9
-    # end_time=rospy.rostime.Time(secs=1655405022, nsecs=942549)  # toss 10
-    ######################### DEPRECATED ###########################
-    # bundletrack_time, gt_time = extract_time_versus_poses(
-    #     start_time,
-    #     end_time,
-    #     depth_bag_file,
-    #     odom_bag_file,
-    #     DEPTH_ROS_TOPIC,
-    #     ODOM_ROS_TOPIC,
-    #     GT_POSE_DIR,
-    # )
-
-    # gt_time_ = extract_gt_poses_from_tagslam_with_missing_frames(
-    #     start_time,
-    #     end_time,
-    #     depth_bag_file=depth_bag_file,
-    #     odom_bag_file=odom_bag_file,
-    #     depth_topic=DEPTH_ROS_TOPIC,
-    #     odom_topic=ODOM_ROS_TOPIC,
-    #     output_dir=GT_POSE_DIR,
-    #     write=False,
-    # )
-    ################################################################
+    yaml_path = './assets/config.yaml'
+    toss_type = 'cube'
+    start_time = load_toss_time_from_yaml(yaml_path, toss_type, toss_id, 'start_time')
+    end_time = load_toss_time_from_yaml(yaml_path, toss_type, toss_id, 'end_time')
     frame_num = len([name for name in os.listdir(OUTPUT_POSE_DIR)])
     print(f"there are {frame_num} frames")
-    sync = Synchronizer(GT_POSE_DIR, frame_num, start_time, end_time)
+    sync = Synchronizer(GT_POSE_DIR, frame_num, start_time, end_time, save=True)
     bundletrack_time, gt_time = sync.bundletrack_time, sync.gt_time
     print(len(bundletrack_time), len(gt_time))
     bundletrack_time = [t.to_sec() for t in bundletrack_time]
     gt_time = [t.to_sec() for t in gt_time]
     plot_with_time(bundletrack_time, gt_time, OUTPUT_POSE_DIR, GT_POSE_DIR)
-
-    # ContactNets toss: from object leaving the gripper to the object landing on the table
-    # start_time_toss = rospy.rostime.Time(secs=1655404905, nsecs=177325)  # toss 1
-    # end_time_toss = rospy.rostime.Time(secs=1655404906, nsecs=183975)  # toss 1
-    # Convert pose data to ContactNets format
-    # dataset = DatasetManagement(frame_num, start_time_toss, end_time_toss, bundletrack_time)
