@@ -107,8 +107,8 @@ tosses:
       end_time:
         secs: 1691457462
         nsecs: 646672
-      start_frame: 0
-      end_frame: 0
+      start_frame: 98
+      end_frame: 178
 
     - toss: 2
       start_time:
@@ -117,8 +117,8 @@ tosses:
       end_time:
         secs: 1691457467
         nsecs: 957458
-      start_frame: 0
-      end_frame: 0
+      start_frame: 63
+      end_frame: 150
 
     - toss: 3
       start_time:
@@ -127,8 +127,8 @@ tosses:
       end_time:
         secs: 1691457476
         nsecs: 454079
-      start_frame: 0
-      end_frame: 0
+      start_frame: 66
+      end_frame: 245
 
     - toss: 4
       start_time:
@@ -137,8 +137,8 @@ tosses:
       end_time:
         secs: 1691457481
         nsecs: 519583
-      start_frame: 0
-      end_frame: 0
+      start_frame: 56
+      end_frame: 125
 
     - toss: 5
       start_time:
@@ -147,8 +147,8 @@ tosses:
       end_time:
         secs: 1691457486
         nsecs: 427349
-      start_frame: 0
-      end_frame: 0
+      start_frame: 68
+      end_frame: 120
 
     - toss: 6
       start_time:
@@ -157,8 +157,8 @@ tosses:
       end_time:
         secs: 1691457490
         nsecs: 413123
-      start_frame: 0
-      end_frame: 0
+      start_frame: 60
+      end_frame: 110
 
     - toss: 7
       start_time:
@@ -167,8 +167,8 @@ tosses:
       end_time:
         secs: 1691457495
         nsecs: 559201
-      start_frame: 0
-      end_frame: 0
+      start_frame: 70
+      end_frame: 150
 
     - toss: 8
       start_time:
@@ -177,8 +177,8 @@ tosses:
       end_time:
         secs: 1691457506
         nsecs: 237337
-      start_frame: 0
-      end_frame: 0
+      start_frame: 58
+      end_frame: 305
 
     - toss: 9
       start_time:
@@ -187,8 +187,8 @@ tosses:
       end_time:
         secs: 1691457514
         nsecs: 435131
-      start_frame: 0
-      end_frame: 0
+      start_frame: 42
+      end_frame: 200
 
     - toss: 10
       start_time:
@@ -197,5 +197,5 @@ tosses:
       end_time:
         secs: 1691457519
         nsecs: 762523
-      start_frame: 0
-      end_frame: 0
+      start_frame: 59
+      end_frame: 115

@@ -112,22 +112,22 @@ def write_real_depth_as_txt(start_frame, end_frame, img_dir, real_depth_dir):
         np.savetxt(depth_dir, real)
 
 
-def check_empty_img():
+def check_empty_img(masks_dir):
     """
     Since Bundletrack loses tracking if any of the masks are empty, we need to check emptyness for masks.
     """
     empty_list = []
-    for frame_id in range(1, 3372):
-        denoise_mask_dir = (
-            "/home/cnets-vision/mengti_ws/BundleTrack/Data/YCBINEOAT/contact_nets_new_full/masks/%04i.png"
-            % frame_id
+    nums = len([name for name in os.listdir(masks_dir)])
+    for frame_id in range(1, nums+1):
+        mask_file = (
+            os.path.join(masks_dir, "%04i.png"% frame_id)
         )
-        image = cv2.imread(denoise_mask_dir)
-
+        image = cv2.imread(mask_file)
         if np.sum(image) == 0:
             empty_list.append(frame_id)
         else:
             continue
+    print(f'Empty masks: {empty_list}')
     return empty_list
 
 
@@ -263,7 +263,6 @@ def removed_files(num):
 
 def main():
     pass
-
 
 if __name__ == "__main__":
     main()

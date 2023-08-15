@@ -3,6 +3,7 @@ import numpy as np
 from tqdm import tqdm
 from depth_filter import DepthFilter
 from file_utils import (
+    check_empty_img,
     create_annotated_poses,
     denoise,
     generate_depth_img_without_robot,
@@ -27,7 +28,7 @@ import yaml
 
 """Process the cube data.
 """
-TOSS_ID = 1
+TOSS_ID = 8
 ROSBAG_NAME = "./rosbags/raw_10.bag"
 ODOM_ROSBAG_NAME = "./rosbags/odom_10.bag"
 DEPTH_ROS_TOPIC = "/camera/aligned_depth_to_color/image_raw"
@@ -211,3 +212,4 @@ if __name__ == "__main__":
             region=(11, 11),
         )
         create_annotated_poses(output_dir=ANNOTATED_POSES_DIR, frame_id=frame_id)
+    check_empty_img(DENOISE_MASK_DIR)

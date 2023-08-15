@@ -19,7 +19,7 @@ class Synchronizer:
         self.depth_sub = message_filters.Subscriber(
             "/camera/aligned_depth_to_color/image_raw", Image
         )
-        self.odom_sub = message_filters.Subscriber("/tagslam/odom/body_cube", Odometry)
+        self.odom_sub = message_filters.Subscriber("/tagslam/odom/body_bottle", Odometry)
         self.ts = message_filters.ApproximateTimeSynchronizer(
             [self.depth_sub, self.odom_sub], 1000, 10
         )

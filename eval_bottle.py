@@ -1,4 +1,5 @@
 import os
+from file_utils import load_toss_time_from_yaml
 import rospy
 import numpy as np
 import scipy.spatial as sp
@@ -13,22 +14,15 @@ from math_utils import (
     rotation_matrix_to_euler,
     transform_bundletrack_output,
 )
-from rosbag_processor import (
-    extract_time_versus_poses,
-    extract_gt_poses_from_tagslam_with_missing_frames,
-)
 from sync_data import Synchronizer
 import yaml
 
-GT_POSE_DIR = (
-    "/home/cnets-vision/mengti_ws/robot_filter/dataset/bottle_toss/tagslam_poses/"
-)
-OUTPUT_POSE_DIR = "/home/cnets-vision/mengti_ws/BundleSDF/results/bottle_toss/ob_in_cam/"
-ODOM_FILE_PATH = (
-    "/home/cnets-vision/mengti_ws/BundleSDF/data/bottle_toss/annotated_poses/"
-)
+TOSS_ID = 8
+GT_POSE_DIR = f"/home/cnets-vision/mengti_ws/robot_filter/dataset/bottle_toss_{TOSS_ID}/tagslam_poses/"
+OUTPUT_POSE_DIR = f"/home/cnets-vision/mengti_ws/BundleSDF/results/bottle_toss_{TOSS_ID}/ob_in_cam/"
+ODOM_FILE_PATH = f"/home/cnets-vision/mengti_ws/BundleSDF/data/bottle_toss_{TOSS_ID}/annotated_poses/"
 CAMERA_EXTRINSICS_FILE = './assets/realsense_pose_bottle.yaml'
-FIG_NAME = "result_poses_bottle_world_twice.png"
+FIG_NAME = f"result_poses_bottle_{TOSS_ID}.png"
 cam = 'cam0' # realsense camera name
 with open(CAMERA_EXTRINSICS_FILE, 'r') as stream:
     data_loaded = yaml.safe_load(stream)
@@ -355,12 +349,10 @@ if __name__ == "__main__":
     odom_bag_file = "./odom_43.bag"
     DEPTH_ROS_TOPIC = "/camera/aligned_depth_to_color/image_raw"
     ODOM_ROS_TOPIC = "/tagslam/odom/body_bottle"
-    start_time = None
-    end_time = None
-    # start time
-    start_time = rospy.rostime.Time(secs=1691457456, nsecs=641854)
-    # end time
-    end_time = rospy.rostime.Time(secs=1691457522, nsecs=271324)
+    yaml_path = './assets/config.yaml'
+    toss_type = 'bottle'
+    start_time = load_toss_time_from_yaml(yaml_path, toss_type, TOSS_ID, 'start_time')
+    end_time = load_toss_time_from_yaml(yaml_path, toss_type, TOSS_ID, 'end_time')
 
     frame_num = len([name for name in os.listdir(OUTPUT_POSE_DIR)])
     print(f"there are {frame_num} frames")

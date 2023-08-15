@@ -2,6 +2,7 @@ import os
 import numpy as np
 from file_utils import load_field_from_yaml, load_toss_time_from_yaml
 from math_utils import trans_mat_to_pos_quat, transform_bundletrack_output
+from rosbag_processor import extract_timestamps
 import rospy
 import torch
 
@@ -323,7 +324,7 @@ class DatasetManagement:
 
         plt.tight_layout()
         fig.suptitle('Generated from BundleSDF result')
-        plt.savefig('bundlesdf_interp.png')
+        plt.savefig(f'bundlesdf_bottle_traj_{toss_id}.png')
         plt.show()
 
 #################### Plotting contactnets sample traj #################
@@ -378,20 +379,21 @@ def visualize_trajectory(file_path):
 if __name__ == "__main__":
     # visualize_trajectory('/home/cnets-vision/mengti_ws/dair_pll_latest/assets/contactnets_cube/250.pt')
     toss_id = 10
-    toss_type = 'cube'
-    filename = f'old_toss_{toss_id}'
+    toss_type = 'bottle'
+    filename = f'bottle_toss_{toss_id}'
     yaml_path = './assets/config.yaml'
+    rosbag = './rosbags/raw_43.bag'
+    ros_topic = '/camera/aligned_depth_to_color/image_raw'
+    CAMERA_EXTRINSICS_FILE = './assets/realsense_pose_bottle.yaml'
     BUNDLESDF_POSE_DIR = "/home/cnets-vision/mengti_ws/BundleSDF/results/"+filename+"/ob_in_cam/"
-    CONTACTNETS_INPUT_DIR = ("/home/cnets-vision/mengti_ws/dair_pll_latest/assets/bundlesdf/")
-    ODOM_FILE_PATH = ("/home/cnets-vision/mengti_ws/BundleSDF/data/"+filename+"/annotated_poses/")
-    GT_POSE_DIR = ("/home/cnets-vision/mengti_ws/robot_filter/dataset/"+filename+"/tagslam_poses/")
+    CONTACTNETS_INPUT_DIR = "/home/cnets-vision/mengti_ws/dair_pll_latest/assets/bundlesdf_bottle/"
+    ODOM_FILE_PATH = "/home/cnets-vision/mengti_ws/BundleSDF/data/"+filename+"/annotated_poses/"
+    GT_POSE_DIR = "/home/cnets-vision/mengti_ws/robot_filter/dataset/"+filename+"/tagslam_poses/"
     frame_num = len([name for name in os.listdir(BUNDLESDF_POSE_DIR)])
-    CAMERA_EXTRINSICS_FILE = './assets/realsense_pose_cube_old.yaml'
+    print(f'Total frame num: {frame_num}')
     cam = 'cam0' # realsense camera name
     with open(CAMERA_EXTRINSICS_FILE, 'r') as stream:
         data_loaded = yaml.safe_load(stream)
-    print(data_loaded[cam]['pose']['position'])
-
     cam_pos_dict = data_loaded[cam]['pose']['position']
     cam_trans = np.array([cam_pos_dict['x'], cam_pos_dict['y'], cam_pos_dict['z']]).reshape(-1, 1)
     cam_rot_dict = data_loaded[cam]['pose']['rotation']
@@ -404,6 +406,6 @@ if __name__ == "__main__":
     sync = Synchronizer(GT_POSE_DIR, frame_num, start_time, end_time, save=False)
     bundletrack_time, gt_time = sync.bundletrack_time, sync.gt_time
     print(len(bundletrack_time), len(gt_time))
+    # bundletrack_time = extract_timestamps(rosbag, ros_topic, start_time, end_time)
     dataset = DatasetManagement(frame_num, start_frame, end_frame, bundletrack_time, toss_id, cam_trans, cam_axis_vec, plot=True)
     dataset.transform()
-    # dataset.do_process()
