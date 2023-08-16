@@ -129,7 +129,8 @@ class ObjectPlaybackSim:
             while True:
                 self.simulator.AdvanceTo(self.simulator.get_context().get_time() + 2.0)
         self.simulator.AdvanceTo(0.01)
-        self.plot_camera_images()
+        # self.plot_camera_images()
+        self.save_depth_and_mask()
 
     def setup_extrinsic(self, translation, axis_vec):
         angle = np.linalg.norm(axis_vec)
@@ -140,12 +141,24 @@ class ObjectPlaybackSim:
         diagram = self.builder.Build()
         diagram.set_name("depth_camera_demo_system")
         return diagram
+    
+    def save_depth_and_mask(self):
+        depth_image = self.diagram.GetOutputPort("depth_image").Eval(self.context)
+        depth_mm = depth_image.data[:, :, 0] * 1000
+        depth_mm_clipped = np.clip(depth_mm, 0, 65535)
+        depth_uint16 = depth_mm_clipped.astype(np.uint16)
+        img = Image.fromarray(depth_uint16)
+        img.save(os.path.join(NERF_DEPTH_DIR, "%04i.png" % self.frame_id))  
+        # img = imageio.imread(os.path.join(NERF_DEPTH_DIR, "%04i.png" % self.frame_id))
+        # print(f'Saved depth with format {img.dtype}')
+        mask = np.isfinite(np.squeeze(depth_image.data)).astype(np.uint8) * 255
+        imageio.imwrite(os.path.join(NERF_MASK_DIR, "%04i.png" % self.frame_id), mask)
+        # img = imageio.imread(os.path.join(NERF_MASK_DIR, "%04i.png" % self.frame_id))
+        # print(f'Saved mask with format {img.dtype}')
 
     def plot_camera_images(self):
         color_image = self.diagram.GetOutputPort("color_image").Eval(self.context)
         depth_image = self.diagram.GetOutputPort("depth_image").Eval(self.context)
-        print(np.unique(color_image.data))
-        print(np.unique(np.squeeze(depth_image.data)))
         # Plot the two images.
         plt.figure(figsize=(10,5))
         plt.subplot(121)
@@ -155,7 +168,7 @@ class ObjectPlaybackSim:
         _max = 1
         plt.subplot(122)
         plt.imshow(np.squeeze(depth_image.data), vmin=_min, vmax=_max)  # (480.640,1)
-        print(np.squeeze(depth_image.data).dtype) #TODO: change to uint16
+        plt.plot(400, 320, "ro")
         plt.title("Depth image")
         plt.tight_layout()
         plt.savefig('./cube_drake_visualizer.png')
@@ -167,7 +180,8 @@ if __name__ == "__main__":
     CAMERA_EXTRINSICS_FILE = "./assets/realsense_pose_cube_old.yaml"
     OUTPUT_POSE_DIR = f"/home/cnets-vision/mengti_ws/BundleSDF/results/old_toss_{toss_id}/ob_in_cam/"
     ODOM_FILE_PATH = f"/home/cnets-vision/mengti_ws/BundleSDF/data/old_toss_{toss_id}/annotated_poses/"
-    # URDF_FILE = "/home/cnets-vision/mengti_ws/dair_pll_latest/assets/contactnets_cube_mesh.urdf"
+    NERF_DEPTH_DIR = "./dataset/nerf/depth"
+    NERF_MASK_DIR = "./dataset/nerf/masks"
     cam = 'cam0' # realsense camera name
     with open(CAMERA_EXTRINSICS_FILE, 'r') as stream:
         data_loaded = yaml.safe_load(stream)
@@ -177,7 +191,7 @@ if __name__ == "__main__":
     cam_axis_vec = np.array([cam_rot_dict['x'], cam_rot_dict['y'], cam_rot_dict['z']])
     frame_num = len([name for name in os.listdir(OUTPUT_POSE_DIR)])
     print(f"Total frame is {frame_num}")
-    for frame_id in range(1, 2):
+    for frame_id in range(1, frame_num+1):
         print(f"Processing frame {frame_id}")
         bundletrack_pose = np.loadtxt(OUTPUT_POSE_DIR + "%04i.txt" % frame_id)
         pose = transform_bundletrack_output(
