@@ -141,20 +141,39 @@ class ObjectPlaybackSim:
         diagram = self.builder.Build()
         diagram.set_name("depth_camera_demo_system")
         return diagram
-    
+
     def save_depth_and_mask(self):
         depth_image = self.diagram.GetOutputPort("depth_image").Eval(self.context)
+
+        # Convert to millimeters
         depth_mm = depth_image.data[:, :, 0] * 1000
-        depth_mm_clipped = np.clip(depth_mm, 0, 65535)
-        depth_uint16 = depth_mm_clipped.astype(np.uint16)
-        img = Image.fromarray(depth_uint16)
-        img.save(os.path.join(NERF_DEPTH_DIR, "%04i.png" % self.frame_id))  
-        # img = imageio.imread(os.path.join(NERF_DEPTH_DIR, "%04i.png" % self.frame_id))
-        # print(f'Saved depth with format {img.dtype}')
+
+        # Normalize the depth to the range [0, 255]
+        depth_min = np.min(depth_mm)
+        depth_max = np.max(depth_mm)
+        depth_normalized = ((depth_mm - depth_min) / (depth_max - depth_min) * 255).astype(np.uint8)
+
+        # Save the normalized depth image
+        img = Image.fromarray(depth_normalized)
+        img.save(os.path.join(NERF_DEPTH_DIR, "%04i.png" % self.frame_id))
+
+        # Generate and save the mask
         mask = np.isfinite(np.squeeze(depth_image.data)).astype(np.uint8) * 255
         imageio.imwrite(os.path.join(NERF_MASK_DIR, "%04i.png" % self.frame_id), mask)
-        # img = imageio.imread(os.path.join(NERF_MASK_DIR, "%04i.png" % self.frame_id))
-        # print(f'Saved mask with format {img.dtype}')
+
+    # def save_depth_and_mask(self):
+    #     depth_image = self.diagram.GetOutputPort("depth_image").Eval(self.context)
+    #     depth_mm = depth_image.data[:, :, 0] * 1000
+    #     depth_mm_clipped = np.clip(depth_mm, 0, 65535)
+    #     depth_uint16 = depth_mm_clipped.astype(np.uint16)
+    #     img = Image.fromarray(depth_uint16)
+    #     img.save(os.path.join(NERF_DEPTH_DIR, "%04i.png" % self.frame_id))
+    #     # img = imageio.imread(os.path.join(NERF_DEPTH_DIR, "%04i.png" % self.frame_id))
+    #     # print(f'Saved depth with format {img.dtype}')
+    #     mask = np.isfinite(np.squeeze(depth_image.data)).astype(np.uint8) * 255
+    #     imageio.imwrite(os.path.join(NERF_MASK_DIR, "%04i.png" % self.frame_id), mask)
+    #     # img = imageio.imread(os.path.join(NERF_MASK_DIR, "%04i.png" % self.frame_id))
+    #     # print(f'Saved mask with format {img.dtype}')
 
     def plot_camera_images(self):
         color_image = self.diagram.GetOutputPort("color_image").Eval(self.context)
