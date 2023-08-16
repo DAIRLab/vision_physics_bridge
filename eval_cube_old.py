@@ -22,9 +22,7 @@ GT_POSE_DIR = (
     f"/home/cnets-vision/mengti_ws/robot_filter/dataset/old_toss_{toss_id}/tagslam_poses/"
 )
 OUTPUT_POSE_DIR = f"/home/cnets-vision/mengti_ws/BundleSDF/results/old_toss_{toss_id}/ob_in_cam/"
-ODOM_FILE_PATH = (
-    f"/home/cnets-vision/mengti_ws/BundleSDF/data/old_toss_{toss_id}/annotated_poses/"
-)
+ODOM_FILE_PATH = f"/home/cnets-vision/mengti_ws/BundleSDF/data/old_toss_{toss_id}/annotated_poses/"
 FIG_NAME = f"result_poses_bundlesdf_{toss_id}.png"
 CAMERA_EXTRINSICS_FILE = "./assets/realsense_pose_cube_old.yaml"
 
