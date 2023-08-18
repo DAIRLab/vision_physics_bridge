@@ -17,7 +17,7 @@ from math_utils import (
 from sync_data import Synchronizer
 import yaml
 
-TOSS_ID = 8
+TOSS_ID = 2
 GT_POSE_DIR = f"/home/cnets-vision/mengti_ws/robot_filter/dataset/bottle_toss_{TOSS_ID}/tagslam_poses/"
 OUTPUT_POSE_DIR = f"/home/cnets-vision/mengti_ws/BundleSDF/results/bottle_toss_{TOSS_ID}/ob_in_cam/"
 ODOM_FILE_PATH = f"/home/cnets-vision/mengti_ws/BundleSDF/data/bottle_toss_{TOSS_ID}/annotated_poses/"
@@ -342,6 +342,7 @@ def plot_with_time(bundletrack_time, gt_time, bundletrack_pose_dir, gt_pose_dir)
     fig.subplots_adjust(bottom=spacing)
     plt.savefig(FIG_NAME)
     plt.show()
+    print(f'{FIG_NAME} saved.')
 
 
 if __name__ == "__main__":

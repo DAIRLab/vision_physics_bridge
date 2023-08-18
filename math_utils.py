@@ -194,7 +194,7 @@ def trans_mat_to_pos_quat(trans):
     q = R.from_matrix(trans[:3, :3]).as_quat().reshape(-1, 1)
     magnitude = np.linalg.norm(q)
     q /= magnitude
-    if ((q[3] < -0.01)
+    if ((q[3] < -0.02)
         or (q[3] == 0 and q[0] < 0)
         or (q[3] == 0 and q[0] == 0 and q[1] < 0)
         or (q[3] == 0 and q[0] == 0 and q[1] == 0 and q[2] < 0)):

@@ -260,9 +260,34 @@ def removed_files(num):
         print(filename, new_filename)
         os.rename(filename, new_filename)
 
+def replace_comma_with_space(file_path):
+    """Replace every comma with a space in the specified file."""
+    
+    # Read the content of the file
+    with open(file_path, 'r') as f:
+        content = f.read()
+    
+    # Replace comma with space
+    modified_content = content.replace(',', ' ')
+    
+    # Write the modified content back to the file
+    with open(file_path, 'w') as f:
+        f.write(modified_content)
 
+    print(f"Replaced commas with spaces in {file_path}")
+
+def process_directory(directory_path):
+    """Apply the replace_comma_with_space function to all .txt files in the specified directory."""
+    
+    for root, dirs, files in os.walk(directory_path):
+        for file_name in files:
+            if file_name.endswith('.txt'):
+                file_path = os.path.join(root, file_name)
+                replace_comma_with_space(file_path)
+    print('Done!')
+    
 def main():
-    pass
+    process_directory('/home/cnets-vision/mengti_ws/BundleSDF/results/ob_in_cam_projected_icp_transformed')
 
 if __name__ == "__main__":
     main()

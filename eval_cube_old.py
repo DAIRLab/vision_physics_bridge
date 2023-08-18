@@ -21,9 +21,10 @@ toss_id = 1
 GT_POSE_DIR = (
     f"/home/cnets-vision/mengti_ws/robot_filter/dataset/old_toss_{toss_id}/tagslam_poses/"
 )
-OUTPUT_POSE_DIR = f"/home/cnets-vision/mengti_ws/BundleSDF/results/old_toss_{toss_id}/ob_in_cam/"
+# OUTPUT_POSE_DIR = f"/home/cnets-vision/mengti_ws/BundleSDF/results/old_toss_{toss_id}/ob_in_cam/"
+OUTPUT_POSE_DIR = f"/home/cnets-vision/mengti_ws/BundleSDF/results/ob_in_cam_projected_icp_transformed/"
 ODOM_FILE_PATH = f"/home/cnets-vision/mengti_ws/BundleSDF/data/old_toss_{toss_id}/annotated_poses/"
-FIG_NAME = f"result_poses_bundlesdf_{toss_id}.png"
+FIG_NAME = f"result_poses_bundlesdf_{toss_id}_icp_transformed.png"
 CAMERA_EXTRINSICS_FILE = "./assets/realsense_pose_cube_old.yaml"
 
 cam = 'cam0' # realsense camera name
