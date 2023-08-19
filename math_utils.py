@@ -180,15 +180,15 @@ def pos_quat_to_trans_mat(pos_quat):
 
 def trans_mat_to_pos_quat(trans):
     q = R.from_matrix(trans[:3, :3]).as_quat().reshape(-1, 1)
-    # magnitude = np.linalg.norm(q)
-    # q /= magnitude
-    # if ((q[3] < -0.01)
-    #     or (q[3] == 0 and q[0] < 0)
-    #     or (q[3] == 0 and q[0] == 0 and q[1] < 0)
-    #     or (q[3] == 0 and q[0] == 0 and q[1] == 0 and q[2] < 0)):
-    #     q[0] *= -1.0
-    #     q[1] *= -1.0
-    #     q[2] *= -1.0
-    #     q[3] *= -1.0
+    magnitude = np.linalg.norm(q)
+    q /= magnitude
+    if ((q[3] < -0.01)
+        or (q[3] == 0 and q[0] < 0)
+        or (q[3] == 0 and q[0] == 0 and q[1] < 0)
+        or (q[3] == 0 and q[0] == 0 and q[1] == 0 and q[2] < 0)):
+        q[0] *= -1.0
+        q[1] *= -1.0
+        q[2] *= -1.0
+        q[3] *= -1.0
     pos = trans[:3, 3].reshape(-1, 1)
     return np.vstack((pos, q))

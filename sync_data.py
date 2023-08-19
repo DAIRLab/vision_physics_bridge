@@ -26,6 +26,7 @@ class Synchronizer:
         self.frame = 0
         self.bundletrack_time = []
         self.gt_time = []
+        self.tagslam_poses = []
         self.ts.registerCallback(self.callback)
         rospy.spin()
 
@@ -33,9 +34,8 @@ class Synchronizer:
         if self.start_time <= depth_msg.header.stamp < self.end_time:
             self.frame += 1
             print(self.frame)
-            # print(f"odom_msg.header.time {odom_msg.header.stamp}")
             position = odom_msg.pose.pose.position
-            Q = np.zeros((7, 1))
+            Q = np.zeros((7,))
             Q[0] = position.x
             Q[1] = position.y
             Q[2] = position.z
@@ -43,21 +43,20 @@ class Synchronizer:
             Q[4] = odom_msg.pose.pose.orientation.y
             Q[5] = odom_msg.pose.pose.orientation.z
             Q[6] = odom_msg.pose.pose.orientation.w
+            self.tagslam_poses.append(Q)
+            btime = depth_msg.header.stamp.secs + depth_msg.header.stamp.nsecs * 1e-9
+            gtime = odom_msg.header.stamp.secs + odom_msg.header.stamp.nsecs * 1e-9
+            self.bundletrack_time.append(btime)
+            self.gt_time.append(gtime)
+        if self.frame == self.data_length:
             if self.save:
-                np.savetxt(self.tagslam_dir + "%04i.txt" % self.frame, Q)
-            # if self.frame == self.start_frame:
-            #     print("Saving!!!!!")
-            #     quat = Q[3:].reshape(-1,)
-            #     rotation_matrix = R.from_quat(quat).as_matrix()
-            #     translation = np.array([[position.x], [position.y], [position.z]])
-            #     result = np.vstack(
-            #         (np.hstack((rotation_matrix, translation)), np.array([0, 0, 0, 1]))
-            #     )
-            #     result = world_to_camera(result, cam_trans, cam_axis_vec)
-            #     np.savetxt('/home/cnets-vision/mengti_ws/robot_filter/' + "%04i.txt" % 0, result)
-            self.bundletrack_time.append(depth_msg.header.stamp)
-            self.gt_time.append(odom_msg.header.stamp)
-        if self.frame == self.data_length:  # TODO
+                self.bundletrack_time = np.expand_dims(self.bundletrack_time,axis=0)
+                self.gt_time = np.expand_dims(self.gt_time,axis=0)
+                self.tagslam_poses = np.array(self.tagslam_poses).T
+                data = np.concatenate((self.bundletrack_time, self.gt_time, self.tagslam_poses), axis=0)
+                data = data.T #N, 9
+                np.savetxt(self.tagslam_dir + 'tagslam.txt', data)
+                print(self.tagslam_dir + 'tagslam.txt saved!')
             rospy.signal_shutdown("Shutting down the node")
 
 

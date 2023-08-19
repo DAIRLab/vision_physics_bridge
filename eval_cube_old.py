@@ -1,3 +1,4 @@
+import argparse
 import os
 from file_utils import load_toss_time_from_yaml
 import rospy
@@ -16,26 +17,6 @@ from math_utils import (
 )
 from sync_data import Synchronizer
 import yaml
-
-toss_id = 1
-GT_POSE_DIR = (
-    f"/home/cnets-vision/mengti_ws/robot_filter/dataset/old_toss_{toss_id}/tagslam_poses/"
-)
-OUTPUT_POSE_DIR = f"/home/cnets-vision/mengti_ws/BundleSDF/results/old_toss_{toss_id}/ob_in_cam/"
-# OUTPUT_POSE_DIR = f"/home/cnets-vision/mengti_ws/BundleSDF/results/ob_in_cam_projected_icp_transformed/"
-ODOM_FILE_PATH = f"/home/cnets-vision/mengti_ws/BundleSDF/data/old_toss_{toss_id}/annotated_poses/"
-FIG_NAME = f"result_poses_bundlesdf_{toss_id}.png"
-CAMERA_EXTRINSICS_FILE = "./assets/realsense_pose_cube_old.yaml"
-
-cam = 'cam0' # realsense camera name
-with open(CAMERA_EXTRINSICS_FILE, 'r') as stream:
-    data_loaded = yaml.safe_load(stream)
-print(data_loaded[cam]['pose']['position'])
-
-cam_pos_dict = data_loaded[cam]['pose']['position']
-cam_trans = np.array([cam_pos_dict['x'], cam_pos_dict['y'], cam_pos_dict['z']]).reshape(-1, 1)
-cam_rot_dict = data_loaded[cam]['pose']['rotation']
-cam_axis_vec = np.array([cam_rot_dict['x'], cam_rot_dict['y'], cam_rot_dict['z']])
 
 def get_cosine_sim(frame_id):
     """Compare the output of BundleTrack with the ground-truth poses of tagslam."""
@@ -77,7 +58,7 @@ def calculate_success_rate(
     success_rate = (success_count / num_frames) * 100
     return success_rate
 
-def plot_with_time(bundletrack_time, gt_time, bundletrack_pose_dir, gt_pose_dir):
+def plot_with_time(bundletrack_time, gt_time, bundletrack_pose_dir, gt_poses):
     """Plot the x, y, z of BundleTrack output versus ground-truth poses of tagslam."""
     bundletrack_time = np.array(bundletrack_time)
     output_x, output_y, output_z = [], [], []  # translation
@@ -125,9 +106,9 @@ def plot_with_time(bundletrack_time, gt_time, bundletrack_pose_dir, gt_pose_dir)
         # estimate_w_world_quat_list.append(w_test)
         ################################################
 
-    for frame_id in range(1, frame_num + 1):
+    for frame_id in range(frame_num):
         gt_frame = frame_id
-        gt_pose = np.loadtxt(gt_pose_dir + "%04i.txt" % gt_frame)
+        gt_pose = gt_poses[gt_frame]
         gt_x.append(gt_pose[0])
         gt_y.append(gt_pose[1])
         gt_z.append(gt_pose[2])
@@ -253,10 +234,37 @@ def plot_with_time(bundletrack_time, gt_time, bundletrack_pose_dir, gt_pose_dir)
 
 
 if __name__ == "__main__":
+    parser = argparse.ArgumentParser()
+    parser.add_argument(
+        "--toss_id",
+        type=int,
+        required=True,
+    )
+    args = parser.parse_args()
+    toss_id = args.toss_id
+    print(f'Processing toss {toss_id}')
     depth_bag_file = "./rosbags/raw_10.bag"
     odom_bag_file = "./rosbags/odom_10.bag"
     DEPTH_ROS_TOPIC = "/camera/aligned_depth_to_color/image_raw"
     ODOM_ROS_TOPIC = "/tagslam/odom/body_cube"
+    GT_POSE_DIR = (
+        f"/home/cnets-vision/mengti_ws/robot_filter/dataset/old_toss_{toss_id}/tagslam_poses/"
+    )
+    OUTPUT_POSE_DIR = f"/home/cnets-vision/mengti_ws/BundleSDF/results/old_toss_{toss_id}/ob_in_cam/"
+    # OUTPUT_POSE_DIR = f"/home/cnets-vision/mengti_ws/BundleSDF/results/ob_in_cam_projected_icp_transformed/"
+    ODOM_FILE_PATH = f"/home/cnets-vision/mengti_ws/BundleSDF/data/old_toss_{toss_id}/annotated_poses/"
+    FIG_NAME = f"result_poses_bundlesdf_{toss_id}.png"
+    CAMERA_EXTRINSICS_FILE = "./assets/realsense_pose_cube_old.yaml"
+
+    cam = 'cam0' # realsense camera name
+    with open(CAMERA_EXTRINSICS_FILE, 'r') as stream:
+        data_loaded = yaml.safe_load(stream)
+    print(data_loaded[cam]['pose']['position'])
+    cam_pos_dict = data_loaded[cam]['pose']['position']
+    cam_trans = np.array([cam_pos_dict['x'], cam_pos_dict['y'], cam_pos_dict['z']]).reshape(-1, 1)
+    cam_rot_dict = data_loaded[cam]['pose']['rotation']
+    cam_axis_vec = np.array([cam_rot_dict['x'], cam_rot_dict['y'], cam_rot_dict['z']])
+
     start_time = None
     end_time = None
     yaml_path = './assets/config.yaml'
@@ -265,9 +273,10 @@ if __name__ == "__main__":
     end_time = load_toss_time_from_yaml(yaml_path, toss_type, toss_id, 'end_time')
     frame_num = len([name for name in os.listdir(OUTPUT_POSE_DIR)])
     print(f"there are {frame_num} frames")
-    sync = Synchronizer(GT_POSE_DIR, frame_num, start_time, end_time, save=True)
-    bundletrack_time, gt_time = sync.bundletrack_time, sync.gt_time
-    print(len(bundletrack_time), len(gt_time))
-    bundletrack_time = [t.to_sec() for t in bundletrack_time]
-    gt_time = [t.to_sec() for t in gt_time]
-    plot_with_time(bundletrack_time, gt_time, OUTPUT_POSE_DIR, GT_POSE_DIR)
+    
+    data = np.loadtxt(GT_POSE_DIR+'tagslam.txt')
+    print('data', data.shape)
+    bundletrack_time, gt_time = data[:, 0], data[:, 1] #N,
+    tagslam_poses = data[:, 2:] #N,7
+    print(bundletrack_time.shape, gt_time.shape, tagslam_poses.shape)
+    plot_with_time(bundletrack_time, gt_time, OUTPUT_POSE_DIR, tagslam_poses)

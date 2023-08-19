@@ -12,6 +12,7 @@ from file_utils import (
     load_toss_time_from_yaml,
     write_real_depth_as_txt,
 )
+from math_utils import pos_quat_to_trans_mat, world_to_camera
 from pydrake.all import StartMeshcat
 from rosbag_processor import (
     bag_to_depth_images,
@@ -22,6 +23,7 @@ from rosbag_processor import (
     extract_gt_poses_from_tagslam_with_missing_frames,
 )
 import rospy
+from sync_data import Synchronizer
 from urdf_filter import dilate, run_urdf_filter
 import os, os.path
 import yaml
@@ -134,16 +136,6 @@ if __name__ == "__main__":
     translation = args.translation
     axis_vec = args.axis_vec
 
-    extract_cube_pose(
-        start_time,
-        end_time,
-        ROSBAG_NAME,
-        ODOM_ROSBAG_NAME,
-        ODOM_ROS_TOPIC,
-        ANNOTATED_POSES_DIR,
-        translation,
-        axis_vec,
-    )  # Get the cube pose for the first frame
     bag_to_depth_images(
         ROSBAG_NAME,
         DEPTH_ROS_TOPIC,
@@ -165,7 +157,7 @@ if __name__ == "__main__":
         end_time,
         bundletrack_rgb_dir=BUNDLETRACK_RGB,
     )
-    frame_num = len([name for name in os.listdir(RGB_DATA_DIR)])
+    frame_num = len([name for name in os.listdir(BUNDLETRACK_RGB)])
     print("There are %i frames in total!" % frame_num)
     positions = import_data(POSITION_FILE_PATH)
     write_real_depth_as_txt(
@@ -213,3 +205,12 @@ if __name__ == "__main__":
         )
         create_annotated_poses(output_dir=ANNOTATED_POSES_DIR, frame_id=frame_id)
     check_empty_img(DENOISE_MASK_DIR)
+    # do this only once
+    sync = Synchronizer(TAGSLAM_POSES_DIR, frame_num, start_time, end_time, save=True)
+    data = np.loadtxt(TAGSLAM_POSES_DIR+'tagslam.txt')
+    init_pose = data[0, 2:]
+    init_pose_mat = pos_quat_to_trans_mat(init_pose.T)
+    init_pose_mat_cam = world_to_camera(init_pose_mat, cam_trans, cam_axis_vec)
+    np.savetxt(
+        os.path.join(ANNOTATED_POSES_DIR, "%04i.txt" % 0), init_pose_mat_cam
+    )  # save init cube pose in camera frame
