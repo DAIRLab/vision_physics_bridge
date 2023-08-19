@@ -161,8 +161,10 @@ class DatasetManagement:
         dp_t = dp_t.T
         w_t = w_t.T
         data = data.T
-        print('data: ', data.shape)
+        print('data: ', data.shape) #N,13
         print(p_t.shape, quat_shuffle.shape, dp_t.shape, w_t.shape)
+        torch.save(torch.tensor(data), CONTACTNETS_INPUT_DIR + "{}.pt".format(self.toss_id))
+        print(f'file {self.toss_id}.pt saved at {CONTACTNETS_INPUT_DIR + "{}.pt".format(self.toss_id)}')
         fig, ax = plt.subplots(4, 3, figsize=(15, 15))
         ax[0, 0].plot(p_t[:, 0])
         ax[0, 0].set_title('X Position')
@@ -193,8 +195,8 @@ class DatasetManagement:
         ax[3, 2].set_title('Linear Velocity Y')
         plt.tight_layout()
         fig.suptitle('Generated from BundleSDF result')
-        plt.savefig(f'sophter.png')
-        print(f'Saved fig sophter.png')
+        plt.savefig(f'sophter_{toss_id}.png')
+        print(f'Saved fig sophter_{toss_id}.png')
         plt.show()
         
     def transform(self):
@@ -414,12 +416,14 @@ def visualize_trajectory(file_path, fig_name):
 if __name__ == "__main__":
     # toss_id = 10
     # my_traj = f'/home/cnets-vision/mengti_ws/dair_pll_latest/assets/bundlesdf_cube/{toss_id}.pt'
-    # sample_traj = '/home/cnets-vision/mengti_ws/dair_pll_latest/assets/contactnets_cube/200.pt'
+    # sample_traj = '/home/cnets-vision/mengti_ws/dair_pll_latest/assets/contactnets_cube/200.pt' #N,13
     # traj = torch.load(sample_traj)
     # print(traj.size())
     # visualize_trajectory(my_traj, f'bundlesdf_cube_traj_{toss_id}.png')
     # visualize_trajectory(sample_traj, 'sample_traj.png')
-    toss_id = 1
+    
+    
+    toss_id = 10
     toss_type = 'cube'
     filename = f'old_toss_{toss_id}'
     rosbag = './rosbags/raw_10.bag'
@@ -431,7 +435,7 @@ if __name__ == "__main__":
     CAMERA_EXTRINSICS_FILE = './assets/realsense_pose_cube_old.yaml'
     # CAMERA_EXTRINSICS_FILE = './assets/realsense_pose_bottle.yaml'
     BUNDLESDF_POSE_DIR = "/home/cnets-vision/mengti_ws/BundleSDF/results/"+filename+"/ob_in_cam/"
-    CONTACTNETS_INPUT_DIR = f"/home/cnets-vision/mengti_ws/dair_pll_latest/assets/bundlesdf_test/"
+    CONTACTNETS_INPUT_DIR = f"/home/cnets-vision/mengti_ws/dair_pll_latest/assets/bundlesdf_do_process/"
     ODOM_FILE_PATH = "/home/cnets-vision/mengti_ws/BundleSDF/data/"+filename+"/annotated_poses/"
     GT_POSE_DIR = "/home/cnets-vision/mengti_ws/robot_filter/dataset/"+filename+"/tagslam_poses/"
     frame_num = len([name for name in os.listdir(BUNDLESDF_POSE_DIR)])

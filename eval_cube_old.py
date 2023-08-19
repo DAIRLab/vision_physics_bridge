@@ -21,10 +21,10 @@ toss_id = 1
 GT_POSE_DIR = (
     f"/home/cnets-vision/mengti_ws/robot_filter/dataset/old_toss_{toss_id}/tagslam_poses/"
 )
-# OUTPUT_POSE_DIR = f"/home/cnets-vision/mengti_ws/BundleSDF/results/old_toss_{toss_id}/ob_in_cam/"
-OUTPUT_POSE_DIR = f"/home/cnets-vision/mengti_ws/BundleSDF/results/ob_in_cam_projected_icp_transformed/"
+OUTPUT_POSE_DIR = f"/home/cnets-vision/mengti_ws/BundleSDF/results/old_toss_{toss_id}/ob_in_cam/"
+# OUTPUT_POSE_DIR = f"/home/cnets-vision/mengti_ws/BundleSDF/results/ob_in_cam_projected_icp_transformed/"
 ODOM_FILE_PATH = f"/home/cnets-vision/mengti_ws/BundleSDF/data/old_toss_{toss_id}/annotated_poses/"
-FIG_NAME = f"result_poses_bundlesdf_{toss_id}_icp_transformed.png"
+FIG_NAME = f"result_poses_bundlesdf_{toss_id}.png"
 CAMERA_EXTRINSICS_FILE = "./assets/realsense_pose_cube_old.yaml"
 
 cam = 'cam0' # realsense camera name
@@ -86,14 +86,6 @@ def plot_with_time(bundletrack_time, gt_time, bundletrack_pose_dir, gt_pose_dir)
     ground_truth_w, ground_truth_x, ground_truth_y, ground_truth_z = [], [], [], []
     frame_num = len(bundletrack_time)
     estimated_poses, ground_truth_poses = [], []
-    
-    
-    ########## For Test ###########
-    # estimated_x_world_pose, estimated_y_world_pose, estimated_z_world_pose = [], [], []
-    # estimate_x_world_quat_list, estimate_y_world_quat_list, estimate_z_world_quat_list, estimate_w_world_quat_list = [], [], [], []
-    # gt_x_world_pose, gt_y_world_pose, gt_z_world_pose = [], [], []
-    # gt_x_world_test_list, gt_y_world_test_list, gt_z_world_test_list, gt_w_world_test_list = [], [], [], []
-    ###############################
     for frame_id in range(1, frame_num + 1):
         output_pose = np.loadtxt(bundletrack_pose_dir + "%04i.txt" % frame_id)
         output_pose = transform_bundletrack_output(
@@ -133,7 +125,7 @@ def plot_with_time(bundletrack_time, gt_time, bundletrack_pose_dir, gt_pose_dir)
         # estimate_w_world_quat_list.append(w_test)
         ################################################
 
-    for frame_id in range(1, len(gt_time) + 1):
+    for frame_id in range(1, frame_num + 1):
         gt_frame = frame_id
         gt_pose = np.loadtxt(gt_pose_dir + "%04i.txt" % gt_frame)
         gt_x.append(gt_pose[0])
@@ -154,8 +146,8 @@ def plot_with_time(bundletrack_time, gt_time, bundletrack_pose_dir, gt_pose_dir)
         # gt_pose_trans = pos_quat_to_trans_mat(gt_pose)
         # gt_pose_trans_cam = world_to_camera(
         #     gt_pose_trans,
-        #     CAMERA_CONFIG["old"]["translation"],
-        #     CAMERA_CONFIG["old"]["axis_vec"],
+        #     cam_trans,
+        #     cam_axis_vec,
         # )
         # gt_pos_quat_cam = trans_mat_to_pos_quat(gt_pose_trans_cam)
         # gt_x.append(gt_pos_quat_cam[0])
@@ -256,6 +248,7 @@ def plot_with_time(bundletrack_time, gt_time, bundletrack_pose_dir, gt_pose_dir)
     fig.subplots_adjust(hspace=0.5)
     fig.subplots_adjust(bottom=spacing)
     plt.savefig(FIG_NAME)
+    print(f'Figure saved to {FIG_NAME}')
     plt.show()
 
 

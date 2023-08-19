@@ -121,18 +121,6 @@ def camera_to_world(m, translation, axis_vec):
     return np.linalg.inv(extrinsic) @ m
 
 
-CAMERA_CONFIG = {
-    "old": {
-        "translation": np.array([[1.14164360], [0.15815239], [0.66422200]]),
-        "axis_vec": np.array([-1.57165949, -1.63112887, 1.07928078]),
-    },
-    "new": {
-        "translation": np.array([[1.11076422], [-0.07966290], [0.67947702]]),
-        "axis_vec": np.array([-1.61997882, -1.56988553, 0.86362178]),
-    },
-}
-
-
 def transform_bundletrack_output(
     pred_pose, output_pose_dir, odom_file_dir, translation, axis_vec, to_world=False
 ):
@@ -192,15 +180,15 @@ def pos_quat_to_trans_mat(pos_quat):
 
 def trans_mat_to_pos_quat(trans):
     q = R.from_matrix(trans[:3, :3]).as_quat().reshape(-1, 1)
-    magnitude = np.linalg.norm(q)
-    q /= magnitude
-    if ((q[3] < -0.02)
-        or (q[3] == 0 and q[0] < 0)
-        or (q[3] == 0 and q[0] == 0 and q[1] < 0)
-        or (q[3] == 0 and q[0] == 0 and q[1] == 0 and q[2] < 0)):
-        q[0] *= -1.0
-        q[1] *= -1.0
-        q[2] *= -1.0
-        q[3] *= -1.0
+    # magnitude = np.linalg.norm(q)
+    # q /= magnitude
+    # if ((q[3] < -0.01)
+    #     or (q[3] == 0 and q[0] < 0)
+    #     or (q[3] == 0 and q[0] == 0 and q[1] < 0)
+    #     or (q[3] == 0 and q[0] == 0 and q[1] == 0 and q[2] < 0)):
+    #     q[0] *= -1.0
+    #     q[1] *= -1.0
+    #     q[2] *= -1.0
+    #     q[3] *= -1.0
     pos = trans[:3, 3].reshape(-1, 1)
     return np.vstack((pos, q))

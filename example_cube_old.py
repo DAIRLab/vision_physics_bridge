@@ -28,7 +28,7 @@ import yaml
 
 """Process the cube data.
 """
-TOSS_ID = 8
+TOSS_ID = 1
 ROSBAG_NAME = "./rosbags/raw_10.bag"
 ODOM_ROSBAG_NAME = "./rosbags/odom_10.bag"
 DEPTH_ROS_TOPIC = "/camera/aligned_depth_to_color/image_raw"
