@@ -1,3 +1,4 @@
+import argparse
 import os
 import numpy as np
 from file_utils import load_field_from_yaml, load_toss_time_from_yaml
@@ -72,12 +73,12 @@ class DatasetManagement:
             if frame_id >= self.end_frame:
                 break
             if frame_id == self.start_frame:
-                t_start = self.timestamps[frame_id].secs + self.timestamps[frame_id].nsecs * 1e-9
+                t_start = self.timestamps[frame_id]
             pose = np.loadtxt(BUNDLESDF_POSE_DIR + "%04i.txt" % frame_id)
             pose = transform_bundletrack_output(pose, BUNDLESDF_POSE_DIR, ODOM_FILE_PATH, self.cam_trans, self.cam_axis_vec, to_world=True)
             q_t.append(R.from_matrix(pose[:3, :3]).as_quat()) #x,y,z,w
             p_t.append(pose[:3, 3])
-            curr_t = self.timestamps[frame_id].secs + self.timestamps[frame_id].nsecs * 1e-9
+            curr_t = self.timestamps[frame_id]
             t.append(curr_t - t_start)
         self.q_t = np.array(q_t).T
         self.p_t = np.array(p_t).T
@@ -422,8 +423,15 @@ if __name__ == "__main__":
     # visualize_trajectory(my_traj, f'bundlesdf_cube_traj_{toss_id}.png')
     # visualize_trajectory(sample_traj, 'sample_traj.png')
     
-    
-    toss_id = 10
+    parser = argparse.ArgumentParser()
+    parser.add_argument(
+        "--toss_id",
+        type=int,
+        required=True,
+    )
+    args = parser.parse_args()
+    toss_id = args.toss_id
+    print(f'Processing toss {toss_id}')
     toss_type = 'cube'
     filename = f'old_toss_{toss_id}'
     rosbag = './rosbags/raw_10.bag'
@@ -435,7 +443,7 @@ if __name__ == "__main__":
     CAMERA_EXTRINSICS_FILE = './assets/realsense_pose_cube_old.yaml'
     # CAMERA_EXTRINSICS_FILE = './assets/realsense_pose_bottle.yaml'
     BUNDLESDF_POSE_DIR = "/home/cnets-vision/mengti_ws/BundleSDF/results/"+filename+"/ob_in_cam/"
-    CONTACTNETS_INPUT_DIR = f"/home/cnets-vision/mengti_ws/dair_pll_latest/assets/bundlesdf_do_process/"
+    CONTACTNETS_INPUT_DIR = f"/home/cnets-vision/mengti_ws/dair_pll_latest/assets/bundlesdf_cube_ours/"
     ODOM_FILE_PATH = "/home/cnets-vision/mengti_ws/BundleSDF/data/"+filename+"/annotated_poses/"
     GT_POSE_DIR = "/home/cnets-vision/mengti_ws/robot_filter/dataset/"+filename+"/tagslam_poses/"
     frame_num = len([name for name in os.listdir(BUNDLESDF_POSE_DIR)])
@@ -452,10 +460,15 @@ if __name__ == "__main__":
     end_time = load_toss_time_from_yaml(yaml_path, toss_type, toss_id, 'end_time')
     start_frame = load_field_from_yaml(yaml_path, toss_type, toss_id, 'start_frame')
     end_frame = load_field_from_yaml(yaml_path, toss_type, toss_id, 'end_frame')
-    sync = Synchronizer(GT_POSE_DIR, frame_num, start_time, end_time, save=False)
-    bundletrack_time, gt_time = sync.bundletrack_time, sync.gt_time
-    print(len(bundletrack_time), len(gt_time))
+    # sync = Synchronizer(GT_POSE_DIR, frame_num, start_time, end_time, save=False)
+    # bundletrack_time, gt_time = sync.bundletrack_time, sync.gt_time
+    # print(len(bundletrack_time), len(gt_time))
+    
     # bundletrack_time = extract_timestamps(rosbag, ros_topic, start_time, end_time)
+    
+    data = np.loadtxt(GT_POSE_DIR+'tagslam.txt')
+    print('data loaded', data.shape)
+    bundletrack_time, gt_time = data[:, 0], data[:, 1] #N,
     dataset = DatasetManagement(frame_num, start_frame, end_frame, bundletrack_time, toss_id, cam_trans, cam_axis_vec, plot=True)
     # dataset.transform()
     dataset.do_process()
