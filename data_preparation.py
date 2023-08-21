@@ -10,7 +10,8 @@ import torch
 from sync_data import Synchronizer
 from scipy.spatial.transform import Rotation as R, RotationSpline
 from scipy import signal
-from scipy.interpolate import CubicSpline
+from scipy.interpolate import CubicSpline, interp1d
+from pyquaternion import Quaternion
 
 import matplotlib.pyplot as plt
 import yaml
@@ -54,16 +55,6 @@ class DatasetManagement:
         self.load_poses()
         
     def load_poses(self):
-        # rot_t = []
-        # p_t = []
-        # for frame_id in range(1, self.frame_num+1):
-        #     pose = np.loadtxt(BUNDLESDF_POSE_DIR + "%04i.txt" % frame_id)
-        #     pose = transform_bundletrack_output(pose, BUNDLESDF_POSE_DIR, ODOM_FILE_PATH, self.cam_trans, self.cam_axis_vec, to_world=True)
-        #     rot_t.append(pose[:3, :3])
-        #     p_t.append(pose[:3, 3])
-        # self.rot_t = np.array(rot_t)
-        # self.p_t = np.array(p_t)
-        ############################
         p_t = []
         q_t = []
         t = []
@@ -80,26 +71,86 @@ class DatasetManagement:
             p_t.append(pose[:3, 3])
             curr_t = self.timestamps[frame_id]
             t.append(curr_t - t_start)
-        self.q_t = np.array(q_t).T
-        self.p_t = np.array(p_t).T
-        self.t = np.array(t).T
-        print(f'load_poses: q_t {self.q_t.shape}, p_t: {self.p_t.shape}, t: {self.t.shape}')
+        quats = np.array(q_t)
+        positions = np.array(p_t)
+        ts = np.array(t)
+        print(f'quats: {quats.shape}, positions: {positions.shape}, ts: {ts.shape}')
+        self.q_t = quats.T
+        self.p_t = positions.T
+        self.t = ts.T
+        print(f'load_poses: self.q_t {self.q_t.shape}, self.p_t: {self.p_t.shape}, self.t: {self.t.shape}')
+    
+    def upsample(self, quats, positions, ts):
+        quats = quats / np.linalg.norm(quats, axis=1)[:, np.newaxis]
+        # upsample the trajectory
+        N = quats.shape[0]
+        for i in range(1, N):
+            if np.dot(quats[0], quats[i]) < 0:
+                quats[i] = -quats[i]
+
+        # Upsample factor
+        M = 100
+        new_times = np.linspace(0, 1, M)
+
+        # Interpolate positions using linear interpolation
+        interp_func_x = interp1d(np.linspace(0, 1, N), positions[:, 0], kind='linear')
+        interp_func_y = interp1d(np.linspace(0, 1, N), positions[:, 1], kind='linear')
+        interp_func_z = interp1d(np.linspace(0, 1, N), positions[:, 2], kind='linear')
+
+        new_positions = np.vstack([
+            interp_func_x(new_times),
+            interp_func_y(new_times),
+            interp_func_z(new_times)
+        ]).T
+
+        new_quaternions = np.zeros((M, 4))
+        for i in range(N-1):  # Adjusted loop condition
+            start_idx = i * (M // (N-1))
+            end_idx = start_idx + (M // (N-1))
+            t_array = np.linspace(0, 1, M//(N-1))
+            q0 = Quaternion(quats[i, :])
+            q1 = Quaternion(quats[i+1, :]) if i < N-2 else Quaternion(quats[-1, :])
+            interpolated_quats = [Quaternion.slerp(q0, q1, amount=t).elements for t in t_array]
+            new_quaternions[start_idx:end_idx, :] = np.array(interpolated_quats)
+        if end_idx < M:
+            new_quaternions[end_idx:] = quats[-1]
         
+        interp_func_timestamps = interp1d(np.linspace(0, 1, N), ts, kind='linear')
+        new_timestamps = interp_func_timestamps(new_times)
+        return new_quaternions.T, new_positions.T, new_timestamps.T
+            
     def do_process(self):
         """
-        Reference:
-            https://github.com/DAIRLab/SoPhTER/blob/master/contactnets/utils/processing/process_dynamics.py
+        Generate contactnets trajectory.
+        The PLL format is in:
+	    [ quaternion  position  angular_velocity  linear_velocity ]
+        where:
+            - position:  		[x, y, z] in meters
+            - quaternion: 		[qw, qx, qy, qz]
+            - linear_velocity: 	[vx, vy, vz] in meters/second
+            - angular_velocity:	[wx, wy, wz] in rad/second in body frame
         """
         rot_t = R.from_quat(self.q_t.T)
         if True:
             rvecs = rotvecfix(rot_t.as_rotvec()).T
-
             for i in range(3):
                 rvecs[i,:] = signal.medfilt(rvecs[i,:],kernel_size=3)
         rot_t = rot_t.from_rotvec(rvecs.T)
         quat_t = rot_t.as_quat().T  #x,y,z,w
+        print('before upsampling >>>>>>>>>')
         print(f'quat_t: {quat_t.shape}') #4,N
-        print('self.p_t', self.p_t.shape) # 3,N
+        print(f'self.p_t: {self.p_t.shape}') # 3,N
+        print(f'self.t: {self.t.shape}') #N,
+        ##### Upsample
+        # quat_t = quat_t.T
+        # self.q_t, self.p_t, self.t = self.upsample(quat_t, self.p_t.T, self.t)
+        # rot_t = R.from_quat(self.q_t.T)
+        # quat_t = rot_t.as_quat().T
+        # print('After upsampling >>>>>>>>>')
+        # print(f'quat_t: {quat_t.shape}') #4,M
+        # print(f'self.p_t: {self.p_t.shape}') # 3,M
+        # print(f'self.t: {self.t.shape}') #M,
+        #####
         pdiff = self.p_t[:,1:] - self.p_t[:,:-1]
         tdiff = np.tile((self.t[1:] - self.t[:-1]).reshape([1,-1]), [3,1])
         dp_t = pdiff / tdiff
@@ -129,7 +180,8 @@ class DatasetManagement:
             w_w = np.clip((fc_w / (fs / 2)), a_min = 0.000001, a_max = 0.999999) # Normalize the frequency
             b, a = signal.butter(1, w_w, 'low')
             for i in range(3):
-                w_t[i,:] = signal.medfilt(w_t[i,:],kernel_size=3)
+                # w_t[i,:] = signal.medfilt(w_t[i,:],kernel_size=3)
+                w_t[i,:] = signal.savgol_filter(w_t[i,:], window_length=15, polyorder=4)
         filter_vel = True
         if filter_vel:
             # filter linear velocity
@@ -137,7 +189,8 @@ class DatasetManagement:
             b, a = signal.butter(1, w_v, 'low')
             for i in range(3):
                 #dp_t[i,:] = signal.filtfilt(b, a, dp_t[i,:],padtype='odd',padlen=100)
-                dp_t[i,:] = signal.medfilt(dp_t[i,:],kernel_size=3)
+                # dp_t[i,:] = signal.medfilt(dp_t[i,:],kernel_size=3)
+                dp_t[i,:] = signal.savgol_filter(dp_t[i,:], window_length=10, polyorder=4)
 
         if True:
             # delta v = v' - v
@@ -156,7 +209,8 @@ class DatasetManagement:
                 #ddp_t[i,:] = signal.filtfilt(b, a, ddp_t[i,:],padtype='odd',padlen=100)
         
         quat_shuffle = np.concatenate((quat_t[3:4, :], quat_t[0:3, :]), axis=0) #w,x,y,z
-        data = np.concatenate((self.p_t, quat_shuffle, dp_t, w_t), axis=0)
+        # data = np.concatenate((self.p_t, quat_shuffle, dp_t, w_t), axis=0)
+        data = np.concatenate((quat_shuffle, self.p_t, w_t, dp_t), axis=0)
         p_t = self.p_t.T
         quat_shuffle = quat_shuffle.T
         dp_t = dp_t.T
@@ -196,8 +250,8 @@ class DatasetManagement:
         ax[3, 2].set_title('Linear Velocity Y')
         plt.tight_layout()
         fig.suptitle('Generated from BundleSDF result')
-        plt.savefig(f'sophter_{toss_id}.png')
-        print(f'Saved fig sophter_{toss_id}.png')
+        plt.savefig(f'bundlesdf_{toss_type}_traj_{toss_id}.png')
+        print(f'Saved fig bundlesdf_{toss_type}_traj_{toss_id}.png')
         plt.show()
         
     def transform(self):
@@ -223,20 +277,10 @@ class DatasetManagement:
                 continue
             if frame_id >= self.end_frame:
                 break
-            # pose = np.loadtxt(BUNDLESDF_POSE_DIR + "%04i.txt" % frame_id)
-            # pose_ = np.loadtxt(BUNDLESDF_POSE_DIR + "%04i.txt" % (frame_id+1))
-            # pose = transform_bundletrack_output(pose, BUNDLESDF_POSE_DIR, ODOM_FILE_PATH, self.cam_trans, self.cam_axis_vec, to_world=True)
-            # pose_ = transform_bundletrack_output(pose_, BUNDLESDF_POSE_DIR, ODOM_FILE_PATH, self.cam_trans, self.cam_axis_vec, to_world=True)
-            # rotation = pose[:3, :3]
-            # rotation_ = pose_[:3, :3]
-            # translation = pose[:3, 3]
-            # translation_ = pose_[:3, 3]
-            ###############
             rotation = rot_t[frame_id]
             rotation_ = rot_t[frame_id+1]
             translation = self.p_t[frame_id]
             translation_ = self.p_t[frame_id+1]
-            ###############
             q = R.from_matrix(rotation).as_quat()
             q_shuffle = np.concatenate((q[3:4], q[0:3]), axis=0)
             dt = self.timestamps[frame_id+1].to_sec() - self.timestamps[frame_id].to_sec()
@@ -361,19 +405,19 @@ class DatasetManagement:
 
         plt.tight_layout()
         fig.suptitle('Generated from BundleSDF result')
-        plt.savefig(f'bundlesdf_{toss_type}_traj_{toss_id}_test.png')
-        print(f'Saved fig bundlesdf_{toss_type}_traj_{toss_id}_test.png')
+        plt.savefig(f'bundlesdf_{toss_type}_traj_{toss_id}.png')
+        print(f'Saved fig bundlesdf_{toss_type}_traj_{toss_id}.png')
         plt.show()
 
 #################### Plotting contactnets sample traj #################
 def visualize_trajectory(file_path, fig_name):
-    data = torch.load(file_path)
-    # Assuming the data tensor has the format [N, 13]
-    positions = data[:, 4:7].numpy()
-    quats = data[:, 0:4].numpy()
-    angular_vels = data[:, 7:10].numpy()
-    linear_vels = data[:, 10:13].numpy()
-
+    data = torch.load(file_path)   #p_t, quat_shuffle, dp_t, w_t
+    print(data.shape) #N,13
+    positions = data[:, :3].numpy() #N,3
+    quats = data[:, 3:7].numpy() #N,4
+    linear_vels = data[:, 7:10].numpy() #N,3
+    angular_vels = data[:, 10:].numpy() #N,3
+    print(positions.shape, quats.shape, linear_vels.shape, angular_vels.shape)
     fig, ax = plt.subplots(4, 3, figsize=(15, 15))
 
     # Plot positions
@@ -411,17 +455,18 @@ def visualize_trajectory(file_path, fig_name):
     plt.tight_layout()
     fig.suptitle('ContactNets cube trajectory')
     plt.savefig(fig_name)
+    print(f'Saved to {fig_name}')
     plt.show()
 
 #######################################################################
 if __name__ == "__main__":
-    # toss_id = 10
-    # my_traj = f'/home/cnets-vision/mengti_ws/dair_pll_latest/assets/bundlesdf_cube/{toss_id}.pt'
-    # sample_traj = '/home/cnets-vision/mengti_ws/dair_pll_latest/assets/contactnets_cube/200.pt' #N,13
+    # toss_id = 1
+    # my_traj = f'/home/cnets-vision/mengti_ws/dair_pll_latest/assets/bundlesdf_cube/{toss_id-1}.pt'
+    # visualize_trajectory(my_traj, f'my_traj_{toss_id}.png')
+    # sample_traj = '/home/cnets-vision/mengti_ws/dair_pll_latest/assets/contactnets_cube/5.pt' #N,13
     # traj = torch.load(sample_traj)
     # print(traj.size())
-    # visualize_trajectory(my_traj, f'bundlesdf_cube_traj_{toss_id}.png')
-    # visualize_trajectory(sample_traj, 'sample_traj.png')
+    # visualize_trajectory(sample_traj, 'sample_traj_5.png')
     
     parser = argparse.ArgumentParser()
     parser.add_argument(
@@ -443,7 +488,7 @@ if __name__ == "__main__":
     CAMERA_EXTRINSICS_FILE = './assets/realsense_pose_cube_old.yaml'
     # CAMERA_EXTRINSICS_FILE = './assets/realsense_pose_bottle.yaml'
     BUNDLESDF_POSE_DIR = "/home/cnets-vision/mengti_ws/BundleSDF/results/"+filename+"/ob_in_cam/"
-    CONTACTNETS_INPUT_DIR = f"/home/cnets-vision/mengti_ws/dair_pll_latest/assets/bundlesdf_cube_ours/"
+    CONTACTNETS_INPUT_DIR = f"/home/cnets-vision/mengti_ws/dair_pll_latest/assets/bundlesdf_upsample/"
     ODOM_FILE_PATH = "/home/cnets-vision/mengti_ws/BundleSDF/data/"+filename+"/annotated_poses/"
     GT_POSE_DIR = "/home/cnets-vision/mengti_ws/robot_filter/dataset/"+filename+"/tagslam_poses/"
     frame_num = len([name for name in os.listdir(BUNDLESDF_POSE_DIR)])

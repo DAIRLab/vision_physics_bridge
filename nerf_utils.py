@@ -37,6 +37,7 @@ from file_utils import import_data, filter
 from tqdm import tqdm
 import os
 import yaml
+import argparse
 
 class ObjectPlaybackSim:
     def __init__(
@@ -57,8 +58,8 @@ class ObjectPlaybackSim:
         )
         self.X_model = RigidTransform(pose)
         self.parser = Parser(self.plant)
-        self.model_file = FindResourceOrThrow('drake/../../../../../../../../robot_filter/dataset/old_toss_1_contactnet/urdf/contactnets_cube_mesh_1.urdf')
-        # self.model_file = FindResourceOrThrow("drake/../../../../../../../../dair_pll_latest/assets/contactnets_cube_mesh.urdf")
+        # self.model_file = FindResourceOrThrow('drake/../../../../../../../../robot_filter/dataset/old_toss_{toss_id}_contactnet/urdf/contactnets_cube_mesh_1.urdf')
+        self.model_file = FindResourceOrThrow("drake/../../../../../../../../dair_pll_latest/assets/contactnets_cube_mesh.urdf")
         self.model = self.parser.AddModelFromFile(self.model_file)
 
         self.plant.WeldFrames(
@@ -198,13 +199,20 @@ class ObjectPlaybackSim:
         # plt.show()
     
 if __name__ == "__main__":
-    toss_id = 1
+    parser = argparse.ArgumentParser()
+    parser.add_argument(
+        "--toss_id",
+        type=int,
+        required=True,
+    )
+    args = parser.parse_args()
+    toss_id = args.toss_id
     meshcat = StartMeshcat()
     CAMERA_EXTRINSICS_FILE = "./assets/realsense_pose_cube_old.yaml"
     OUTPUT_POSE_DIR = f"/home/cnets-vision/mengti_ws/BundleSDF/results/old_toss_{toss_id}/ob_in_cam/"
     ODOM_FILE_PATH = f"/home/cnets-vision/mengti_ws/BundleSDF/data/old_toss_{toss_id}/annotated_poses/"
-    NERF_DEPTH_DIR = "./dataset/nerf/old_toss_1_contactnet/depth"
-    NERF_MASK_DIR = "./dataset/nerf/old_toss_1_contactnet/masks"
+    NERF_DEPTH_DIR = f"./dataset/nerf_old_toss_{toss_id}/depth"
+    NERF_MASK_DIR = f"./dataset/nerf_old_toss_{toss_id}/masks"
     cam = 'cam0' # realsense camera name
     with open(CAMERA_EXTRINSICS_FILE, 'r') as stream:
         data_loaded = yaml.safe_load(stream)

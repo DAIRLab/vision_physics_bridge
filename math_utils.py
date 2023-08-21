@@ -192,3 +192,26 @@ def trans_mat_to_pos_quat(trans):
         q[3] *= -1.0
     pos = trans[:3, 3].reshape(-1, 1)
     return np.vstack((pos, q))
+
+def slerp(q0, q1, t_array):
+    """Spherical linear interpolation between two quaternions."""
+    dot = np.dot(q0, q1)
+    
+    # If the dot product is negative, slerp won't take the shorter path.
+    if dot < 0.0:
+        q1 = -q1
+        dot = -dot
+        
+    DOT_THRESHOLD = 0.9995
+    if dot > DOT_THRESHOLD:
+        # If the inputs are too close for comfort, linearly interpolate and normalize the result.
+        result = q0 + t_array[:, np.newaxis] * (q1 - q0)
+        return result / np.linalg.norm(result, axis=1)[:, np.newaxis]
+    
+    # Compute the quaternion of the rotation angle
+    theta_0 = np.arccos(dot)
+    theta = theta_0 * t_array
+    q2 = q1 - q0 * dot
+    q2 /= np.linalg.norm(q2)
+    
+    return np.cos(theta)[:, np.newaxis] * q0 + np.sin(theta)[:, np.newaxis] * q2
