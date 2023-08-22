@@ -6,6 +6,7 @@ import numpy as np
 import scipy.spatial as sp
 import matplotlib.pyplot as plt
 from scipy.spatial.transform import Rotation as R
+import cv2
 
 from math_utils import (
     camera_to_world,
@@ -232,7 +233,46 @@ def plot_with_time(bundletrack_time, gt_time, bundletrack_pose_dir, gt_poses):
     print(f'Figure saved to {FIG_NAME}')
     plt.show()
 
+def draw_coords_to_image():
+    SEGMENT_IMAGE_DIR = f"/home/cnets-vision/mengti_ws/BundleSDF/results/old_toss_{toss_id}/color_segmented/"
+    OUTPUT_SEGMENT_DIR = f"/home/cnets-vision/mengti_ws/BundleSDF/results/old_toss_{toss_id}/color_segmented_coords/"
+    if not os.path.exists:
+        os.mkdir(OUTPUT_SEGMENT_DIR)
+        print(f'Made dir {OUTPUT_SEGMENT_DIR}')
+    axis_length = 50  # change this according to your needs
+    axis_points = np.float32([[0,0,0],
+                            [axis_length,0,0], 
+                            [0,axis_length,0], 
+                            [0,0,axis_length]])
+    intrinsic = np.loadtxt(f"/home/cnets-vision/mengti_ws/BundleSDF/data/old_toss_{toss_id}/cam_K.txt")
+    for frame_id in range(1, frame_num):
+        output_pose = np.loadtxt(OUTPUT_POSE_DIR + "%04i.txt" % frame_id)
+        output_pose = transform_bundletrack_output(
+            output_pose,
+            OUTPUT_POSE_DIR,
+            ODOM_FILE_PATH,
+            cam_trans,
+            cam_axis_vec,
+        ) # camera frame
+        rvec = output_pose[:3, :3]
+        tvec = output_pose[:3, 3]
+        print(rvec.shape, tvec.shape, intrinsic.shape, axis_points.shape)
+        image_points, _ = cv2.projectPoints(axis_points, rvec, tvec, intrinsic, distCoeffs=np.zeros((5,1)))
 
+        f = os.path.join(SEGMENT_IMAGE_DIR, "%04i.png" % frame_id)
+        filename = "%04i.png" % frame_id
+        print(f'file path: {f}')
+        image_with_axes = cv2.imread(f)
+        image_points = image_points.reshape(image_points.shape[0], image_points.shape[-1])
+        image_points = image_points.astype(int)
+        print(tuple(image_points[0].ravel()))
+        print(tuple(image_points[1].ravel()))
+        cv2.line(image_with_axes, tuple(image_points[0].ravel()), tuple(image_points[1].ravel()), (0,0,255), 5)  # X-axis (Red)
+        cv2.line(image_with_axes, tuple(image_points[0].ravel()), tuple(image_points[2].ravel()), (0,255,0), 5)  # Y-axis (Green)
+        cv2.line(image_with_axes, tuple(image_points[0].ravel()), tuple(image_points[3].ravel()), (255,0,0), 5)  # Z-axis (Blue)
+        cv2.imwrite(OUTPUT_SEGMENT_DIR+filename, image_with_axes)
+        print(f'Wrote image {OUTPUT_SEGMENT_DIR+filename}')
+    
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument(
@@ -250,8 +290,9 @@ if __name__ == "__main__":
     GT_POSE_DIR = (
         f"/home/cnets-vision/mengti_ws/robot_filter/dataset/old_toss_{toss_id}/tagslam_poses/"
     )
+    # OUTPUT_POSE_DIR = f"/home/cnets-vision/mengti_ws/BundleSDF/results/old_toss_{toss_id}/ob_in_cam/"
     OUTPUT_POSE_DIR = f"/home/cnets-vision/mengti_ws/BundleSDF/results/old_toss_{toss_id}/ob_in_cam/"
-    # OUTPUT_POSE_DIR = f"/home/cnets-vision/mengti_ws/BundleSDF/results/ob_in_cam_projected_icp_transformed/"
+    # OUTPUT_POSE_DIR = f"/home/cnets-vision/mengti_ws/ob_in_cam_new_params/"
     ODOM_FILE_PATH = f"/home/cnets-vision/mengti_ws/BundleSDF/data/old_toss_{toss_id}/annotated_poses/"
     FIG_NAME = f"result_poses_bundlesdf_{toss_id}.png"
     CAMERA_EXTRINSICS_FILE = "./assets/realsense_pose_cube_old.yaml"
@@ -279,4 +320,5 @@ if __name__ == "__main__":
     bundletrack_time, gt_time = data[:, 0], data[:, 1] #N,
     tagslam_poses = data[:, 2:] #N,7
     print(bundletrack_time.shape, gt_time.shape, tagslam_poses.shape)
-    plot_with_time(bundletrack_time, gt_time, OUTPUT_POSE_DIR, tagslam_poses)
+    # plot_with_time(bundletrack_time, gt_time, OUTPUT_POSE_DIR, tagslam_poses)
+    draw_coords_to_image()

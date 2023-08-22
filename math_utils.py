@@ -215,3 +215,19 @@ def slerp(q0, q1, t_array):
     q2 /= np.linalg.norm(q2)
     
     return np.cos(theta)[:, np.newaxis] * q0 + np.sin(theta)[:, np.newaxis] * q2
+
+def wxyz2xyzw(quat_wxyz):
+    """
+    quat_wxyz: (N,4)
+    """
+    w = quat_wxyz[:, 0:1]
+    xyz = quat_wxyz[:, 1:]
+    return np.concatenate((xyz, w), axis=1)
+
+def xyzw2wxyz(quat_xyzw):
+    """
+    quat_xyzw: (N,4)
+    """
+    xyz = quat_xyzw[:, 0:3]
+    w = quat_xyzw[:, 3:4]
+    return np.concatenate((w, xyz), axis=1)
