@@ -8,3 +8,5 @@
 *.mp4
 *.png
 .vscode
+/ob_in_cams
+/assets

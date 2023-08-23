@@ -81,6 +81,11 @@ def chamfer_distance_between_clouds_mutual(pts1,pts2):
   dists2, indices2 = kdtree2.query(pts1)
   return 0.5*(dists1.mean()+dists2.mean())   #!NOTE should not be mean of all, see https://pdal.io/en/stable/apps/chamfer.html
 
+def normalized_chamfer_distance(pts1,pts2):
+    chamfer_dist = chamfer_distance_between_clouds_mutual(pts1,pts2)
+    normalization_factor = len(pts1) + len(pts2)
+    return chamfer_dist / normalization_factor
+
 def sample_points_from_mesh(mesh, num_points):
     """Sample points from a mesh."""
     # Get the area of each face
@@ -124,7 +129,7 @@ def benchmark_one_video():
     add_errs = np.array(add_errs)
     ADDS_AUC = compute_auc(adi_errs)*100
     ADD_AUC = compute_auc(add_errs)*100
-    print(ADD_AUC, ADDS_AUC)
+    print(f'ADD: {ADD_AUC}, ADDS: {ADDS_AUC}')
     
     ### mesh 
     cd = np.inf
@@ -132,20 +137,20 @@ def benchmark_one_video():
         pred_pts,_ = trimesh.sample.sample_surface(pred_mesh, 99999, face_weight=None, sample_color=False)
         pcd_pred = toOpen3dCloud(pred_pts)
         pcd_pred = pcd_pred.voxel_down_sample(0.005)
-        # pcd_gt = toOpen3dCloud(gt_pts)
         pcd_gt = o3d.io.read_point_cloud(GT_PCD_DIR)
         gt_pts = np.asarray(pcd_gt.points)
         thres = 0.02
+        print(f'pred: {len(pred_pts)}, gt: {len(gt_pts)}')
         reg_p2p = o3d.pipelines.registration.registration_icp(pcd_pred, pcd_gt, thres, np.eye(4), o3d.pipelines.registration.TransformationEstimationPointToPoint())
         pred_pts_icp = (reg_p2p.transformation@to_homo(pred_pts).T).T[:,:3]
         chamfer_dists = chamfer_distance_between_clouds_mutual(pred_pts_icp, gt_pts)
         cd = chamfer_dists.mean()*100
         print("chamfer_dist(cm)",cd)
 
-        # pcd = toOpen3dCloud(gt_pts)
-        # o3d.io.write_point_cloud(f'{PCD_DIR}gt_pts.ply',pcd)
-        # pcd = toOpen3dCloud(pred_pts)
-        # o3d.io.write_point_cloud(f'{PCD_DIR}old_toss_{toss_id}_pred_pts.ply',pcd)
+        pcd = toOpen3dCloud(gt_pts)
+        o3d.io.write_point_cloud(f'{PCD_DIR}gt_pts.ply',pcd,write_ascii=True)
+        pcd = toOpen3dCloud(pred_pts)
+        o3d.io.write_point_cloud(f'{PCD_DIR}pred_pts.ply',pcd,write_ascii=True)
     
     
 if __name__ == '__main__':
@@ -157,14 +162,48 @@ if __name__ == '__main__':
     )
     args = parser.parse_args()
     toss_id = args.toss_id
-    OUTPUT_POSE_DIR = f"/home/cnets-vision/mengti_ws/BundleSDF/results/old_toss_{toss_id}/ob_in_cam_exp_4/"
+
+    """Ablation Studies
+    1. BundleSDF 1 toss: old_toss_2/ob_in_cam + ablation1/mesh_cleaned_convex_hull.obj
+    2. BundleSDF 10 tosses: 
+    3. BundleSDF 1 tosses -> pose+mesh -> CN ->CN mesh:  old_toss_2/ob_in_cam + body_3.obj
+    4. BundleSDF 1 tosses -> pose+mesh -> reprojection -> BundleSDF 1 toss: old_toss_2/ob_in_cam_exp_4 + mesh_all_tosses_convex_hull.obj
+    5. BundleSDF 1 tosses -> pose+mesh -> CN -> CN mesh -> reprojection -> BundleSDF 1 toss: ob_in_cam_exp_5 + ablation5/mesh_cleaned_convex_hull.obj
+    6. BundleSDF 1 tosses -> pose+mesh -> CN -> CN mesh -> reprojection+icp -> BundleSDF 1 toss: old_toss_2_icp + mesh_cn_run_and_refined.obj
+    """
+    #### Ablation 1 ####
+    # OUTPUT_POSE_DIR = f"/home/cnets-vision/mengti_ws/robot_filter/old_toss_2_bowen/ob_in_cam/" # my result is good, so used bowen's
+    # OUTPUT_POSE_DIR = f"/home/cnets-vision/mengti_ws/robot_filter/ob_in_cam_exp_1/"
+    # # PRED_MESH_FILE = "./assets/ablation1/mesh_cleaned_convex_hull.obj"
+    # PRED_MESH_FILE = "./assets/ablation1/mesh_refined.obj"
+    
+    #### Ablaton 2 ####
+    OUTPUT_POSE_DIR = f"/home/cnets-vision/mengti_ws/robot_filter/ob_in_cam_exp_2/"
+    PRED_MESH_FILE = "./assets/ablation2/mesh_all_tosses_convex_hull_with_normals.obj"
+    
+    #### Ablation 3 ####
+    # PRED_MESH_FILE = "./assets/ablation3/body_3_noise.obj"
+    # OUTPUT_POSE_DIR = f"/home/cnets-vision/mengti_ws/robot_filter/ob_in_cam_exp_1/"
+
+    #### Ablation 4 ####
+    # OUTPUT_POSE_DIR = f"/home/cnets-vision/mengti_ws/BundleSDF/results/old_toss_{toss_id}/ob_in_cam_exp_4/"
+    # PRED_MESH_FILE = "./assets/mesh_after_global_refine.obj"
+
+    #### Ablation 5 ####
+    # OUTPUT_POSE_DIR = f"/home/cnets-vision/mengti_ws/robot_filter/ob_in_cam_exp_5/"
+    # PRED_MESH_FILE = "./assets/ablation5/mesh_cleaned_convex_hull_with_normals.obj"
+
+    #### Ablation 6 ####
+    # OUTPUT_POSE_DIR = f"/home/cnets-vision/mengti_ws/BundleSDF/results/old_toss_{toss_id}_icp/ob_in_cam/"
+    # PRED_MESH_FILE = "./assets/mesh_cn_run_and_refined_convex_hull_with_normals.obj"#"./assets/mesh_cn_run_and_refined.obj"
+
+
     ODOM_FILE_PATH = f"/home/cnets-vision/mengti_ws/BundleSDF/data/old_toss_{toss_id}/annotated_poses/"
     GT_POSE_DIR = f"./dataset/old_toss_{toss_id}/tagslam_poses/"
+    GT_MESH_FILE = "./assets/contactnets_cube.obj"
     PCD_DIR = f"./assets/"
     GT_PCD_DIR = f"./assets/gt_cube.ply"
     CAMERA_EXTRINSICS_FILE = "./assets/realsense_pose_cube_old.yaml"
-    PRED_MESH_FILE = "./assets/mesh_cn_run_and_refined.obj"
-    GT_MESH_FILE = "./assets/contactnets_cube.obj"
     cam = 'cam0' # realsense camera name
     with open(CAMERA_EXTRINSICS_FILE, 'r') as stream:
         data_loaded = yaml.safe_load(stream)
