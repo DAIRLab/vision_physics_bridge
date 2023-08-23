@@ -234,17 +234,20 @@ def plot_with_time(bundletrack_time, gt_time, bundletrack_pose_dir, gt_poses):
     plt.show()
 
 def draw_coords_to_image():
+    """Draw rgb axes onto images to indicate the pose.
+    """
     SEGMENT_IMAGE_DIR = f"/home/cnets-vision/mengti_ws/BundleSDF/results/old_toss_{toss_id}/color_segmented/"
-    OUTPUT_SEGMENT_DIR = f"/home/cnets-vision/mengti_ws/BundleSDF/results/old_toss_{toss_id}/color_segmented_coords/"
-    if not os.path.exists:
+    OUTPUT_SEGMENT_DIR = f"./dataset/old_toss_{toss_id}/color_segmented_coords/"
+    if not os.path.exists(OUTPUT_SEGMENT_DIR):
         os.mkdir(OUTPUT_SEGMENT_DIR)
         print(f'Made dir {OUTPUT_SEGMENT_DIR}')
-    axis_length = 50  # change this according to your needs
+    axis_length = 0.1
     axis_points = np.float32([[0,0,0],
                             [axis_length,0,0], 
                             [0,axis_length,0], 
                             [0,0,axis_length]])
     intrinsic = np.loadtxt(f"/home/cnets-vision/mengti_ws/BundleSDF/data/old_toss_{toss_id}/cam_K.txt")
+    # tagslam_data = np.loadtxt(GT_POSE_DIR+'tagslam.txt')
     for frame_id in range(1, frame_num):
         output_pose = np.loadtxt(OUTPUT_POSE_DIR + "%04i.txt" % frame_id)
         output_pose = transform_bundletrack_output(
@@ -256,7 +259,11 @@ def draw_coords_to_image():
         ) # camera frame
         rvec = output_pose[:3, :3]
         tvec = output_pose[:3, 3]
-        print(rvec.shape, tvec.shape, intrinsic.shape, axis_points.shape)
+        # tagslam_pose = tagslam_data[frame_id, 2:]
+        # tagslam_mat = pos_quat_to_trans_mat(tagslam_pose)
+        # tagslam_mat = world_to_camera(tagslam_mat, cam_trans, cam_axis_vec)
+        # rvec = tagslam_mat[:3, :3]
+        # tvec = tagslam_mat[:3, 3]
         image_points, _ = cv2.projectPoints(axis_points, rvec, tvec, intrinsic, distCoeffs=np.zeros((5,1)))
 
         f = os.path.join(SEGMENT_IMAGE_DIR, "%04i.png" % frame_id)
@@ -291,8 +298,7 @@ if __name__ == "__main__":
         f"/home/cnets-vision/mengti_ws/robot_filter/dataset/old_toss_{toss_id}/tagslam_poses/"
     )
     # OUTPUT_POSE_DIR = f"/home/cnets-vision/mengti_ws/BundleSDF/results/old_toss_{toss_id}/ob_in_cam/"
-    OUTPUT_POSE_DIR = f"/home/cnets-vision/mengti_ws/BundleSDF/results/old_toss_{toss_id}/ob_in_cam/"
-    # OUTPUT_POSE_DIR = f"/home/cnets-vision/mengti_ws/ob_in_cam_new_params/"
+    OUTPUT_POSE_DIR = f"/home/cnets-vision/mengti_ws/BundleSDF/results/old_toss_{toss_id}/ob_in_cam_exp_4/"
     ODOM_FILE_PATH = f"/home/cnets-vision/mengti_ws/BundleSDF/data/old_toss_{toss_id}/annotated_poses/"
     FIG_NAME = f"result_poses_bundlesdf_{toss_id}.png"
     CAMERA_EXTRINSICS_FILE = "./assets/realsense_pose_cube_old.yaml"
@@ -320,5 +326,5 @@ if __name__ == "__main__":
     bundletrack_time, gt_time = data[:, 0], data[:, 1] #N,
     tagslam_poses = data[:, 2:] #N,7
     print(bundletrack_time.shape, gt_time.shape, tagslam_poses.shape)
-    # plot_with_time(bundletrack_time, gt_time, OUTPUT_POSE_DIR, tagslam_poses)
-    draw_coords_to_image()
+    plot_with_time(bundletrack_time, gt_time, OUTPUT_POSE_DIR, tagslam_poses)
+    # draw_coords_to_image()
