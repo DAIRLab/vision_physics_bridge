@@ -2,6 +2,7 @@
 /rosbags
 *.tar.gz
 *.txt
+!requirements.txt 
 /__pycache__
 /dataset
 *.gif
