@@ -165,37 +165,35 @@ if __name__ == '__main__':
 
     """Ablation Studies
     1. BundleSDF 1 toss: old_toss_2/ob_in_cam + ablation1/mesh_cleaned_convex_hull.obj
-    2. BundleSDF 10 tosses: 
+    2. BundleSDF 10 tosses: ablation2/ob_in_cam_exp_2
     3. BundleSDF 1 tosses -> pose+mesh -> CN ->CN mesh:  old_toss_2/ob_in_cam + body_3.obj
     4. BundleSDF 1 tosses -> pose+mesh -> reprojection -> BundleSDF 1 toss: old_toss_2/ob_in_cam_exp_4 + mesh_all_tosses_convex_hull.obj
     5. BundleSDF 1 tosses -> pose+mesh -> CN -> CN mesh -> reprojection -> BundleSDF 1 toss: ob_in_cam_exp_5 + ablation5/mesh_cleaned_convex_hull.obj
     6. BundleSDF 1 tosses -> pose+mesh -> CN -> CN mesh -> reprojection+icp -> BundleSDF 1 toss: old_toss_2_icp + mesh_cn_run_and_refined.obj
     """
     #### Ablation 1 ####
-    # OUTPUT_POSE_DIR = f"/home/cnets-vision/mengti_ws/robot_filter/old_toss_2_bowen/ob_in_cam/" # my result is good, so used bowen's
-    # OUTPUT_POSE_DIR = f"/home/cnets-vision/mengti_ws/robot_filter/ob_in_cam_exp_1/"
-    # # PRED_MESH_FILE = "./assets/ablation1/mesh_cleaned_convex_hull.obj"
+    # OUTPUT_POSE_DIR = f"/home/cnets-vision/mengti_ws/robot_filter/ob_in_cams/ob_in_cam_exp_1/"
     # PRED_MESH_FILE = "./assets/ablation1/mesh_refined.obj"
     
     #### Ablaton 2 ####
-    OUTPUT_POSE_DIR = f"/home/cnets-vision/mengti_ws/robot_filter/ob_in_cam_exp_2/"
-    PRED_MESH_FILE = "./assets/ablation2/mesh_all_tosses_convex_hull_with_normals.obj"
+    # OUTPUT_POSE_DIR = f"/home/cnets-vision/mengti_ws/robot_filter/ob_in_cams/ob_in_cam_exp_2/"
+    # PRED_MESH_FILE = "./assets/ablation2/mesh_cleaned_convex_hull_with_normals.obj"
     
     #### Ablation 3 ####
     # PRED_MESH_FILE = "./assets/ablation3/body_3_noise.obj"
     # OUTPUT_POSE_DIR = f"/home/cnets-vision/mengti_ws/robot_filter/ob_in_cam_exp_1/"
 
     #### Ablation 4 ####
-    # OUTPUT_POSE_DIR = f"/home/cnets-vision/mengti_ws/BundleSDF/results/old_toss_{toss_id}/ob_in_cam_exp_4/"
-    # PRED_MESH_FILE = "./assets/mesh_after_global_refine.obj"
+    OUTPUT_POSE_DIR = f"/home/cnets-vision/mengti_ws/BundleSDF/results/old_toss_{toss_id}/ob_in_cam_exp_4/"
+    PRED_MESH_FILE = "./assets/ablation4/mesh_all_tosses_convex_hull_with_normals.obj"
 
     #### Ablation 5 ####
     # OUTPUT_POSE_DIR = f"/home/cnets-vision/mengti_ws/robot_filter/ob_in_cam_exp_5/"
     # PRED_MESH_FILE = "./assets/ablation5/mesh_cleaned_convex_hull_with_normals.obj"
 
     #### Ablation 6 ####
-    # OUTPUT_POSE_DIR = f"/home/cnets-vision/mengti_ws/BundleSDF/results/old_toss_{toss_id}_icp/ob_in_cam/"
-    # PRED_MESH_FILE = "./assets/mesh_cn_run_and_refined_convex_hull_with_normals.obj"#"./assets/mesh_cn_run_and_refined.obj"
+    # OUTPUT_POSE_DIR = f"/home/cnets-vision/mengti_ws/robot_filter/ob_in_cams/ob_in_cam_exp_6/"
+    # PRED_MESH_FILE = "./assets/ablation6/mesh_refined_convex_hull_with_normals.obj"
 
 
     ODOM_FILE_PATH = f"/home/cnets-vision/mengti_ws/BundleSDF/data/old_toss_{toss_id}/annotated_poses/"

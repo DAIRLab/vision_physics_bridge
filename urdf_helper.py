@@ -6,6 +6,8 @@ from itertools import combinations
 import open3d as o3d
 import argparse
 
+from experiments import toOpen3dCloud
+
 def ensure_vertex_normals(mesh):
     # Accessing vertex_normals will compute them if they aren't already present
     mesh.vertex_normals = (mesh.vertex_normals.T / np.linalg.norm(mesh.vertex_normals, axis=1)).T
@@ -174,6 +176,47 @@ def add_noise_to_mesh(input, output, noise_factor=0.1):
     mesh.export(output)
     print(f'Noisy mesh exported to {output}')
 
+def sample_points_from_mesh(input_obj_path, output_obj_path, num_points=1000, triangle_size=0.005):
+    mesh = trimesh.load_mesh(input_obj_path)
+    points = mesh.sample(num_points)
+    vertices = []
+    faces = []
+    for point in points:
+        v0 = point
+        v1 = point + [triangle_size, 0, 0]
+        v2 = point + [0, triangle_size, 0]
+        vertices.extend([v0, v1, v2])
+        n = len(vertices) - 3
+        faces.append([n, n+1, n+2])
+    point_mesh = trimesh.Trimesh(vertices=vertices, faces=faces)
+    point_mesh.export(output_obj_path, file_type='obj')
+
+def sample_pcd_from_mesh(input_obj_path, output_ply_path, num_points=1000):
+    mesh = trimesh.load(input_obj_path, force='mesh')
+    if np.asarray(mesh.triangles).shape[0] == 0:
+        raise ValueError("The mesh doesn't contain any triangles.")
+    pts = mesh.sample(99999)
+    pcd = toOpen3dCloud(np.array(pts))
+    o3d.io.write_point_cloud(output_ply_path,pcd,write_ascii=True)
+    print(f'pcd exported to {output_ply_path}')
+    
+def pcd_to_mesh(input_ply_path, output_obj_path):
+    pcd = o3d.io.read_point_cloud(input_ply_path)
+    pcd.estimate_normals()
+    distances = pcd.compute_nearest_neighbor_distance()
+    avg_dist = np.mean(distances)
+    radius = 1.5 * avg_dist   
+    mesh = o3d.geometry.TriangleMesh.create_from_point_cloud_ball_pivoting(
+            pcd,
+            o3d.utility.DoubleVector([radius, radius * 2]))
+
+    # create the triangular mesh with the vertices and faces from open3d
+    tri_mesh = trimesh.Trimesh(np.asarray(mesh.vertices), np.asarray(mesh.triangles),
+                            vertex_normals=np.asarray(mesh.vertex_normals))
+
+    # trimesh.convex.is_convex(tri_mesh)
+    tri_mesh.export(output_obj_path, file_type='obj')
+    
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument(
@@ -194,6 +237,8 @@ if __name__ == '__main__':
     normal_mesh = f'./assets/{filename}_with_normals.obj'
     rescale_mesh = f'./assets/{filename}_rescale.obj'
     alt_simplified_mesh = f'./assets/{filename}_rescale_simplified_alt.obj'
+    sampled_mesh = f'./assets/{filename}_sampled.obj'
+    sampled_pcd = f'./assets/{filename}_sampled.ply'
     # simplify_mesh(original_mesh, simplified_mesh, 0.01)
     # create_max_volume_obj(simplified_mesh, output_path, vertex_count=10, target_vertex_count=8, target_face_count=6)
     # add_normals_to_obj(output_path, normal_mesh)
@@ -202,6 +247,10 @@ if __name__ == '__main__':
     # shrink_mesh_file(original_mesh, 8.7, rescale_mesh)
     # simplify_mesh(rescale_mesh, simplified_mesh, 0.5)
     # add_normals_to_obj(simplified_mesh, normal_mesh)
-    noisy_mesh = f'./assets/{filename}_noise.obj'
-    add_noise_to_mesh(original_mesh, noisy_mesh)
-  
+    
+    # noisy_mesh = f'./assets/{filename}_noise.obj'
+    # add_noise_to_mesh(original_mesh, noisy_mesh)
+    
+    # sample_points_from_mesh(original_mesh, sampled_mesh, num_points=5000, triangle_size=0.005)
+    sample_pcd_from_mesh(original_mesh, sampled_pcd)
+    pcd_to_mesh(sampled_pcd, sampled_mesh)

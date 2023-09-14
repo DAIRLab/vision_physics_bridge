@@ -119,9 +119,9 @@ class DatasetManagement:
         positions = np.array(p_t)
         ts = np.array(t)
         print(f'quats: {quats.shape}, positions: {positions.shape}, ts: {ts.shape}')
-        self.q_t = quats.T
-        self.p_t = positions.T
-        self.t = ts.T
+        self.q_t = quats
+        self.p_t = positions
+        self.t = ts
         print(f'load_poses: self.q_t {self.q_t.shape}, self.p_t: {self.p_t.shape}, self.t: {self.t.shape}')
     
     # def force_landing(self, q_t, p_t, t):
@@ -142,6 +142,7 @@ class DatasetManagement:
     def upsample(self, quats, positions, ts):
         """
         quats: (N, 4), x,y,z,w
+        positions: (N, 3)
         """
         quats = xyzw2wxyz(quats) #w,x,y,z
         quats = quats / np.linalg.norm(quats, axis=1)[:, np.newaxis]
@@ -181,7 +182,7 @@ class DatasetManagement:
         interp_func_timestamps = interp1d(np.linspace(0, 1, N), ts, kind='linear')
         new_timestamps = interp_func_timestamps(new_times)
         new_quaternions = wxyz2xyzw(new_quaternions) #x,y,z,w
-        return new_quaternions.T, new_positions.T, new_timestamps.T
+        return new_quaternions, new_positions, new_timestamps
             
     def do_process(self):
         """
@@ -194,7 +195,7 @@ class DatasetManagement:
             - linear_velocity: 	[vx, vy, vz] in meters/second
             - angular_velocity:	[wx, wy, wz] in rad/second in body frame
         """
-        rot_t = R.from_quat(self.q_t.T)
+        rot_t = R.from_quat(self.q_t)
         filter_rot = True
         if filter_rot:
             rvecs = rotvecfix(rot_t.as_rotvec()).T
@@ -205,17 +206,28 @@ class DatasetManagement:
         
         adjust_pos = True
         if adjust_pos: # the franka is on a plank, need to add the plank height to z
-            self.p_t = self.p_t + PLANK_HEIGHT
+            for i in range(self.p_t.shape[0]): #N,3
+                self.p_t[i, -1] = self.p_t[i, -1] - PLANK_HEIGHT
+                if self.p_t[-1, -1] != 0.0: # force landing on the table
+                    self.p_t[-1, -1] = 0.0
+                # if self.p_t[i, -1] < 0.0:
+                #     self.p_t[i, -1] = 0.0
         filter_pos = True
         if filter_pos:
-            self.p_t = smooth_positions(self.p_t.T, window_size=5).T
+            # self.p_t = smooth_positions(self.p_t, window_size=5)
+            print("self.p_t before smoothing:", self.p_t.shape) #N,3
+            for i in range(3):
+                self.p_t[:, i] = signal.savgol_filter(self.p_t[:, i], window_length=15, polyorder=3)
+            print("self.p_t:", self.p_t.shape) #N,3
         ##### Upsample
-        quat_t = quat_t / np.linalg.norm(quat_t, axis=1)[:, None]
-        self.q_t, self.p_t, self.t = self.upsample(quat_t, self.p_t.T, self.t) #xyzw
-        self.q_t = self.q_t / np.linalg.norm(self.q_t, axis=0)
-        print(f'upsampled self.q_t: {self.q_t.shape}')
-        rot_t = R.from_quat(self.q_t.T) #N,3,3
+        quat_t = quat_t / np.linalg.norm(quat_t, axis=1).reshape(-1,1)
+        print(f"quat_t: {quat_t.shape}") #N,4
+        self.q_t, self.p_t, self.t = self.upsample(quat_t, self.p_t, self.t) #xyzw
+        print(f'after upsample: {self.q_t.shape}, {self.p_t.shape}, {self.t.shape}')
+        self.q_t = self.q_t / np.linalg.norm(self.q_t, axis=1).reshape(-1,1) #N,4
+        rot_t = R.from_quat(self.q_t) #N,3,3
         #####
+        self.p_t = self.p_t.T
         pdiff = self.p_t[:,1:] - self.p_t[:,:-1]
         tdiff = np.tile((self.t[1:] - self.t[:-1]).reshape([1,-1]), [3,1])
         dp_t = pdiff / tdiff
@@ -249,21 +261,25 @@ class DatasetManagement:
             # filter angular velocity
             w_w = np.clip((fc_w / (fs / 2)), a_min = 0.000001, a_max = 0.999999) # Normalize the frequency
             b, a = signal.butter(1, w_w, 'low')
+            print("w_t_body before smoothing:", w_t_body.shape) #3,N
             for i in range(3):
                 # w_t_body[i,:] = signal.medfilt(w_t_body[i,:],kernel_size=3)
                 w_t_body[i,:] = signal.savgol_filter(w_t_body[i,:], window_length=15, polyorder=4)
+            print("w_t_body after smoothing:", w_t_body.shape) #3,N
         filter_vel = True
         if filter_vel:
             # filter linear velocity
             w_v = np.clip((fc_v / (fs / 2)), a_min = 0.000001, a_max = 0.999999) # Normalize the frequency
             b, a = signal.butter(1, w_v, 'low')
+            print("dp_t before smoothing:", dp_t.shape) #3,N
             for i in range(3):
                 #dp_t[i,:] = signal.filtfilt(b, a, dp_t[i,:],padtype='odd',padlen=100)
                 # dp_t[i,:] = signal.medfilt(dp_t[i,:],kernel_size=3)
                 dp_t[i,:] = signal.savgol_filter(dp_t[i,:], window_length=10, polyorder=4)
-
-        quat_shuffle = xyzw2wxyz(self.q_t.T).T #w,x,y,z
-        quat_shuffle = quat_shuffle / np.linalg.norm(quat_shuffle)
+            print("dp_t after smoothing:", dp_t.shape) #3,N
+        quat_shuffle = xyzw2wxyz(self.q_t).T #4,N, wxyz
+        print(f'quat_shuffle: {quat_shuffle.shape}')
+        quat_shuffle = quat_shuffle / np.linalg.norm(quat_shuffle,axis=0)
         print(f'quat normal: {np.linalg.norm(quat_shuffle)}')
         data = np.concatenate((quat_shuffle, self.p_t, w_t_body, dp_t), axis=0)
         p_t = self.p_t.T
@@ -629,10 +645,10 @@ if __name__ == "__main__":
     CAMERA_EXTRINSICS_FILE = './assets/realsense_pose_cube_old.yaml'
     # CAMERA_EXTRINSICS_FILE = './assets/realsense_pose_bottle.yaml'
     BUNDLESDF_POSE_DIR = "/home/cnets-vision/mengti_ws/BundleSDF/results/"+filename+"/ob_in_cam/"
-    CONTACTNETS_INPUT_DIR = f"/home/cnets-vision/mengti_ws/dair_pll_latest/assets/bundlesdf_tagslam/"
+    CONTACTNETS_INPUT_DIR = f"/home/cnets-vision/mengti_ws/dair_pll_latest/assets/bundlesdf_cube/"
     ODOM_FILE_PATH = "/home/cnets-vision/mengti_ws/BundleSDF/data/"+filename+"/annotated_poses/"
     GT_POSE_DIR = "/home/cnets-vision/mengti_ws/robot_filter/dataset/"+filename+"/tagslam_poses/"
-    PLANK_HEIGHT = 0.0145 #0.022
+    PLANK_HEIGHT =  0.03428 #0.0145
     frame_num = len([name for name in os.listdir(BUNDLESDF_POSE_DIR)])
     print(f'Total frame num: {frame_num}')
     cam = 'cam0' # realsense camera name

@@ -19,6 +19,7 @@ from math_utils import (
 from sync_data import Synchronizer
 import yaml
 
+
 def get_cosine_sim(frame_id):
     """Compare the output of BundleTrack with the ground-truth poses of tagslam."""
     gt_pose = np.loadtxt(GT_POSE_DIR + "%04i.txt" % frame_id)
@@ -49,7 +50,7 @@ def calculate_rotation_error(estimated_pose, ground_truth_pose):
 
 
 def calculate_success_rate(
-    translation_errors, rotation_errors, translation_threshold, rotation_threshold
+        translation_errors, rotation_errors, translation_threshold, rotation_threshold
 ):
     num_frames = len(translation_errors)
     success_count = sum(
@@ -58,6 +59,7 @@ def calculate_success_rate(
     )
     success_rate = (success_count / num_frames) * 100
     return success_rate
+
 
 def plot_with_time(bundletrack_time, gt_time, bundletrack_pose_dir, gt_poses):
     """Plot the x, y, z of BundleTrack output versus ground-truth poses of tagslam."""
@@ -77,7 +79,7 @@ def plot_with_time(bundletrack_time, gt_time, bundletrack_pose_dir, gt_poses):
             cam_trans,
             cam_axis_vec,
             to_world=True,
-        ) # camera frame
+        )  # camera frame
         estimated_poses.append(output_pose)
         output_pose_ = trans_mat_to_pos_quat(output_pose)
         output_x.append(output_pose_[0])
@@ -146,17 +148,17 @@ def plot_with_time(bundletrack_time, gt_time, bundletrack_pose_dir, gt_poses):
         # ground_truth_x.append(x_)
         # ground_truth_y.append(y_)
         # ground_truth_z.append(z_)
-        
+
         ########### Transform to world again ############
         # gt_pose_world_test = camera_to_world(gt_pose_trans_cam)
         # gt_pose_world_quat = trans_mat_to_pos_quat(gt_pose_world_test)
         # print("After world2cam and cam2world transform", gt_pose_world_quat)
-        # gt_x_quat_test, gt_y_quat_test, gt_z_quat_test, gt_w_quat_test = (gt_pose_world_quat[3], 
-        #                                    gt_pose_world_quat[4], 
-        #                                    gt_pose_world_quat[5], 
+        # gt_x_quat_test, gt_y_quat_test, gt_z_quat_test, gt_w_quat_test = (gt_pose_world_quat[3],
+        #                                    gt_pose_world_quat[4],
+        #                                    gt_pose_world_quat[5],
         #                                    gt_pose_world_quat[6]
         #                                 )
-        # gt_x_world_pose.append(gt_pose_world_quat[0]) 
+        # gt_x_world_pose.append(gt_pose_world_quat[0])
         # gt_y_world_pose.append(gt_pose_world_quat[1])
         # gt_z_world_pose.append(gt_pose_world_quat[2])
         # gt_x_world_test_list.append(gt_x_quat_test)
@@ -233,6 +235,7 @@ def plot_with_time(bundletrack_time, gt_time, bundletrack_pose_dir, gt_poses):
     print(f'Figure saved to {FIG_NAME}')
     plt.show()
 
+
 def draw_coords_to_image():
     """Draw rgb axes onto images to indicate the pose.
     """
@@ -242,10 +245,10 @@ def draw_coords_to_image():
         os.mkdir(OUTPUT_SEGMENT_DIR)
         print(f'Made dir {OUTPUT_SEGMENT_DIR}')
     axis_length = 0.1
-    axis_points = np.float32([[0,0,0],
-                            [axis_length,0,0], 
-                            [0,axis_length,0], 
-                            [0,0,axis_length]])
+    axis_points = np.float32([[0, 0, 0],
+                              [axis_length, 0, 0],
+                              [0, axis_length, 0],
+                              [0, 0, axis_length]])
     intrinsic = np.loadtxt(f"/home/cnets-vision/mengti_ws/BundleSDF/data/old_toss_{toss_id}/cam_K.txt")
     # tagslam_data = np.loadtxt(GT_POSE_DIR+'tagslam.txt')
     for frame_id in range(1, frame_num):
@@ -256,7 +259,7 @@ def draw_coords_to_image():
             ODOM_FILE_PATH,
             cam_trans,
             cam_axis_vec,
-        ) # camera frame
+        )  # camera frame
         rvec = output_pose[:3, :3]
         tvec = output_pose[:3, 3]
         # tagslam_pose = tagslam_data[frame_id, 2:]
@@ -264,7 +267,7 @@ def draw_coords_to_image():
         # tagslam_mat = world_to_camera(tagslam_mat, cam_trans, cam_axis_vec)
         # rvec = tagslam_mat[:3, :3]
         # tvec = tagslam_mat[:3, 3]
-        image_points, _ = cv2.projectPoints(axis_points, rvec, tvec, intrinsic, distCoeffs=np.zeros((5,1)))
+        image_points, _ = cv2.projectPoints(axis_points, rvec, tvec, intrinsic, distCoeffs=np.zeros((5, 1)))
 
         f = os.path.join(SEGMENT_IMAGE_DIR, "%04i.png" % frame_id)
         filename = "%04i.png" % frame_id
@@ -274,12 +277,13 @@ def draw_coords_to_image():
         image_points = image_points.astype(int)
         print(tuple(image_points[0].ravel()))
         print(tuple(image_points[1].ravel()))
-        cv2.line(image_with_axes, tuple(image_points[0].ravel()), tuple(image_points[1].ravel()), (0,0,255), 5)  # X-axis (Red)
-        cv2.line(image_with_axes, tuple(image_points[0].ravel()), tuple(image_points[2].ravel()), (0,255,0), 5)  # Y-axis (Green)
-        cv2.line(image_with_axes, tuple(image_points[0].ravel()), tuple(image_points[3].ravel()), (255,0,0), 5)  # Z-axis (Blue)
-        cv2.imwrite(OUTPUT_SEGMENT_DIR+filename, image_with_axes)
-        print(f'Wrote image {OUTPUT_SEGMENT_DIR+filename}')
-    
+        cv2.line(image_with_axes, tuple(image_points[0].ravel()), tuple(image_points[1].ravel()), (0, 0, 255), 5)  # X-axis (Red)
+        cv2.line(image_with_axes, tuple(image_points[0].ravel()), tuple(image_points[2].ravel()), (0, 255, 0), 5)  # Y-axis (Green)
+        cv2.line(image_with_axes, tuple(image_points[0].ravel()), tuple(image_points[3].ravel()), (255, 0, 0), 5)  # Z-axis (Blue)
+        cv2.imwrite(OUTPUT_SEGMENT_DIR + filename, image_with_axes)
+        print(f'Wrote image {OUTPUT_SEGMENT_DIR + filename}')
+
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument(
@@ -297,30 +301,16 @@ if __name__ == "__main__":
     GT_POSE_DIR = (
         f"/home/cnets-vision/mengti_ws/robot_filter/dataset/old_toss_{toss_id}/tagslam_poses/"
     )
-    OUTPUT_POSE_DIR = f"/home/cnets-vision/mengti_ws/BundleSDF/results/old_toss_{toss_id}/ob_in_cam/"
-    #### Ablation 1 ####
-    # OUTPUT_POSE_DIR = f"/home/cnets-vision/mengti_ws/robot_filter/ob_in_cams/ob_in_cam_exp_1/"
-    
-    #### Ablaton 2 ####
-    # OUTPUT_POSE_DIR = f"/home/cnets-vision/mengti_ws/robot_filter/ob_in_cams/ob_in_cam_exp_2/"
-    
-    #### Ablation 3 ####
-    # OUTPUT_POSE_DIR = f"/home/cnets-vision/mengti_ws/robot_filter/ob_in_cam_exp_1/"
-    
-    #### Ablation 4 ####
-    # OUTPUT_POSE_DIR = f"/home/cnets-vision/mengti_ws/BundleSDF/results/old_toss_{toss_id}/ob_in_cam_exp_4/"
-    
-    #### Ablation 5 ####
-    # OUTPUT_POSE_DIR = f"/home/cnets-vision/mengti_ws/robot_filter/ob_in_cams/ob_in_cam_exp_5/"
-    
-    #### Ablation 6 ####
-    # OUTPUT_POSE_DIR = f"/home/cnets-vision/mengti_ws/robot_filter/ob_in_cams/ob_in_cam_exp_6/"
-    
+
+    ###########################
+    OUTPUT_POSE_DIR = f"/home/cnets-vision/mengti_ws/robot_filter/results_bowen/ob_in_cam_icp9/"
+    ###########################
+
     ODOM_FILE_PATH = f"/home/cnets-vision/mengti_ws/BundleSDF/data/old_toss_{toss_id}/annotated_poses/"
     FIG_NAME = f"result_poses_bundlesdf_{toss_id}.png"
     CAMERA_EXTRINSICS_FILE = "./assets/realsense_pose_cube_old.yaml"
 
-    cam = 'cam0' # realsense camera name
+    cam = 'cam0'  # realsense camera name
     with open(CAMERA_EXTRINSICS_FILE, 'r') as stream:
         data_loaded = yaml.safe_load(stream)
     print(data_loaded[cam]['pose']['position'])
@@ -328,16 +318,16 @@ if __name__ == "__main__":
     cam_trans = np.array([cam_pos_dict['x'], cam_pos_dict['y'], cam_pos_dict['z']]).reshape(-1, 1)
     cam_rot_dict = data_loaded[cam]['pose']['rotation']
     cam_axis_vec = np.array([cam_rot_dict['x'], cam_rot_dict['y'], cam_rot_dict['z']])
-    
+
     yaml_path = './assets/config.yaml'
     toss_type = 'cube'
     frame_num = len([name for name in os.listdir(OUTPUT_POSE_DIR)])
     print(f"there are {frame_num} frames")
-    
-    data = np.loadtxt(GT_POSE_DIR+'tagslam.txt')
+
+    data = np.loadtxt(GT_POSE_DIR + 'tagslam.txt')
     print('data', data.shape)
-    bundletrack_time, gt_time = data[:, 0], data[:, 1] #N,
-    tagslam_poses = data[:, 2:] #N,7
+    bundletrack_time, gt_time = data[:, 0], data[:, 1]  # N,
+    tagslam_poses = data[:, 2:]  # N,7
     print(bundletrack_time.shape, gt_time.shape, tagslam_poses.shape)
     plot_with_time(bundletrack_time, gt_time, OUTPUT_POSE_DIR, tagslam_poses)
     # draw_coords_to_image()
