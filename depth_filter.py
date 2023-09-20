@@ -1,6 +1,6 @@
 import numpy as np
 import open3d as o3d
-from math_utils import axis_angle_to_rotation_matrix
+from math_utils import setup_extrinsic
 from visualization import VisOpen3D
 from tqdm import tqdm
 
@@ -45,7 +45,7 @@ class DepthFilter:
         self.depth_image_title = depth_image_dir % frame_id
         self.cube_screen_image_dir = cube_screen_image_dir % frame_id
         self.cube_depth_image_dir = cube_depth_image_dir % frame_id
-        self.extrinsic = self.setup_extrinsic(translation, axis_vec)
+        self.extrinsic = setup_extrinsic(translation, axis_vec)
         self.K = np.array(
             [
                 [380.2484436035156, 0, 314.2138977050781],
@@ -56,19 +56,19 @@ class DepthFilter:
         self.pcd = self.generate_pcd()
         self.cropped_pcd = self.crop()
 
-    def setup_extrinsic(self, translation, axis_vec):
-        # Setup camera extrinsic
-        angle = np.linalg.norm(axis_vec)
-        axis = axis_vec / angle
-        rotation = axis_angle_to_rotation_matrix(
-            axis, angle
-        )  # directions of the world-axes in camera coordinates
-        rotation_prime = rotation.T  # USE THIS
-        translation_prime = -rotation_prime @ translation  # USE THIS
-        extrinsic = np.vstack(
-            (np.hstack((rotation_prime, translation_prime)), np.array([0, 0, 0, 1]))
-        )
-        return extrinsic
+    # def setup_extrinsic(self, translation, axis_vec):
+    #     # Setup camera extrinsic
+    #     angle = np.linalg.norm(axis_vec)
+    #     axis = axis_vec / angle
+    #     rotation = axis_angle_to_rotation_matrix(
+    #         axis, angle
+    #     )  # directions of the world-axes in camera coordinates
+    #     rotation_prime = rotation.T  # USE THIS
+    #     translation_prime = -rotation_prime @ translation  # USE THIS
+    #     extrinsic = np.vstack(
+    #         (np.hstack((rotation_prime, translation_prime)), np.array([0, 0, 0, 1]))
+    #     )
+    #     return extrinsic
 
     def generate_pcd(self):
         depth = o3d.io.read_image(self.depth_image_title)

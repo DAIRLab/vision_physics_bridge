@@ -1,6 +1,6 @@
 import numpy as np
 import math
-import tf.transformations as tr
+# import tf.transformations as tr
 from scipy.spatial.transform import Rotation as R
 
 
@@ -44,11 +44,11 @@ def rotation_matrix_to_euler(R):
 
     return np.array([x, y, z])
 
-def rotation_matrix_to_quaternion(R):
-    """
-    :param R: 4*4 transformation matrix.
-    """
-    return tr.quaternion_from_matrix(R)
+# def rotation_matrix_to_quaternion(R):
+#     """
+#     :param R: 4*4 transformation matrix.
+#     """
+#     return tr.quaternion_from_matrix(R)
 
 def world_to_image(point, K, R, T):
     """

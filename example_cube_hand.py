@@ -10,6 +10,7 @@ from file_utils import (
     import_data,
     write_real_depth_as_txt,
 )
+from math_utils import world_to_camera
 from pydrake.all import StartMeshcat
 from rosbag_processor import (
     bag_to_depth_images,
@@ -113,7 +114,8 @@ cube_quat = np.array([0.00166957478468, -0.00188674789889, -0.00255240804615, 0.
 def save_init_pose(trans, quat, save_dir):
     rot = R.from_quat(quat).as_matrix()
     mat = np.vstack((np.hstack((rot, trans)), np.array([0,0,0,1])))
-    np.savetxt(os.path.join(save_dir, "%04i.txt" % 0), mat)
+    mat_cam = world_to_camera(mat, cam_trans, cam_axis_vec)
+    np.savetxt(os.path.join(save_dir, "%04i.txt" % 0), mat_cam)
     print(f'Initial pose saved to {save_dir}')
 
 # def save_init_pose(trans, axis_vec, save_dir):
