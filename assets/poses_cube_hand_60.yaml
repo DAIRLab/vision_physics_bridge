@@ -1,0 +1,53 @@
+bodies:
+ - grasp_lab:
+     type: simple
+     is_static: true
+     default_tag_size: 0
+     pose:
+       position:
+         x: -0.00010018
+         y: -0.00008767
+         z: 0.00004798
+       rotation:
+         x: -0.00012507
+         y: 0.00001431
+         z: 0.00023131
+       position_noise:
+         x: 0.00073919
+         y: 0.00073442
+         z: 0.00076273
+       rotation_noise:
+         x: 0.00055335
+         y: 0.00051768
+         z: 0.00051377
+     tags:
+ - surface:
+     type: board
+     is_static: true
+     default_tag_size: 0.12000000
+     board:
+       tag_start_id: 78
+       tag_size: 0.12000000
+       tag_bits: 6
+       tag_spacing: 0.25000000
+       tag_rows: 2
+       tag_columns: 3
+       tag_rotation_noise: 0.00100000
+       tag_position_noise: 0.00100000
+     pose:
+       position:
+         x: 0.18152504
+         y: 0.00002192
+         z: -0.02251200
+       rotation:
+         x: 0.00000001
+         y: -0.00000000
+         z: 0.00219753
+       position_noise:
+         x: 0.00047080
+         y: 0.00047033
+         z: 0.00047314
+       rotation_noise:
+         x: 0.00001000
+         y: 0.00001000
+         z: 0.00009963
