@@ -285,9 +285,45 @@ def process_directory(directory_path):
                 file_path = os.path.join(root, file_name)
                 replace_comma_with_space(file_path)
     print('Done!')
+
+def formulate_dataset():
+    source_root = "/home/cnets-vision/mengti_ws/BundleSDF/data/"
+    target_folder = "/home/cnets-vision/mengti_ws/BundleSDF/data/old_toss_10_tosses"
+    subfolders = ["rgb", "depth", "masks"]
+    total_folders = 10
+    if not os.path.exists(target_folder):
+        os.makedirs(target_folder)
+    for sf in subfolders:
+        target_subfolder = os.path.join(target_folder, sf)
+
+        # Create the subfolder in the target directory
+        if not os.path.exists(target_subfolder):
+            os.makedirs(target_subfolder)
+
+        current_counter = 1  # Reset counter for each subfolder type
+
+        # Loop through each old_toss_X folder for the current subfolder type
+        for i in range(1, total_folders + 1):
+            source_subfolder = os.path.join(source_root, f"old_toss_{i}", sf)
+
+            # List all files in the current subfolder
+            files = sorted(os.listdir(source_subfolder))
+
+            # Copy each file to the target subfolder and rename it
+            for file in files:
+                source_file_path = os.path.join(source_subfolder, file)
+                target_file_name = f"{current_counter:04}.png"  # Format as 000X.png
+                target_file_path = os.path.join(target_subfolder, target_file_name)
+
+                shutil.copy2(source_file_path, target_file_path)
+                # print(source_file_path, target_file_path)
+                current_counter += 1
     
 def main():
-    process_directory('/home/cnets-vision/mengti_ws/BundleSDF/results/ob_in_cam_projected_icp_transformed')
+    # process_directory('/home/cnets-vision/mengti_ws/BundleSDF/results/ob_in_cam_projected_icp_transformed')
+    # formulate_dataset()
+    for frame_id in range(1, 3813):
+        create_annotated_poses(output_dir="/home/cnets-vision/mengti_ws/BundleSDF/data/old_toss_10_tosses/annotated_poses", frame_id=frame_id)
 
 if __name__ == "__main__":
     main()
