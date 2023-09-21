@@ -101,6 +101,20 @@ DATA_DIR = os.path.join(os.getcwd(), "ob_in_cams", "ob_in_cam_cube_hand/")
 BUNDLESDF_DATA = os.path.join(os.getcwd(), "..", "BundleSDF", "data")
 ODOM_FILE_PATH = os.path.join(BUNDLESDF_DATA, "cube_hand_toss_60_2", "annotated_poses/")
 bundletrack_poses = get_bundletrack_results()
+
+base_url = "http://127.0.0.1"
+
+meshcat_url = base_url + ":" + vis.url().split(":")[-1]
+
+''' Create precisely-sized iframe with meshcat view; put this in its own Jupyter cell. '''
+from IPython.display import HTML
+frame_html = """
+<div style="height: {height}px; width: {width}px; overflow-x: visible; overflow-y: visible; resize: none">
+    <iframe src="{url}" style="width: 100%; height: 100%; border: none"></iframe>
+</div>
+""".format(url=meshcat_url, width=resolution[0], height=resolution[1])
+HTML(frame_html)
+
 vis["cam"].set_transform(T_WC)
 vis["cam_view"].set_transform(T_WC @ tf.translation_matrix([0,0,.05]))
 
@@ -133,12 +147,17 @@ for i, pose in enumerate(bundletrack_poses.T):
     rgb_file_name = os.path.join(BUNDLESDF_DATA, "cube_hand_toss_60_2", "rgb", f"{i+1:04}.png")
     im = cv2.imread(rgb_file_name)
     # im = Image.open(rgb_file_name)
-    # im = Image.fromarray(cam_data[i]).convert('RGB')
+    im = Image.fromarray(im).convert('RGB')
+    print("HERE")
     T_WA = tf.translation_matrix(pose[4:7]) @ tf.quaternion_matrix(pose[:4])
     vis["real_1"].set_transform(T_MW @ T_WA)
+    print("HERE2")
     mesh_im = vis.get_image()
+    print("HERE3")
     im.paste(mesh_im, (0,0), mask = mesh_im)
     # im.save(tmpdir + '/' + f'{i:07d}' + '.png', format="png")
-    im.imwrite(f"./tmp_{i}.png", im)
-    out.write(im)
+    im_np = np.array(im)
+    im_np = cv2.cvtColor(im_np, cv2.COLOR_RGB2BGR)
+    out.write(im_np)
+    time.sleep(0.01)
 out.release()

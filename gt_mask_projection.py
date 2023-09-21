@@ -123,6 +123,10 @@ def get_overlay_video_2():
             cam_axis_vec,
             # to_world=True,
         ) # camera frame
+        z_180_RT = np.zeros((4, 4), dtype=np.float32)
+        z_180_RT[:3, :3] = np.diag([-1, -1, 1])
+        z_180_RT[3, 3] = 1
+        object_pose = z_180_RT@object_pose
         transformed_pts = (object_pose @ np.hstack([vertices, np.ones((vertices.shape[0], 1))]).T).T
         transformed_pts = transformed_pts[:, :3] / transformed_pts[:, 2, np.newaxis]
         img_pts = (intrinsic_matrix @ transformed_pts.T).T
