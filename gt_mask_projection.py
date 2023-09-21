@@ -4,6 +4,7 @@ import pywavefront
 import os
 import yaml
 from math_utils import setup_extrinsic, transform_bundletrack_output
+import open3d as o3d
 
 # DATASET_NAME = "cube_hand_toss_60"
 DATASET_NAME = "cube_hand_1"
@@ -104,5 +105,35 @@ def get_overlay_video():
 
     out.release()
 
+def get_overlay_video_2():
+    mesh = o3d.io.read_triangle_mesh(MESH_FILE)
+    vertices = np.array(mesh.vertices)
+    fourcc = cv2.VideoWriter_fourcc(*'mp4v')
+    out = cv2.VideoWriter('overlay_video.mp4', fourcc, 20.0, (640, 480))
+    num_frames = len(os.listdir(os.path.join(BUNDLESDF_DATASET_DIR, "rgb")))
+    for i in range(1, num_frames):
+        pose_file_name = os.path.join(BUNDLESDF_RESULT_DIR, "ob_in_cam", f"{i:04}.txt")
+        rgb_file_name = os.path.join(BUNDLESDF_DATASET_DIR, "rgb", f"{i:04}.png")
+        object_pose = np.loadtxt(pose_file_name)
+        object_pose = transform_bundletrack_output(
+            object_pose,
+            os.path.join(BUNDLESDF_RESULT_DIR, "ob_in_cam/"),
+            ANNOTATED_POSE_DIR,
+            cam_trans,
+            cam_axis_vec,
+            # to_world=True,
+        ) # camera frame
+        transformed_pts = (object_pose @ np.hstack([vertices, np.ones((vertices.shape[0], 1))]).T).T
+        transformed_pts = transformed_pts[:, :3] / transformed_pts[:, 2, np.newaxis]
+        img_pts = (intrinsic_matrix @ transformed_pts.T).T
+        img_pts = img_pts[:, :2].astype(np.int32)
+        img = cv2.imread(rgb_file_name)
+        for triangle in mesh.triangles:
+            contour = np.array([img_pts[triangle[0]], img_pts[triangle[1]], img_pts[triangle[2]]])
+            cv2.polylines(img, [contour], isClosed=True, color=(0, 255, 0), thickness=2)
+
+        out.write(img)
+    out.release()
+
 if __name__ == "__main__":
-    get_overlay_video()
+    get_overlay_video_2()
