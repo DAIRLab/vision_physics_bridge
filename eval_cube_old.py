@@ -8,14 +8,8 @@ import matplotlib.pyplot as plt
 from scipy.spatial.transform import Rotation as R
 import cv2
 
-from math_utils import (
-    camera_to_world,
-    pos_quat_to_trans_mat,
-    trans_mat_to_pos_quat,
-    world_to_camera,
-    rotation_matrix_to_euler,
-    transform_bundletrack_output,
-)
+from math_utils import pos_quat_to_trans_mat, trans_mat_to_pos_quat, transform_bundletrack_output
+
 from sync_data import Synchronizer
 import yaml
 
@@ -285,7 +279,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--toss_id",
         type=int,
-        required=True,
+        required=False,
     )
     args = parser.parse_args()
     toss_id = args.toss_id
@@ -294,10 +288,9 @@ if __name__ == "__main__":
     odom_bag_file = "./rosbags/odom_10.bag"
     DEPTH_ROS_TOPIC = "/camera/aligned_depth_to_color/image_raw"
     ODOM_ROS_TOPIC = "/tagslam/odom/body_cube"
-    GT_POSE_DIR = (
-        f"/home/cnets-vision/mengti_ws/robot_filter/dataset/old_toss_{toss_id}/tagslam_poses/"
-    )
-    OUTPUT_POSE_DIR = f"/home/cnets-vision/mengti_ws/BundleSDF/results/old_toss_{toss_id}/ob_in_cam/"
+    DATASET="old_toss_1"
+    GT_POSE_DIR = f"/home/cnets-vision/mengti_ws/robot_filter/dataset/{DATASET}/tagslam_poses/"
+    OUTPUT_POSE_DIR = f"/home/cnets-vision/mengti_ws/BundleSDF/results/{DATASET}/ob_in_cam/"
     #### Ablation 1 ####
     # OUTPUT_POSE_DIR = f"/home/cnets-vision/mengti_ws/robot_filter/ob_in_cams/ob_in_cam_exp_1/"
     
@@ -316,8 +309,8 @@ if __name__ == "__main__":
     #### Ablation 6 ####
     # OUTPUT_POSE_DIR = f"/home/cnets-vision/mengti_ws/robot_filter/ob_in_cams/ob_in_cam_exp_6/"
     
-    ODOM_FILE_PATH = f"/home/cnets-vision/mengti_ws/BundleSDF/data/old_toss_{toss_id}/annotated_poses/"
-    FIG_NAME = f"result_poses_bundlesdf_{toss_id}.png"
+    ODOM_FILE_PATH = f"/home/cnets-vision/mengti_ws/BundleSDF/data/{DATASET}/annotated_poses/"
+    FIG_NAME = f"result_poses_bundlesdf_{DATASET}.png"
     CAMERA_EXTRINSICS_FILE = "./assets/realsense_pose_cube_old.yaml"
 
     cam = 'cam0' # realsense camera name

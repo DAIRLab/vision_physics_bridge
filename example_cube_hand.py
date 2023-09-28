@@ -29,15 +29,15 @@ from scipy.spatial.transform import Rotation as R
 """Process the cube hand-tossing data.
 """
 
-ROSBAG_NAME = "./rosbags/raw_48.bag"
+ROSBAG_NAME = "./rosbags/raw_50.bag"
 DEPTH_ROS_TOPIC = "/camera/aligned_depth_to_color/image_raw"
 JOINT_STATE_ROS_TOPIC = "/joint_states"
 RGB_ROS_TOPIC = "/camera/color/image_raw"
 
-ROOT_DIR = "./dataset/cube_hand_toss_60_2/"
-BUNDLETRACK_DATA_DIR = "cube_hand_toss_60_2/"
+ROOT_DIR = "./dataset/cube_hand_toss_60_3/"
+BUNDLETRACK_DATA_DIR = "cube_hand_toss_60_3/"
 BUNDLETRACK_DIR = "/home/cnets-vision/mengti_ws/BundleSDF/data/"
-CAMERA_EXTRINSICS_FILE = "./assets/realsense_pose_cube_hand_60_2.yaml"
+CAMERA_EXTRINSICS_FILE = "./assets/realsense_pose_cube_hand_60_3.yaml"
 # POSE_YAML = "./assets/poses_cube_hand_60.yaml"
 
 # Create folders
@@ -108,8 +108,28 @@ cam_axis_vec = np.array([cam_rot_dict['x'], cam_rot_dict['y'], cam_rot_dict['z']
 # board_trans = np.array([board_pos['x']+X_OFFSET, board_pos['y']+Y_OFFSET, board_pos['z']+Z_OFFSET]).reshape(-1, 1)
 # board_rot_dict = data_loaded['bodies'][1][board]['pose']['rotation']
 # board_axis_vec = np.array([board_rot_dict['x'], board_rot_dict['y'], board_rot_dict['z']])
-cube_trans = np.array([0.183325781372, -0.0359087938626, 0.0252657499878]).reshape(-1, 1)
-cube_quat = np.array([0.00166957478468, -0.00188674789889, -0.00255240804615, 0.999993568937]) #xyzw
+
+# cube_hand_toss_60
+# cube_trans = np.array([0.183325781372, -0.0359087938626, 0.0252657499878]).reshape(-1, 1)
+# cube_quat = np.array([0.00166957478468, -0.00188674789889, -0.00255240804615, 0.999993568937]) #xyzw
+
+# cube_hand_toss_60_2
+# cube_trans = np.array([0.183213660774, -0.0346361918548, 0.0252779084507]).reshape(-1,1)
+# cube_quat = np.array([0.00162496697398, -0.00196408637707, 0.00452820745199, 0.999986498501])
+
+# position: 
+#       x: 0.22072389542360885
+#       y: 0.00558024058296229
+#       z: 0.023225527657574168
+#     orientation: 
+#       x: 0.006720446319847842
+#       y: -0.008890129044248997
+#       z: 0.0009710776280714613
+#       w: 0.9999374271498586
+
+# cube_hand_toss_60_3
+cube_trans = np.array([0.22072389542360885, 0.00558024058296229, 0.023225527657574168]).reshape(-1,1)
+cube_quat = np.array([0.006720446319847842, -0.008890129044248997, 0.0009710776280714613, 0.9999374271498586])
 
 def save_init_pose(trans, quat, save_dir):
     rot = R.from_quat(quat).as_matrix()
@@ -167,18 +187,18 @@ if __name__ == "__main__":
     #     axis_vec,
     # )  # Get the cube pose for the first frame
     save_init_pose(cube_trans, cube_quat, ANNOTATED_POSES_DIR)
-    bag_to_depth_images(
-        ROSBAG_NAME,
-        DEPTH_ROS_TOPIC,
-        DEPTH_DATA_DIR,
-        start_time,
-        end_time,
-        img_dir=IMAGE_TXT_PATH,
-        bundletrack_depth_dir=BUNDLETRACK_DEPTH,
-    )
-    print("Depth images generated")
-    # Since we don't need the masks for this dataset, simply use the old version of rgb processor
-    bag_to_rgb_images(ROSBAG_NAME, RGB_ROS_TOPIC, BUNDLETRACK_RGB, start_time, end_time)
-    frame_num = len([name for name in os.listdir(BUNDLETRACK_RGB)])
-    for frame_id in range(1, frame_num+1):
-        create_annotated_poses(output_dir=ANNOTATED_POSES_DIR, frame_id=frame_id)
+    # bag_to_depth_images(
+    #     ROSBAG_NAME,
+    #     DEPTH_ROS_TOPIC,
+    #     DEPTH_DATA_DIR,
+    #     start_time,
+    #     end_time,
+    #     img_dir=IMAGE_TXT_PATH,
+    #     bundletrack_depth_dir=BUNDLETRACK_DEPTH,
+    # )
+    # print("Depth images generated")
+    # # Since we don't need the masks for this dataset, simply use the old version of rgb processor
+    # bag_to_rgb_images(ROSBAG_NAME, RGB_ROS_TOPIC, BUNDLETRACK_RGB, start_time, end_time)
+    # frame_num = len([name for name in os.listdir(BUNDLETRACK_RGB)])
+    # for frame_id in range(1, frame_num+1):
+    #     create_annotated_poses(output_dir=ANNOTATED_POSES_DIR, frame_id=frame_id)

@@ -611,20 +611,30 @@ def extract_gt_poses_from_tagslam_with_missing_frames(
     record = 0
     for (topic, msg, ts) in odom_bag.read_messages(topics=str(odom_topic)):
         if start_time and end_time:
-            if msg.header.stamp < start_time:
+            # if msg.header.stamp < start_time:
+            #     continue
+            # if msg.header.stamp >= end_time:
+            #     break
+            if frame_id < start_time:
                 continue
-            if msg.header.stamp >= end_time:
+            if frame_id > end_time:
                 break
         if msg.header.stamp.secs not in odom_timestamps_.keys():
             odom_timestamps_[msg.header.stamp.secs] = []
         odom_timestamps_[msg.header.stamp.secs].append(
             BagInfo(msg.header.stamp, msg.pose.pose)
         )
+        frame_id += 1
+    frame_id = 1
     for (topic, msg, ts) in depth_bag.read_messages(topics=str(depth_topic)):
         if start_time and end_time:
-            if msg.header.stamp < start_time:
+            # if msg.header.stamp < start_time:
+            #     continue
+            # if msg.header.stamp >= end_time:
+            #     break
+            if frame_id < start_time:
                 continue
-            if msg.header.stamp >= end_time:
+            if frame_id > end_time:
                 break
         nearest_neighbor = find_nearest_neighbor(msg.header.stamp)
         if nearest_neighbor != None:
@@ -692,40 +702,62 @@ def extract_time_versus_poses(
     odom_bag = rosbag.Bag(odom_bag_file, "r")
     bundletrack_time = []
     odom_time = []
+    frame = 1
+    tagslam_poses = []
     for (topic, msg, ts) in depth_bag.read_messages(topics=str(depth_topic)):
         if start_time and end_time:
-            if msg.header.stamp < start_time:
+            # if msg.header.stamp < start_time:
+            #     continue
+            # if msg.header.stamp >= end_time:
+            #     break
+            if frame < start_time:
                 continue
-            if msg.header.stamp >= end_time:
+            if frame > end_time:
                 break
-        bundletrack_time.append(msg.header.stamp.to_nsec())
+        btime = msg.header.stamp.secs + msg.header.stamp.nsecs * 1e-9
+        bundletrack_time.append(btime)
+        frame+=1
     print("The length of the bundletrack_time is {}".format(len(bundletrack_time)))
 
     frame_id = 1
     for (topic, msg, ts) in odom_bag.read_messages(topics=str(odom_topic)):
         if start_time and end_time:
-            if msg.header.stamp < start_time:
+            # if msg.header.stamp < start_time:
+            #     continue
+            # if msg.header.stamp >= end_time:
+            #     break
+            if frame_id < start_time:
                 continue
-            if msg.header.stamp >= end_time:
+            if frame_id > end_time // 2:
                 break
-        odom_time.append(msg.header.stamp.to_nsec())
-        # Q = np.zeros((4, 1))
-        # Q[0] = msg.pose.pose.orientation.x
-        # Q[1] = msg.pose.pose.orientation.y
-        # Q[2] = msg.pose.pose.orientation.z
-        # Q[3] = msg.pose.pose.orientation.w
-        # rotation_matrix = quaternion_to_rotation_matrix(Q)[:, :, 0]
-        # rotation_matrix_tf = tf.transformations.quaternion_matrix([msg.pose.pose.orientation.x, msg.pose.pose.orientation.y, msg.pose.pose.orientation.z, msg.pose.pose.orientation.w])[:3, :3]
-        # position = msg.pose.pose.position
-        # translation = np.array([[position.x], [position.y], [position.z]])
-        # result = np.vstack(
-        #     (np.hstack((rotation_matrix, translation)), np.array([0, 0, 0, 1]))
-        # )
-        # np.savetxt(output_dir + "%04i.txt" % frame_id, result)
+        time_offset = 120.18  #shift the odom bag for a duration
+        shifted_timestamp = msg.header.stamp+rospy.Duration(time_offset)
+        gtime = shifted_timestamp.secs + shifted_timestamp.nsecs * 1e-9
+        odom_time.append(gtime)
+        
+        Q = np.zeros((7,))
+        position = msg.pose.pose.position
+        Q[0] = position.x
+        Q[1] = position.y
+        Q[2] = position.z
+        Q[3] = msg.pose.pose.orientation.x
+        Q[4] = msg.pose.pose.orientation.y
+        Q[5] = msg.pose.pose.orientation.z
+        Q[6] = msg.pose.pose.orientation.w
+        tagslam_poses.append(Q)
         frame_id += 1
+    tagslam_poses = np.array(tagslam_poses).T
+    bundletrack_time = np.expand_dims(bundletrack_time,axis=0)
+    odom_time = np.expand_dims(odom_time,axis=0)
+    data = np.concatenate((odom_time, tagslam_poses), axis=0)
+    data = data.T #N, 9
+    print(f'data shape: {data.shape}')
+    print(f'bundletrack_time shape: {bundletrack_time.shape}')
+    np.savetxt(output_dir + 'tagslam.txt', data)
+    print(output_dir + 'tagslam.txt saved!')
     depth_bag.close()
     odom_bag.close()
-    return bundletrack_time, odom_time
+    return bundletrack_time
 
 
 def extract_toss_duration(bagfile, topic, threshold):

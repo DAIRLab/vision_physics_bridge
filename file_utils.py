@@ -321,9 +321,9 @@ def formulate_dataset():
     
 def main():
     # process_directory('/home/cnets-vision/mengti_ws/BundleSDF/results/ob_in_cam_projected_icp_transformed')
-    # formulate_dataset()
-    for frame_id in range(1, 3813):
-        create_annotated_poses(output_dir="/home/cnets-vision/mengti_ws/BundleSDF/data/old_toss_10_tosses/annotated_poses", frame_id=frame_id)
+    formulate_dataset()
+    # for frame_id in range(1, 3813):
+    #     create_annotated_poses(output_dir="/home/cnets-vision/mengti_ws/BundleSDF/data/old_toss_10_tosses/annotated_poses", frame_id=frame_id)
 
 if __name__ == "__main__":
     main()

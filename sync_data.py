@@ -6,7 +6,7 @@ from nav_msgs.msg import Odometry
 import numpy as np
 from scipy.spatial.transform import Rotation as R
 import yaml
-
+import os
 
 class Synchronizer:
     def __init__(self, tagslam_dir, data_length, start_time, end_time, save=False) -> None:
@@ -31,7 +31,9 @@ class Synchronizer:
         rospy.spin()
 
     def callback(self, depth_msg, odom_msg):
-        if self.start_time <= depth_msg.header.stamp < self.end_time:
+        print(depth_msg.header.stamp, odom_msg.header.stamp)
+        # if self.start_time <= depth_msg.header.stamp < self.end_time:
+        if self.start_time <= self.frame <= self.end_time:
             self.frame += 1
             print(self.frame)
             position = odom_msg.pose.pose.position
@@ -61,29 +63,11 @@ class Synchronizer:
 
 
 if __name__ == "__main__":
-    # import os
-    # CAMERA_EXTRINSICS_FILE = './assets/realsense_pose_bottle.yaml'
-
-    # cam = 'cam0' # realsense camera name
-    # with open(CAMERA_EXTRINSICS_FILE, 'r') as stream:
-    #     data_loaded = yaml.safe_load(stream)
-    # print(data_loaded[cam]['pose']['position'])
-
-    # cam_pos_dict = data_loaded[cam]['pose']['position']
-    # cam_trans = np.array([cam_pos_dict['x'], cam_pos_dict['y'], cam_pos_dict['z']]).reshape(-1, 1)
-    # cam_rot_dict = data_loaded[cam]['pose']['rotation']
-    # cam_axis_vec = np.array([cam_rot_dict['x'], cam_rot_dict['y'], cam_rot_dict['z']])
-
-    # GT_POSE_DIR = (
-    # "/home/cnets-vision/mengti_ws/robot_filter/dataset/bottle_toss/tagslam_poses/"
-    # )
-    # OUTPUT_POSE_DIR = "/home/cnets-vision/mengti_ws/BundleSDF/results/bottle_toss/ob_in_cam/"
-    # frame_num = len([name for name in os.listdir(OUTPUT_POSE_DIR)])
-    # # start time
-    # start_time = rospy.rostime.Time(secs=1691457456, nsecs=641854)
-    # # end time
-    # end_time = rospy.rostime.Time(secs=1691457522, nsecs=271324)
-    
-    # start_frame = 1301
-    # sync = Synchronizer(GT_POSE_DIR, frame_num, start_time, end_time, start_frame, save=False)
-    pass
+    DATASET = "cube_hand_toss_60_3"
+    GT_POSE_DIR = f"/home/cnets-vision/mengti_ws/robot_filter/dataset/{DATASET}/tagslam_poses/"
+    BUNDLESDF_RGB_DIR = f"/home/cnets-vision/mengti_ws/BundleSDF/data/{DATASET}/rgb/"
+    frame_num = len(os.listdir(BUNDLESDF_RGB_DIR))
+    start_frame = 1
+    end_frame = 605
+    sync = Synchronizer(GT_POSE_DIR, frame_num, start_frame, end_frame, save=True)
+    # pass

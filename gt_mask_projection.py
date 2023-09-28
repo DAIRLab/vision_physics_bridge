@@ -3,18 +3,18 @@ import cv2
 import pywavefront
 import os
 import yaml
-from math_utils import setup_extrinsic, transform_bundletrack_output
+from math_utils import pos_quat_to_trans_mat, setup_extrinsic, transform_bundletrack_output, world_to_camera
 import open3d as o3d
 
 # DATASET_NAME = "cube_hand_toss_60"
-DATASET_NAME = "cube_hand_1"
+DATASET_NAME = "cube_hand_3_1"
 MESH_FILE = "./assets/contactnets_cube.obj"
-BUNDLESDF_DIR = os.path.join(os.path.dirname(os.path.realpath(__file__)), "..", "bundlenets")
+BUNDLESDF_DIR = os.path.join(os.path.dirname(os.path.realpath(__file__)), "..", "BundleSDF")
 BUNDLESDF_DATASET_DIR = os.path.join(BUNDLESDF_DIR, "data", DATASET_NAME)
 BUNDLESDF_RESULT_DIR = os.path.join(BUNDLESDF_DIR, "results", DATASET_NAME)
 ANNOTATED_POSE_DIR = os.path.join(BUNDLESDF_DATASET_DIR, "annotated_poses/")
 ANNOTATED_POSE_FILE = os.path.join(BUNDLESDF_DATASET_DIR, "annotated_poses", "0000.txt")
-CAMERA_EXTRINSICS_FILE = "./assets/realsense_pose_cube_hand_60_2.yaml"
+CAMERA_EXTRINSICS_FILE = "./assets/realsense_pose_cube_hand_60_3.yaml"
 RGB_FILE = os.path.join(BUNDLESDF_DATASET_DIR, "rgb", "0001.png")
 
 cam = 'cam0' # realsense camera name
@@ -109,7 +109,7 @@ def get_overlay_video_2():
     mesh = o3d.io.read_triangle_mesh(MESH_FILE)
     vertices = np.array(mesh.vertices)
     fourcc = cv2.VideoWriter_fourcc(*'mp4v')
-    out = cv2.VideoWriter('overlay_video.mp4', fourcc, 20.0, (640, 480))
+    out = cv2.VideoWriter('overlay_video_3.mp4', fourcc, 20.0, (640, 480))
     num_frames = len(os.listdir(os.path.join(BUNDLESDF_DATASET_DIR, "rgb")))
     for i in range(1, num_frames):
         pose_file_name = os.path.join(BUNDLESDF_RESULT_DIR, "ob_in_cam", f"{i:04}.txt")
@@ -122,11 +122,7 @@ def get_overlay_video_2():
             cam_trans,
             cam_axis_vec,
             # to_world=True,
-        ) # camera frame
-        z_180_RT = np.zeros((4, 4), dtype=np.float32)
-        z_180_RT[:3, :3] = np.diag([-1, -1, 1])
-        z_180_RT[3, 3] = 1
-        object_pose = z_180_RT@object_pose
+        ) # camera frame           
         transformed_pts = (object_pose @ np.hstack([vertices, np.ones((vertices.shape[0], 1))]).T).T
         transformed_pts = transformed_pts[:, :3] / transformed_pts[:, 2, np.newaxis]
         img_pts = (intrinsic_matrix @ transformed_pts.T).T
@@ -139,5 +135,32 @@ def get_overlay_video_2():
         out.write(img)
     out.release()
 
+def get_overlay_video_with_gt_poses():
+    mesh = o3d.io.read_triangle_mesh(MESH_FILE)
+    vertices = np.array(mesh.vertices)
+    fourcc = cv2.VideoWriter_fourcc(*'mp4v')
+    out = cv2.VideoWriter('overlay_video_3.mp4', fourcc, 20.0, (640, 480))
+    num_frames = len(os.listdir(os.path.join(BUNDLESDF_DATASET_DIR, "rgb")))//2
+    gt_poses_dir = os.path.join(os.path.dirname(os.path.realpath(__file__)), "dataset", DATASET_NAME, "tagslam_poses", "tagslam.txt")
+    gt_poses = np.loadtxt(gt_poses_dir)[:,1:]
+    image_names = sorted(os.listdir(os.path.join(BUNDLESDF_DATASET_DIR, "rgb")))
+    image_paths = [os.path.join(BUNDLESDF_DATASET_DIR, "rgb", name) for name in image_names]
+    selected_images = image_paths[::2]
+    for i in range(num_frames):
+        img = cv2.imread(selected_images[i])
+        object_pose = pos_quat_to_trans_mat(gt_poses[i-1])
+        object_pose = world_to_camera(object_pose, cam_trans, cam_axis_vec)         
+        transformed_pts = (object_pose @ np.hstack([vertices, np.ones((vertices.shape[0], 1))]).T).T
+        transformed_pts = transformed_pts[:, :3] / transformed_pts[:, 2, np.newaxis]
+        img_pts = (intrinsic_matrix @ transformed_pts.T).T
+        img_pts = img_pts[:, :2].astype(np.int32)
+        # img = cv2.imread(rgb_file_name)
+        for triangle in mesh.triangles:
+            contour = np.array([img_pts[triangle[0]], img_pts[triangle[1]], img_pts[triangle[2]]])
+            cv2.polylines(img, [contour], isClosed=True, color=(0, 255, 0), thickness=2)
+
+        out.write(img)
+    out.release()
+
 if __name__ == "__main__":
-    get_overlay_video_2()
+    get_overlay_video_with_gt_poses()
