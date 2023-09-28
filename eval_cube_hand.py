@@ -21,6 +21,7 @@ import yaml
 DATASET = "cube_hand_3_1"
 GT_POSE_DIR = f"/home/cnets-vision/mengti_ws/robot_filter/dataset/{DATASET}/tagslam_poses/"
 OUTPUT_POSE_DIR = f"/home/cnets-vision/mengti_ws/BundleSDF/results/{DATASET}/ob_in_cam/"
+# OUTPUT_POSE_DIR = f"/home/cnets-vision/mengti_ws/BundleSDF/results/ob_in_cam/"
 ODOM_FILE_PATH = f"/home/cnets-vision/mengti_ws/BundleSDF/data/{DATASET}/annotated_poses/"
 CAMERA_EXTRINSICS_FILE = './assets/realsense_pose_cube_hand_60_3.yaml'
 FIG_NAME = "result_poses_cube_hand_toss_wtf.png"
@@ -93,7 +94,7 @@ def plot_with_time(bundletrack_time, gt_time, bundletrack_pose_dir, gt_poses):
             ODOM_FILE_PATH,
             cam_trans,
             cam_axis_vec,
-            # to_world=True,
+            to_world=True,
         ) # camera frame
         estimated_poses.append(output_pose)
         output_pose_ = trans_mat_to_pos_quat(output_pose)
@@ -259,10 +260,9 @@ if __name__ == "__main__":
     odom_bag_file = "./rosbags/adjusted_odom_50.bag"
     DEPTH_ROS_TOPIC = "/camera/aligned_depth_to_color/image_raw"
     ODOM_ROS_TOPIC = "/tagslam/odom/body_cube"
-    # frame_num = len([name for name in os.listdir(OUTPUT_POSE_DIR)])
-    frame_num = 449
+    frame_num = len([name for name in os.listdir(OUTPUT_POSE_DIR)])
     print(f"there are {frame_num} frames")
-    start_frame, end_frame = 1, 449
+    start_frame, end_frame = 1, 605
     # For raw and odom bag with same frame rate
     # sync = Synchronizer(GT_POSE_DIR, frame_num, start_time, end_time, save=True)
     # bundletrack_time, gt_time = sync.bundletrack_time, sync.gt_time

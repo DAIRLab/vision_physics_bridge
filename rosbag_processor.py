@@ -328,10 +328,11 @@ def extract_cube_pose(
     final_odom_timestamps = {}
     print("Reading depth bag: %s and odom bag: %s" % (bagfile, odom_bagfile))
     for (topic, msg, ts) in depth_bag.read_messages(topics=str(DEPTH_ROS_TOPIC)):
-        # if checkStarttime(msg.header.stamp, start_time):
-        #     continue
-        # if (checkEndtime(msg.header.stamp, end_time)):
-        #     break
+        if start_time and end_time:
+            if msg.header.stamp < start_time:
+                continue
+            if msg.header.stamp >= end_time:
+                break
         if msg.header.stamp.secs not in depth_timestamps.keys():
             depth_timestamps[msg.header.stamp.secs] = []
         depth_timestamps[msg.header.stamp.secs].append(msg.header.stamp.nsecs)
@@ -706,14 +707,14 @@ def extract_time_versus_poses(
     tagslam_poses = []
     for (topic, msg, ts) in depth_bag.read_messages(topics=str(depth_topic)):
         if start_time and end_time:
-            # if msg.header.stamp < start_time:
-            #     continue
-            # if msg.header.stamp >= end_time:
-            #     break
-            if frame < start_time:
+            if msg.header.stamp < start_time:
                 continue
-            if frame > end_time:
+            if msg.header.stamp >= end_time:
                 break
+            # if frame < start_time:
+            #     continue
+            # if frame > end_time:
+            #     break
         btime = msg.header.stamp.secs + msg.header.stamp.nsecs * 1e-9
         bundletrack_time.append(btime)
         frame+=1
@@ -722,17 +723,18 @@ def extract_time_versus_poses(
     frame_id = 1
     for (topic, msg, ts) in odom_bag.read_messages(topics=str(odom_topic)):
         if start_time and end_time:
-            # if msg.header.stamp < start_time:
-            #     continue
-            # if msg.header.stamp >= end_time:
-            #     break
-            if frame_id < start_time:
+            if msg.header.stamp < start_time:
                 continue
-            if frame_id > end_time // 2:
+            if msg.header.stamp >= end_time:
                 break
-        time_offset = 120.18  #shift the odom bag for a duration
-        shifted_timestamp = msg.header.stamp+rospy.Duration(time_offset)
-        gtime = shifted_timestamp.secs + shifted_timestamp.nsecs * 1e-9
+            # if frame_id < start_time:
+            #     continue
+            # if frame_id > end_time // 2:
+            #     break
+        # time_offset = 120.18  #shift the odom bag for a duration
+        # shifted_timestamp = msg.header.stamp+rospy.Duration(time_offset)
+        # gtime = shifted_timestamp.secs + shifted_timestamp.nsecs * 1e-9
+        gtime = msg.header.stamp.secs + msg.header.stamp.nsecs * 1e-9
         odom_time.append(gtime)
         
         Q = np.zeros((7,))
@@ -757,7 +759,7 @@ def extract_time_versus_poses(
     print(output_dir + 'tagslam.txt saved!')
     depth_bag.close()
     odom_bag.close()
-    return bundletrack_time
+    return bundletrack_time.reshape(-1,)
 
 
 def extract_toss_duration(bagfile, topic, threshold):

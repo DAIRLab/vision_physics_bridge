@@ -1,3 +1,4 @@
+from file_utils import load_toss_time_from_yaml
 from math_utils import world_to_camera
 import rospy
 import message_filters
@@ -19,7 +20,7 @@ class Synchronizer:
         self.depth_sub = message_filters.Subscriber(
             "/camera/aligned_depth_to_color/image_raw", Image
         )
-        self.odom_sub = message_filters.Subscriber("/tagslam/odom/body_cube", Odometry)
+        self.odom_sub = message_filters.Subscriber("/tagslam/odom/body_box", Odometry)
         self.ts = message_filters.ApproximateTimeSynchronizer(
             [self.depth_sub, self.odom_sub], 1000, 10
         )
@@ -31,9 +32,7 @@ class Synchronizer:
         rospy.spin()
 
     def callback(self, depth_msg, odom_msg):
-        print(depth_msg.header.stamp, odom_msg.header.stamp)
-        # if self.start_time <= depth_msg.header.stamp < self.end_time:
-        if self.start_time <= self.frame <= self.end_time:
+        if self.start_time <= depth_msg.header.stamp < self.end_time:
             self.frame += 1
             print(self.frame)
             position = odom_msg.pose.pose.position
@@ -63,11 +62,22 @@ class Synchronizer:
 
 
 if __name__ == "__main__":
-    DATASET = "cube_hand_toss_60_3"
+    # DATASET = "cube_hand_toss_60_3"
+    # GT_POSE_DIR = f"/home/cnets-vision/mengti_ws/robot_filter/dataset/{DATASET}/tagslam_poses/"
+    # BUNDLESDF_RGB_DIR = f"/home/cnets-vision/mengti_ws/BundleSDF/data/{DATASET}/rgb/"
+    # frame_num = len(os.listdir(BUNDLESDF_RGB_DIR))
+    # start_frame = 1
+    # end_frame = 605
+    # sync = Synchronizer(GT_POSE_DIR, frame_num, start_frame, end_frame, save=True)
+    
+    DATASET = "new_toss_1"
     GT_POSE_DIR = f"/home/cnets-vision/mengti_ws/robot_filter/dataset/{DATASET}/tagslam_poses/"
     BUNDLESDF_RGB_DIR = f"/home/cnets-vision/mengti_ws/BundleSDF/data/{DATASET}/rgb/"
     frame_num = len(os.listdir(BUNDLESDF_RGB_DIR))
-    start_frame = 1
-    end_frame = 605
-    sync = Synchronizer(GT_POSE_DIR, frame_num, start_frame, end_frame, save=True)
-    # pass
+    yaml_path = "./assets/config.yaml"
+    toss_type = 'cube_new'
+    toss_id=1
+    start_time = load_toss_time_from_yaml(yaml_path, toss_type, toss_id, 'start_time')
+    end_time = load_toss_time_from_yaml(yaml_path, toss_type, toss_id, 'end_time')
+    sync = Synchronizer(GT_POSE_DIR, frame_num, start_time, end_time, save=True)
+    

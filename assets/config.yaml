@@ -210,3 +210,14 @@ tosses:
         nsecs: 762523
       start_frame: 59
       end_frame: 115
+
+  cube_new:
+    - toss: 1
+      start_time:
+        secs: 1667330354
+        nsecs: 923693
+      end_time:
+        secs: 1667330357
+        nsecs: 447548
+      start_frame: 0
+      end_frame: 0
