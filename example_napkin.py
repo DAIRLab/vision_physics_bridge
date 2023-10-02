@@ -11,7 +11,7 @@ from file_utils import (
     load_toss_time_from_yaml,
     write_real_depth_as_txt,
 )
-from math_utils import world_to_camera
+from math_utils import pos_quat_to_trans_mat, world_to_camera
 from pydrake.all import StartMeshcat
 from rosbag_processor import (
     bag_to_depth_images,
@@ -23,24 +23,26 @@ from rosbag_processor import (
     extract_gt_poses_from_tagslam_with_missing_frames,
 )
 import rospy
+from sync_data import Synchronizer
 from urdf_filter import dilate, run_urdf_filter
 import os, os.path
 import yaml
 from scipy.spatial.transform import Rotation as R
 """Process the cube hand-tossing data.
 """
-
-ROSBAG_NAME = "./rosbags/raw_50.bag"
-ODOM_ROSBAG_NAME = "./rosbags/odom_50.bag"
+TOSS_TYPE = 'napkin'
+TOSS_ID=0
+ROSBAG_NAME = "./rosbags/raw_51.bag"
+ODOM_ROSBAG_NAME = "./rosbags/odom_51.bag"
 DEPTH_ROS_TOPIC = "/camera/aligned_depth_to_color/image_raw"
+ODOM_ROS_TOPIC = "/tagslam/odom/body_napkin"
 JOINT_STATE_ROS_TOPIC = "/joint_states"
 RGB_ROS_TOPIC = "/camera/color/image_raw"
-ODOM_ROS_TOPIC = "/tagslam/odom/body_cube"
 
-ROOT_DIR = "./dataset/cube_hand_toss_60_3/"
-BUNDLETRACK_DATA_DIR = "cube_hand_toss_60_3/"
+ROOT_DIR = f"./dataset/{TOSS_TYPE}_{TOSS_ID}/"
+BUNDLETRACK_DATA_DIR = f"{TOSS_TYPE}_{TOSS_ID}/"
 BUNDLETRACK_DIR = "/home/cnets-vision/mengti_ws/BundleSDF/data/"
-CAMERA_EXTRINSICS_FILE = "./assets/realsense_pose_cube_hand_60_3.yaml"
+CAMERA_EXTRINSICS_FILE = "./assets/realsense_pose_napkin.yaml"
 
 # Create folders
 if not os.path.exists(ROOT_DIR + "texts"):
@@ -100,30 +102,8 @@ cam_rot_dict = data_loaded[cam]['pose']['rotation']
 cam_axis_vec = np.array([cam_rot_dict['x'], cam_rot_dict['y'], cam_rot_dict['z']])
 
 yaml_path = './assets/config.yaml'
-toss_type = 'cube_new'
-toss_id=1
-start_time = load_toss_time_from_yaml(yaml_path, toss_type, toss_id, 'start_time')
-end_time = load_toss_time_from_yaml(yaml_path, toss_type, toss_id, 'end_time')
-
-# CUBE_HALF_LENGTH = 0.1048 / 2
-# X_OFFSET = -CUBE_HALF_LENGTH
-# Y_OFFSET = 0
-# Z_OFFSET = 0#CUBE_HALF_LENGTH
-# board = 'surface'
-# with open(POSE_YAML, 'r') as stream:
-#     data_loaded = yaml.safe_load(stream)
-# board_pos = data_loaded['bodies'][1][board]['pose']['position']
-# board_trans = np.array([board_pos['x']+X_OFFSET, board_pos['y']+Y_OFFSET, board_pos['z']+Z_OFFSET]).reshape(-1, 1)
-# board_rot_dict = data_loaded['bodies'][1][board]['pose']['rotation']
-# board_axis_vec = np.array([board_rot_dict['x'], board_rot_dict['y'], board_rot_dict['z']])
-
-# cube_hand_toss_60
-# cube_trans = np.array([0.183325781372, -0.0359087938626, 0.0252657499878]).reshape(-1, 1)
-# cube_quat = np.array([0.00166957478468, -0.00188674789889, -0.00255240804615, 0.999993568937]) #xyzw
-
-# cube_hand_toss_60_2
-# cube_trans = np.array([0.183213660774, -0.0346361918548, 0.0252779084507]).reshape(-1,1)
-# cube_quat = np.array([0.00162496697398, -0.00196408637707, 0.00452820745199, 0.999986498501])
+start_time = load_toss_time_from_yaml(yaml_path, TOSS_TYPE, TOSS_ID, 'start_time')
+end_time = load_toss_time_from_yaml(yaml_path, TOSS_TYPE, TOSS_ID, 'end_time')
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
@@ -157,16 +137,6 @@ if __name__ == "__main__":
     translation = args.translation
     axis_vec = args.axis_vec
 
-    extract_cube_pose(
-        start_time,
-        end_time,
-        ROSBAG_NAME,
-        ODOM_ROSBAG_NAME,
-        ODOM_ROS_TOPIC,
-        ANNOTATED_POSES_DIR,
-        translation,
-        axis_vec,
-    )  # Get the cube pose for the first frame
     bag_to_depth_images(
         ROSBAG_NAME,
         DEPTH_ROS_TOPIC,
@@ -180,5 +150,6 @@ if __name__ == "__main__":
     # Since we don't need the masks for this dataset, simply use the old version of rgb processor
     bag_to_rgb_images(ROSBAG_NAME, RGB_ROS_TOPIC, BUNDLETRACK_RGB, start_time, end_time)
     frame_num = len([name for name in os.listdir(BUNDLETRACK_RGB)])
+    print(f'frame_num is {frame_num}')
     for frame_id in range(1, frame_num+1):
         create_annotated_poses(output_dir=ANNOTATED_POSES_DIR, frame_id=frame_id)

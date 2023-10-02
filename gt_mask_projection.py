@@ -6,15 +6,15 @@ import yaml
 from math_utils import pos_quat_to_trans_mat, setup_extrinsic, transform_bundletrack_output, world_to_camera
 import open3d as o3d
 
-# DATASET_NAME = "cube_hand_toss_60"
+# PARAMETERS
 DATASET_NAME = "cube_hand_3_1"
 MESH_FILE = "./assets/contactnets_cube.obj"
+CAMERA_EXTRINSICS_FILE = "./assets/realsense_pose_cube_hand_60_3.yaml"
 BUNDLESDF_DIR = os.path.join(os.path.dirname(os.path.realpath(__file__)), "..", "BundleSDF")
 BUNDLESDF_DATASET_DIR = os.path.join(BUNDLESDF_DIR, "data", DATASET_NAME)
 BUNDLESDF_RESULT_DIR = os.path.join(BUNDLESDF_DIR, "results", DATASET_NAME)
 ANNOTATED_POSE_DIR = os.path.join(BUNDLESDF_DATASET_DIR, "annotated_poses/")
 ANNOTATED_POSE_FILE = os.path.join(BUNDLESDF_DATASET_DIR, "annotated_poses", "0000.txt")
-CAMERA_EXTRINSICS_FILE = "./assets/realsense_pose_cube_hand_60_3.yaml"
 RGB_FILE = os.path.join(BUNDLESDF_DATASET_DIR, "rgb", "0001.png")
 
 cam = 'cam0' # realsense camera name

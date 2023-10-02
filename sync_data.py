@@ -20,7 +20,7 @@ class Synchronizer:
         self.depth_sub = message_filters.Subscriber(
             "/camera/aligned_depth_to_color/image_raw", Image
         )
-        self.odom_sub = message_filters.Subscriber("/tagslam/odom/body_box", Odometry)
+        self.odom_sub = message_filters.Subscriber("/tagslam/odom/body_napkin", Odometry)
         self.ts = message_filters.ApproximateTimeSynchronizer(
             [self.depth_sub, self.odom_sub], 1000, 10
         )
@@ -70,12 +70,23 @@ if __name__ == "__main__":
     # end_frame = 605
     # sync = Synchronizer(GT_POSE_DIR, frame_num, start_frame, end_frame, save=True)
     
-    DATASET = "new_toss_1"
+    # DATASET = "new_toss_1"
+    # GT_POSE_DIR = f"/home/cnets-vision/mengti_ws/robot_filter/dataset/{DATASET}/tagslam_poses/"
+    # BUNDLESDF_RGB_DIR = f"/home/cnets-vision/mengti_ws/BundleSDF/data/{DATASET}/rgb/"
+    # frame_num = len(os.listdir(BUNDLESDF_RGB_DIR))
+    # yaml_path = "./assets/config.yaml"
+    # toss_type = 'cube_new'
+    # toss_id=1
+    # start_time = load_toss_time_from_yaml(yaml_path, toss_type, toss_id, 'start_time')
+    # end_time = load_toss_time_from_yaml(yaml_path, toss_type, toss_id, 'end_time')
+    # sync = Synchronizer(GT_POSE_DIR, frame_num, start_time, end_time, save=True)
+
+    DATASET = "napkin_1"
     GT_POSE_DIR = f"/home/cnets-vision/mengti_ws/robot_filter/dataset/{DATASET}/tagslam_poses/"
     BUNDLESDF_RGB_DIR = f"/home/cnets-vision/mengti_ws/BundleSDF/data/{DATASET}/rgb/"
     frame_num = len(os.listdir(BUNDLESDF_RGB_DIR))
     yaml_path = "./assets/config.yaml"
-    toss_type = 'cube_new'
+    toss_type = 'napkin'
     toss_id=1
     start_time = load_toss_time_from_yaml(yaml_path, toss_type, toss_id, 'start_time')
     end_time = load_toss_time_from_yaml(yaml_path, toss_type, toss_id, 'end_time')

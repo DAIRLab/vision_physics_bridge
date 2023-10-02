@@ -211,13 +211,99 @@ tosses:
       start_frame: 59
       end_frame: 115
 
-  cube_new:
+  # cube_new:
+  #   - toss: 1
+  #     start_time:
+  #       secs: 1667330354
+  #       nsecs: 923693
+  #     end_time:
+  #       secs: 1667330357
+  #       nsecs: 447548
+  #     start_frame: 0
+  #     end_frame: 0
+  cube_new: #60 fps cude hand toss
     - toss: 1
       start_time:
-        secs: 1667330354
-        nsecs: 923693
+        secs: 1695415477
+        nsecs: 395064
       end_time:
-        secs: 1667330357
-        nsecs: 447548
-      start_frame: 0
-      end_frame: 0
+        secs: 1695415479
+        nsecs: 169873
+
+  napkin:
+    - toss: 0 #entire dataset
+      secs: 1696015383
+        nsecs: 177608
+      end_time:
+        secs: 1696015425
+        nsecs: 939109
+    - toss: 1
+      start_time:
+        secs: 1696015383
+        nsecs: 177608
+      end_time:
+        secs: 1696015386
+        nsecs: 502336
+    - toss: 2
+      start_time:
+        secs: 1696015388
+        nsecs: 480457
+      end_time:
+        secs: 1696015390
+        nsecs: 100687
+    - toss: 3
+      start_time:
+        secs: 1696015391
+        nsecs: 914609
+      end_time:
+        secs: 1696015393
+        nsecs: 734324
+    - toss: 4
+      start_time:
+        secs: 1696015395
+        nsecs: 998295
+      end_time:
+        secs: 1696015397
+        nsecs: 853870
+    - toss: 5
+      start_time:
+        secs: 1696015399
+        nsecs: 762283
+      end_time:
+        secs: 1696015401
+        nsecs: 318823
+    - toss: 6
+      start_time:
+        secs: 1696015403
+        nsecs: 959935
+      end_time:
+        secs: 1696015405
+        nsecs: 559247
+    - toss: 7
+      start_time:
+        secs: 1696015408
+        nsecs: 459369
+      end_time:
+        secs: 1696015410
+        nsecs: 390742
+    - toss: 8
+      start_time:
+        secs: 1696015412
+        nsecs: 457875
+      end_time:
+        secs: 1696015414
+        nsecs: 129579
+    - toss: 9
+      start_time:
+        secs: 1696015416
+        nsecs: 859006
+      end_time:
+        secs: 1696015421
+        nsecs: 425617
+    - toss: 10
+      start_time:
+        secs: 1696015423
+        nsecs: 883122
+      end_time:
+        secs: 1696015425
+        nsecs: 939109

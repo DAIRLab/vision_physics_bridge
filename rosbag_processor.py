@@ -698,6 +698,7 @@ def extract_time_versus_poses(
     depth_topic,
     odom_topic,
     output_dir,
+    time_offset=0.0
 ):
     depth_bag = rosbag.Bag(depth_bag_file, "r")
     odom_bag = rosbag.Bag(odom_bag_file, "r")
@@ -711,10 +712,6 @@ def extract_time_versus_poses(
                 continue
             if msg.header.stamp >= end_time:
                 break
-            # if frame < start_time:
-            #     continue
-            # if frame > end_time:
-            #     break
         btime = msg.header.stamp.secs + msg.header.stamp.nsecs * 1e-9
         bundletrack_time.append(btime)
         frame+=1
@@ -723,18 +720,13 @@ def extract_time_versus_poses(
     frame_id = 1
     for (topic, msg, ts) in odom_bag.read_messages(topics=str(odom_topic)):
         if start_time and end_time:
-            if msg.header.stamp < start_time:
+            if msg.header.stamp+rospy.Duration(time_offset) < start_time:
                 continue
-            if msg.header.stamp >= end_time:
+            if msg.header.stamp+rospy.Duration(time_offset) >= end_time:
                 break
-            # if frame_id < start_time:
-            #     continue
-            # if frame_id > end_time // 2:
-            #     break
-        # time_offset = 120.18  #shift the odom bag for a duration
-        # shifted_timestamp = msg.header.stamp+rospy.Duration(time_offset)
-        # gtime = shifted_timestamp.secs + shifted_timestamp.nsecs * 1e-9
-        gtime = msg.header.stamp.secs + msg.header.stamp.nsecs * 1e-9
+        shifted_timestamp = msg.header.stamp+rospy.Duration(time_offset)
+        gtime = shifted_timestamp.secs + shifted_timestamp.nsecs * 1e-9
+        # gtime = msg.header.stamp.secs + msg.header.stamp.nsecs * 1e-9
         odom_time.append(gtime)
         
         Q = np.zeros((7,))
@@ -753,8 +745,6 @@ def extract_time_versus_poses(
     odom_time = np.expand_dims(odom_time,axis=0)
     data = np.concatenate((odom_time, tagslam_poses), axis=0)
     data = data.T #N, 9
-    print(f'data shape: {data.shape}')
-    print(f'bundletrack_time shape: {bundletrack_time.shape}')
     np.savetxt(output_dir + 'tagslam.txt', data)
     print(output_dir + 'tagslam.txt saved!')
     depth_bag.close()
