@@ -232,7 +232,8 @@ tosses:
 
   napkin:
     - toss: 0 #entire dataset
-      secs: 1696015383
+      start_time:
+        secs: 1696015383
         nsecs: 177608
       end_time:
         secs: 1696015425
@@ -244,6 +245,9 @@ tosses:
       end_time:
         secs: 1696015386
         nsecs: 502336
+      start_frame: 62
+      end_frame: 90
+
     - toss: 2
       start_time:
         secs: 1696015388
@@ -251,6 +255,9 @@ tosses:
       end_time:
         secs: 1696015390
         nsecs: 100687
+      start_frame: 1
+      end_frame: 50
+      
     - toss: 3
       start_time:
         secs: 1696015391

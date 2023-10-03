@@ -18,7 +18,7 @@ import rospy
 def load_toss_time_from_yaml(file_path, toss_type, toss_number, key):
     with open(file_path, 'r') as f:
         data = yaml.safe_load(f)
-    toss_data = data['tosses'][toss_type][toss_number-1]
+    toss_data = data['tosses'][toss_type][toss_number]
     start_time_data = toss_data[key]
     time = rospy.rostime.Time(secs=start_time_data['secs'], nsecs=start_time_data['nsecs'])
     return time

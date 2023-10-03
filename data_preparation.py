@@ -321,8 +321,8 @@ class DatasetManagement:
         ax[3, 2].set_title('Linear Velocity Y')
         plt.tight_layout()
         fig.suptitle('Generated from BundleSDF result')
-        plt.savefig(f'bundlesdf_{toss_type}_traj_{toss_id}_tagslam.png')
-        print(f'Saved fig bundlesdf_{toss_type}_traj_{toss_id}_tagslam.png')
+        plt.savefig(f'bundlesdf_{TOSS_TYPE}_traj_{TOSS_ID}_tagslam.png')
+        print(f'Saved fig bundlesdf_{TOSS_TYPE}_traj_{TOSS_ID}_tagslam.png')
         plt.show()
         
     def transform(self):
@@ -465,8 +465,8 @@ class DatasetManagement:
 
         plt.tight_layout()
         fig.suptitle('Generated from BundleSDF result')
-        plt.savefig(f'bundlesdf_{toss_type}_traj_{toss_id}.png')
-        print(f'Saved fig bundlesdf_{toss_type}_traj_{toss_id}.png')
+        plt.savefig(f'bundlesdf_{TOSS_TYPE}_traj_{TOSS_ID}.png')
+        print(f'Saved fig bundlesdf_{TOSS_TYPE}_traj_{TOSS_ID}.png')
         plt.show()
 
     def do_process_without_anything(self):
@@ -554,8 +554,8 @@ class DatasetManagement:
         ax[3, 2].set_title('Linear Velocity Y')
         plt.tight_layout()
         fig.suptitle('Generated from BundleSDF result')
-        plt.savefig(f'bundlesdf_{toss_type}_traj_{toss_id}_wtf.png')
-        print(f'Saved fig bundlesdf_{toss_type}_traj_{toss_id}_wtf.png')
+        plt.savefig(f'bundlesdf_{TOSS_TYPE}_traj_{TOSS_ID}_wtf.png')
+        print(f'Saved fig bundlesdf_{TOSS_TYPE}_traj_{TOSS_ID}_wtf.png')
         plt.show()
         
         
@@ -617,37 +617,30 @@ def visualize_trajectory(trajectory_dir, fig_name):
 
 #######################################################################
 if __name__ == "__main__":
-    # toss_id = 1
-    # my_traj = f'/home/cnets-vision/mengti_ws/dair_pll_latest/assets/bundlesdf_cube/{toss_id-1}.pt'
-    # visualize_trajectory(my_traj, f'my_traj_{toss_id}.png')
-    # sample_traj = '/home/cnets-vision/mengti_ws/dair_pll_latest/assets/contactnets_cube/0.pt' #N,13
-    # traj = torch.load(sample_traj)
-    # print(traj.size())
-    # visualize_trajectory(sample_traj, 'sample_traj_0.png')
-    
     parser = argparse.ArgumentParser()
     parser.add_argument(
         "--toss_id",
         type=int,
         required=True,
     )
+    parser.add_argument(
+        "--type",
+        type=str,
+        required=True,
+    )
     args = parser.parse_args()
-    toss_id = args.toss_id
-    print(f'Processing toss {toss_id}')
-    toss_type = 'cube'
-    filename = f'old_toss_{toss_id}'
-    rosbag = './rosbags/raw_10.bag'
-    # toss_type = 'bottle'
-    # filename = f'bottle_toss_{toss_id}'
-    # rosbag = './rosbags/raw_43.bag'
-    yaml_path = './assets/config.yaml'
-    ros_topic = '/camera/aligned_depth_to_color/image_raw'
-    CAMERA_EXTRINSICS_FILE = './assets/realsense_pose_cube_old.yaml'
-    # CAMERA_EXTRINSICS_FILE = './assets/realsense_pose_bottle.yaml'
-    BUNDLESDF_POSE_DIR = "/home/cnets-vision/mengti_ws/BundleSDF/results/"+filename+"/ob_in_cam/"
-    CONTACTNETS_INPUT_DIR = f"/home/cnets-vision/mengti_ws/dair_pll_latest/assets/bundlesdf_cube/"
-    ODOM_FILE_PATH = "/home/cnets-vision/mengti_ws/BundleSDF/data/"+filename+"/annotated_poses/"
-    GT_POSE_DIR = "/home/cnets-vision/mengti_ws/robot_filter/dataset/"+filename+"/tagslam_poses/"
+    TOSS_ID = args.toss_id
+    TOSS_TYPE = args.type
+    DATASET = f'{TOSS_TYPE}_{TOSS_ID}'
+    ROSBAG = './rosbags/raw_51.bag'
+    CAMERA_EXTRINSICS_FILE = f'./assets/realsense_pose_{TOSS_TYPE}.yaml'
+    print(f'Processing toss {TOSS_TYPE}_{TOSS_ID}')
+    YAML_PATH = './assets/config.yaml'
+    DEPTH_TOPIC = '/camera/aligned_depth_to_color/image_raw'
+    BUNDLESDF_POSE_DIR = f"/home/cnets-vision/mengti_ws/BundleSDF/results/{DATASET}/ob_in_cam/"
+    CONTACTNETS_INPUT_DIR = f"/home/cnets-vision/mengti_ws/BundleSDF/dair_pll/assets/bundlesdf_{TOSS_TYPE}/"
+    ODOM_FILE_PATH = f"/home/cnets-vision/mengti_ws/BundleSDF/data/{DATASET}/annotated_poses/"
+    GT_POSE_DIR = f"/home/cnets-vision/mengti_ws/robot_filter/dataset/{DATASET}/tagslam_poses/"
     PLANK_HEIGHT =  0.03428 #0.0145
     frame_num = len([name for name in os.listdir(BUNDLESDF_POSE_DIR)])
     print(f'Total frame num: {frame_num}')
@@ -659,20 +652,19 @@ if __name__ == "__main__":
     cam_rot_dict = data_loaded[cam]['pose']['rotation']
     cam_axis_vec = np.array([cam_rot_dict['x'], cam_rot_dict['y'], cam_rot_dict['z']])
     
-    start_time = load_toss_time_from_yaml(yaml_path, toss_type, toss_id, 'start_time')
-    end_time = load_toss_time_from_yaml(yaml_path, toss_type, toss_id, 'end_time')
-    start_frame = load_field_from_yaml(yaml_path, toss_type, toss_id, 'start_frame')
-    end_frame = load_field_from_yaml(yaml_path, toss_type, toss_id, 'end_frame')
+    start_time = load_toss_time_from_yaml(YAML_PATH, TOSS_TYPE, TOSS_ID, 'start_time')
+    end_time = load_toss_time_from_yaml(YAML_PATH, TOSS_TYPE, TOSS_ID, 'end_time')
+    # start_frame = load_field_from_yaml(YAML_PATH, TOSS_TYPE, TOSS_ID, 'start_frame')
+    # end_frame = load_field_from_yaml(YAML_PATH, TOSS_TYPE, TOSS_ID, 'end_frame')
     # sync = Synchronizer(GT_POSE_DIR, frame_num, start_time, end_time, save=False)
     # bundletrack_time, gt_time = sync.bundletrack_time, sync.gt_time
     # print(len(bundletrack_time), len(gt_time))
-    
     # bundletrack_time = extract_timestamps(rosbag, ros_topic, start_time, end_time)
     
     data = np.loadtxt(GT_POSE_DIR+'tagslam.txt')
     print('data loaded', data.shape)
     bundletrack_time, gt_time = data[:, 0], data[:, 1] #N,
-    dataset = DatasetManagement(frame_num, start_frame, end_frame, bundletrack_time, toss_id, cam_trans, cam_axis_vec, plot=True)
+    dataset = DatasetManagement(frame_num, start_frame, end_frame, bundletrack_time, TOSS_ID, cam_trans, cam_axis_vec, plot=True)
     # dataset.transform()
     dataset.do_process()
     # dataset.do_process_without_anything()

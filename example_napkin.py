@@ -31,7 +31,7 @@ from scipy.spatial.transform import Rotation as R
 """Process the cube hand-tossing data.
 """
 TOSS_TYPE = 'napkin'
-TOSS_ID=0
+TOSS_ID=10
 ROSBAG_NAME = "./rosbags/raw_51.bag"
 ODOM_ROSBAG_NAME = "./rosbags/odom_51.bag"
 DEPTH_ROS_TOPIC = "/camera/aligned_depth_to_color/image_raw"
@@ -104,6 +104,7 @@ cam_axis_vec = np.array([cam_rot_dict['x'], cam_rot_dict['y'], cam_rot_dict['z']
 yaml_path = './assets/config.yaml'
 start_time = load_toss_time_from_yaml(yaml_path, TOSS_TYPE, TOSS_ID, 'start_time')
 end_time = load_toss_time_from_yaml(yaml_path, TOSS_TYPE, TOSS_ID, 'end_time')
+print(f'start_time:{start_time.secs}.{start_time.nsecs}, end_time:{end_time.secs}.{end_time.nsecs}')
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()

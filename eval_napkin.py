@@ -228,6 +228,14 @@ def plot_with_time(bundletrack_time, gt_time, bundletrack_pose_dir, gt_poses):
     print(f'Figure saved to {FIG_NAME}')
     plt.show()
 
+def save_init_pose():
+    poses = np.loadtxt(os.path.join(GT_POSE_DIR, "tagslam.txt"))
+    init_pose = poses[0, 1:]
+    mat = pos_quat_to_trans_mat(init_pose)
+    mat_cam = world_to_camera(mat, cam_trans, cam_axis_vec)
+    np.savetxt(os.path.join(ODOM_FILE_PATH, "%04i.txt" % 0), mat_cam)
+    print(f'Initial pose saved to {ODOM_FILE_PATH}')
+    
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument(
@@ -276,7 +284,7 @@ if __name__ == "__main__":
         ODOM_ROS_TOPIC,
         GT_POSE_DIR,
     ).reshape(-1,)
-    
+    save_init_pose()
     data = np.loadtxt(GT_POSE_DIR+'tagslam.txt')
     gt_time = data[:, 0] #N,
     tagslam_poses = data[:, 1:] #N,7
