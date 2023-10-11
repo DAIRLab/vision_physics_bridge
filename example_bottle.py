@@ -36,8 +36,8 @@ RGB_ROS_TOPIC = "/camera/color/image_raw"
 ODOM_ROS_TOPIC = "/tagslam/odom/body_bottle"
 CAMERA_EXTRINSICS_FILE = './assets/realsense_pose_bottle.yaml'
 TOSS_ID = 10
-ROOT_DIR = f"./dataset/bottle_toss_{TOSS_ID}/"
-BUNDLETRACK_DATA_DIR = f"bottle_toss_{TOSS_ID}/"
+ROOT_DIR = f"./dataset/bottle_{TOSS_ID}/"
+BUNDLETRACK_DATA_DIR = f"bottle_{TOSS_ID}/"
 BUNDLETRACK_DIR = "/home/cnets-vision/mengti_ws/BundleSDF/data/"
 
 # Create folders

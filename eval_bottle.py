@@ -1,5 +1,6 @@
 import os
 from file_utils import load_toss_time_from_yaml
+from rosbag_processor import extract_time_versus_poses
 import rospy
 import numpy as np
 import scipy.spatial as sp
@@ -16,23 +17,7 @@ from math_utils import (
 )
 from sync_data import Synchronizer
 import yaml
-
-TOSS_ID = 2
-GT_POSE_DIR = f"/home/cnets-vision/mengti_ws/robot_filter/dataset/bottle_toss_{TOSS_ID}/tagslam_poses/"
-OUTPUT_POSE_DIR = f"/home/cnets-vision/mengti_ws/BundleSDF/results/bottle_toss_{TOSS_ID}/ob_in_cam/"
-ODOM_FILE_PATH = f"/home/cnets-vision/mengti_ws/BundleSDF/data/bottle_toss_{TOSS_ID}/annotated_poses/"
-CAMERA_EXTRINSICS_FILE = './assets/realsense_pose_bottle.yaml'
-FIG_NAME = f"result_poses_bottle_{TOSS_ID}.png"
-cam = 'cam0' # realsense camera name
-with open(CAMERA_EXTRINSICS_FILE, 'r') as stream:
-    data_loaded = yaml.safe_load(stream)
-print(data_loaded[cam]['pose']['position'])
-
-cam_pos_dict = data_loaded[cam]['pose']['position']
-cam_trans = np.array([cam_pos_dict['x'], cam_pos_dict['y'], cam_pos_dict['z']]).reshape(-1, 1)
-cam_rot_dict = data_loaded[cam]['pose']['rotation']
-cam_axis_vec = np.array([cam_rot_dict['x'], cam_rot_dict['y'], cam_rot_dict['z']])
-
+import argparse
 
 def get_cosine_sim(frame_id):
     """Compare the output of BundleTrack with the ground-truth poses of tagslam."""
@@ -167,7 +152,7 @@ def plot_ground_truth(start_frame, end_frame):
     plt.show()
 
 
-def plot_with_time(bundletrack_time, gt_time, bundletrack_pose_dir, gt_pose_dir):
+def plot_with_time(bundletrack_time, gt_time, bundletrack_pose_dir, gt_poses):
     """Plot the x, y, z of BundleTrack output versus ground-truth poses of tagslam."""
     bundletrack_time = np.array(bundletrack_time)
     output_x, output_y, output_z = [], [], []  # translation
@@ -215,31 +200,32 @@ def plot_with_time(bundletrack_time, gt_time, bundletrack_pose_dir, gt_pose_dir)
         # estimate_z_world_quat_list.append(z_test)
         # estimate_w_world_quat_list.append(w_test)
         ################################################
-
-    for frame_id in range(1, len(gt_time) + 1):
+    frame_num = tagslam_poses.shape[0]
+    for frame_id in range(frame_num):
         gt_frame = frame_id
-        gt_pose = np.loadtxt(gt_pose_dir + "%04i.txt" % gt_frame)
-        # gt_x.append(gt_pose[0])
-        # gt_y.append(gt_pose[1])
-        # gt_z.append(gt_pose[2])
-        # x_, y_, z_, w_ = (
-        #     gt_pose[3],
-        #     gt_pose[4],
-        #     gt_pose[5],
-        #     gt_pose[6],
-        # )
-        # ground_truth_poses.append(pos_quat_to_trans_mat(gt_pose))
-        # ground_truth_w.append(w_)
-        # ground_truth_x.append(x_)
-        # ground_truth_y.append(y_)
-        # ground_truth_z.append(z_)
-        ############# Transform to camera ##############
-        gt_pose_trans = pos_quat_to_trans_mat(gt_pose)
-        gt_pose_trans_cam = world_to_camera(
-            gt_pose_trans,
-            cam_trans,
-            cam_axis_vec
+        gt_pose = gt_poses[gt_frame]
+        # gt_pose = np.loadtxt(gt_pose_dir + "%04i.txt" % gt_frame)
+        gt_x.append(gt_pose[0])
+        gt_y.append(gt_pose[1])
+        gt_z.append(gt_pose[2])
+        x_, y_, z_, w_ = (
+            gt_pose[3],
+            gt_pose[4],
+            gt_pose[5],
+            gt_pose[6],
         )
+        ground_truth_poses.append(pos_quat_to_trans_mat(gt_pose))
+        ground_truth_w.append(w_)
+        ground_truth_x.append(x_)
+        ground_truth_y.append(y_)
+        ground_truth_z.append(z_)
+        ############# Transform to camera ##############
+        # gt_pose_trans = pos_quat_to_trans_mat(gt_pose)
+        # gt_pose_trans_cam = world_to_camera(
+        #     gt_pose_trans,
+        #     cam_trans,
+        #     cam_axis_vec
+        # )
         # gt_pos_quat_cam = trans_mat_to_pos_quat(gt_pose_trans_cam)
         # gt_x.append(gt_pos_quat_cam[0])
         # gt_y.append(gt_pos_quat_cam[1])
@@ -257,23 +243,23 @@ def plot_with_time(bundletrack_time, gt_time, bundletrack_pose_dir, gt_pose_dir)
         # ground_truth_z.append(z_)
         
         ########### Transform to world again ############
-        gt_pose_world_test = camera_to_world(gt_pose_trans_cam, cam_trans, cam_axis_vec)
-        gt_pos_quat_cam = trans_mat_to_pos_quat(gt_pose_world_test)
-        ground_truth_poses.append(gt_pose_world_test)
-        gt_x.append(gt_pos_quat_cam[0])
-        gt_y.append(gt_pos_quat_cam[1])
-        gt_z.append(gt_pos_quat_cam[2])
-        x_, y_, z_, w_ = (
-                        gt_pos_quat_cam[3], 
-                        gt_pos_quat_cam[4], 
-                        gt_pos_quat_cam[5], 
-                        gt_pos_quat_cam[6]
-                    )
+        # gt_pose_world_test = camera_to_world(gt_pose_trans_cam, cam_trans, cam_axis_vec)
+        # gt_pos_quat_cam = trans_mat_to_pos_quat(gt_pose_world_test)
+        # ground_truth_poses.append(gt_pose_world_test)
+        # gt_x.append(gt_pos_quat_cam[0])
+        # gt_y.append(gt_pos_quat_cam[1])
+        # gt_z.append(gt_pos_quat_cam[2])
+        # x_, y_, z_, w_ = (
+        #                 gt_pos_quat_cam[3], 
+        #                 gt_pos_quat_cam[4], 
+        #                 gt_pos_quat_cam[5], 
+        #                 gt_pos_quat_cam[6]
+        #             )
         
-        ground_truth_w.append(w_)
-        ground_truth_x.append(x_)
-        ground_truth_y.append(y_)
-        ground_truth_z.append(z_)
+        # ground_truth_w.append(w_)
+        # ground_truth_x.append(x_)
+        # ground_truth_y.append(y_)
+        # ground_truth_z.append(z_)
         ################################################
     output_x, output_y, output_z = (
         np.array(output_x),
@@ -346,20 +332,57 @@ def plot_with_time(bundletrack_time, gt_time, bundletrack_pose_dir, gt_pose_dir)
 
 
 if __name__ == "__main__":
-    depth_bag_file = "./raw_43.bag"
-    odom_bag_file = "./odom_43.bag"
+    parser = argparse.ArgumentParser()
+    parser.add_argument(
+        "--toss_id",
+        type=int,
+        required=True,
+    )
+    args = parser.parse_args()
+    TOSS_ID = args.toss_id
+    TOSS_TYPE = 'bottle'
+    DATASET = f'{TOSS_TYPE}_{TOSS_ID}'
+    GT_POSE_DIR = f"/home/cnets-vision/mengti_ws/robot_filter/dataset/{DATASET}/tagslam_poses/"
+    OUTPUT_POSE_DIR = f"/home/cnets-vision/mengti_ws/BundleSDF/results/{DATASET}/ob_in_cam/"
+    ODOM_FILE_PATH = f"/home/cnets-vision/mengti_ws/BundleSDF/data/{DATASET}/annotated_poses/"
+    CAMERA_EXTRINSICS_FILE = './assets/realsense_pose_bottle.yaml'
+    FIG_NAME = f"result_poses_{DATASET}.png"
+    depth_bag_file = "./rosbags/raw_43.bag"
+    odom_bag_file = "./rosbags/odom_43.bag"
     DEPTH_ROS_TOPIC = "/camera/aligned_depth_to_color/image_raw"
     ODOM_ROS_TOPIC = "/tagslam/odom/body_bottle"
     yaml_path = './assets/config.yaml'
-    toss_type = 'bottle'
-    start_time = load_toss_time_from_yaml(yaml_path, toss_type, TOSS_ID, 'start_time')
-    end_time = load_toss_time_from_yaml(yaml_path, toss_type, TOSS_ID, 'end_time')
+
+    cam = 'cam0' # realsense camera name
+    with open(CAMERA_EXTRINSICS_FILE, 'r') as stream:
+        data_loaded = yaml.safe_load(stream)
+    print(data_loaded[cam]['pose']['position'])
+    cam_pos_dict = data_loaded[cam]['pose']['position']
+    cam_trans = np.array([cam_pos_dict['x'], cam_pos_dict['y'], cam_pos_dict['z']]).reshape(-1, 1)
+    cam_rot_dict = data_loaded[cam]['pose']['rotation']
+    cam_axis_vec = np.array([cam_rot_dict['x'], cam_rot_dict['y'], cam_rot_dict['z']])
+
+    start_time = load_toss_time_from_yaml(yaml_path, TOSS_TYPE, TOSS_ID, 'start_time')
+    end_time = load_toss_time_from_yaml(yaml_path, TOSS_TYPE, TOSS_ID, 'end_time')
 
     frame_num = len([name for name in os.listdir(OUTPUT_POSE_DIR)])
     print(f"there are {frame_num} frames")
-    sync = Synchronizer(GT_POSE_DIR, frame_num, start_time, end_time, save=True)
-    bundletrack_time, gt_time = sync.bundletrack_time, sync.gt_time
-    print(len(bundletrack_time), len(gt_time))
-    bundletrack_time = [t.to_sec() for t in bundletrack_time]
-    gt_time = [t.to_sec() for t in gt_time]
-    plot_with_time(bundletrack_time, gt_time, OUTPUT_POSE_DIR, GT_POSE_DIR)
+    # sync = Synchronizer(GT_POSE_DIR, frame_num, start_time, end_time, save=True)
+    # bundletrack_time, gt_time = sync.bundletrack_time, sync.gt_time
+    # print(len(bundletrack_time), len(gt_time))
+    # bundletrack_time = [t.to_sec() for t in bundletrack_time]
+    # gt_time = [t.to_sec() for t in gt_time]
+    bundletrack_time = extract_time_versus_poses(
+        start_time,
+        end_time,
+        depth_bag_file,
+        odom_bag_file,
+        DEPTH_ROS_TOPIC,
+        ODOM_ROS_TOPIC,
+        GT_POSE_DIR,
+        save=True
+    ).reshape(-1,)
+    data = np.loadtxt(GT_POSE_DIR+'tagslam.txt')
+    gt_time = data[:, 0] #N,
+    tagslam_poses = data[:, 1:] #N,7
+    plot_with_time(bundletrack_time, gt_time, OUTPUT_POSE_DIR, tagslam_poses)

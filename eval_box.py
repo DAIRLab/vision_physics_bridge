@@ -11,6 +11,7 @@ from math_utils import (
     rotation_matrix_to_euler,
     trans_mat_to_pos_quat,
     transform_bundletrack_output,
+    world_to_camera,
 )
 from rosbag_processor import extract_time_versus_poses, extract_gt_poses_from_tagslam_with_missing_frames
 import yaml
@@ -80,65 +81,6 @@ def matrix_to_quaternion(matrix):
             q[3] = 0.25 * s
     return q
 
-def plot_xyz(start_frame, end_frame):
-    """Plot the x, y, z of BundleTrack output versus ground-truth poses of tagslam."""
-    output_x, output_y, output_z = [], [], []  # translation
-    gt_x, gt_y, gt_z = [], [], []
-    angles = []
-
-    for frame_id in range(start_frame, end_frame + 1):
-        gt_frame = frame_id
-        gt_pose = np.loadtxt(GT_POSE_DIR + "%04i.txt" % gt_frame)
-        output_pose = np.loadtxt(OUTPUT_POSE_DIR + "%04i.txt" % frame_id)
-        # output_pose = transform_to_camera(output_pose)
-        output_pose = camera_to_world(output_pose)
-        angle = get_angle(output_pose[:3, :3], gt_pose[:3, :3])
-        angles.append(angle)
-        output_x.append(output_pose[0, 3])
-        output_y.append(output_pose[1, 3])
-        output_z.append(output_pose[2, 3])
-
-        gt_x.append(gt_pose[0, 3])
-        gt_y.append(gt_pose[1, 3])
-        gt_z.append(gt_pose[2, 3])
-    output_x, output_y, output_z = (
-        np.array(output_x),
-        np.array(output_y),
-        np.array(output_z),
-    )
-    gt_x, gt_y, gt_z = np.array(gt_x), np.array(gt_y), np.array(gt_z)
-
-    x = np.arange(0, output_x.shape[0])
-    plt.plot(x, output_x, label="Bundletrack")
-    plt.plot(x, gt_x, label="ground-truth")
-    plt.xlabel("X-axis")
-    plt.ylabel("Y-axis")
-    plt.title("Position x")
-    plt.legend()
-    plt.show()
-
-    plt.plot(x, output_y, label="BundleTrack")
-    plt.plot(x, gt_y, label="ground-truth")
-    plt.xlabel("X-axis")
-    plt.ylabel("Y-axis")
-    plt.title("Position y")
-    plt.legend()
-    plt.show()
-
-    plt.plot(x, output_z, label="BundleTrack")
-    plt.plot(x, gt_z, label="ground-truth")
-    plt.xlabel("X-axis")
-    plt.ylabel("Y-axis")
-    plt.title("Position z")
-    plt.legend()
-    plt.show()
-
-    plt.plot(x, angles)
-    plt.xlabel("X-axis")
-    plt.ylabel("angle diff (degrees)")
-    plt.title("Angle difference")
-    plt.show()
-
 
 def plot_with_time(bundletrack_time, gt_time, bundletrack_pose_dir, gt_poses):
     """Plot the x, y, z of BundleTrack output versus ground-truth poses of tagslam."""
@@ -147,7 +89,7 @@ def plot_with_time(bundletrack_time, gt_time, bundletrack_pose_dir, gt_poses):
     gt_x, gt_y, gt_z = [], [], []
     estimated_w, estimated_x, estimated_y, estimated_z = [], [], [], []
     ground_truth_w, ground_truth_x, ground_truth_y, ground_truth_z = [], [], [], []
-    frame_num = len(bundletrack_time)
+    frame_num = len([name for name in os.listdir(OUTPUT_POSE_DIR)])
     estimated_poses, ground_truth_poses = [], []
     for frame_id in range(1, frame_num + 1):
         output_pose = np.loadtxt(bundletrack_pose_dir + "%04i.txt" % frame_id)
@@ -187,7 +129,8 @@ def plot_with_time(bundletrack_time, gt_time, bundletrack_pose_dir, gt_poses):
         # estimate_z_world_quat_list.append(z_test)
         # estimate_w_world_quat_list.append(w_test)
         ################################################
-
+    tagslam_poses = np.loadtxt(os.path.join(GT_POSE_DIR, "tagslam.txt"))
+    frame_num = tagslam_poses.shape[0]
     for frame_id in range(frame_num):
         gt_frame = frame_id
         gt_pose = gt_poses[gt_frame]
@@ -314,7 +257,14 @@ def plot_with_time(bundletrack_time, gt_time, bundletrack_pose_dir, gt_poses):
     print(f'Figure saved to {FIG_NAME}')
     plt.show()
 
-
+def save_init_pose():
+    poses = np.loadtxt(os.path.join(GT_POSE_DIR, "tagslam.txt"))
+    init_pose = poses[0, 1:]
+    mat = pos_quat_to_trans_mat(init_pose)
+    mat_cam = world_to_camera(mat, cam_trans, cam_axis_vec)
+    np.savetxt(os.path.join(ODOM_FILE_PATH, "%04i.txt" % 0), mat_cam)
+    print(f'Initial pose saved to {ODOM_FILE_PATH}')
+    
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument(
@@ -325,16 +275,16 @@ if __name__ == "__main__":
     args = parser.parse_args()
     toss_id = args.toss_id
     print(f'Processing toss {toss_id}')
-    depth_bag_file = "./rosbags/raw_19.bag"
-    odom_bag_file = "./rosbags/odom_19.bag"
+    depth_bag_file = "./rosbags/raw_57.bag"
+    odom_bag_file = "./rosbags/adjusted_odom_57.bag"
     DEPTH_ROS_TOPIC = "/camera/aligned_depth_to_color/image_raw"
     ODOM_ROS_TOPIC = "/tagslam/odom/body_box"
-    DATASET=f"new_toss_{toss_id}"
+    DATASET=f"box_{toss_id}"
     GT_POSE_DIR = f"/home/cnets-vision/mengti_ws/robot_filter/dataset/{DATASET}/tagslam_poses/"
     OUTPUT_POSE_DIR = f"/home/cnets-vision/mengti_ws/BundleSDF/results/{DATASET}/ob_in_cam/"
     ODOM_FILE_PATH = f"/home/cnets-vision/mengti_ws/BundleSDF/data/{DATASET}/annotated_poses/"
     FIG_NAME = f"result_poses_bundlesdf_{DATASET}.png"
-    CAMERA_EXTRINSICS_FILE = "./assets/realsense_pose_cube_new.yaml"
+    CAMERA_EXTRINSICS_FILE = "./assets/realsense_pose_box.yaml"
 
     cam = 'cam0' # realsense camera name
     with open(CAMERA_EXTRINSICS_FILE, 'r') as stream:
@@ -346,16 +296,12 @@ if __name__ == "__main__":
     cam_axis_vec = np.array([cam_rot_dict['x'], cam_rot_dict['y'], cam_rot_dict['z']])
 
     yaml_path = './assets/config.yaml'
-    toss_type = 'cube_new'
-    toss_id=1
+    toss_type = 'box'
     start_time = load_toss_time_from_yaml(yaml_path, toss_type, toss_id, 'start_time')
     end_time = load_toss_time_from_yaml(yaml_path, toss_type, toss_id, 'end_time')
     frame_num = len([name for name in os.listdir(OUTPUT_POSE_DIR)])
     print(f"there are {frame_num} frames")
-    
-    data = np.loadtxt(GT_POSE_DIR+'tagslam.txt')
-    print('data', data.shape)
-
+    # For raw and odom bag with different frame rate
     bundletrack_time = extract_time_versus_poses(
         start_time,
         end_time,
@@ -364,7 +310,13 @@ if __name__ == "__main__":
         DEPTH_ROS_TOPIC,
         ODOM_ROS_TOPIC,
         GT_POSE_DIR,
+        save=True,
+        time_offset=125.19
     )
+    bundletrack_time = bundletrack_time.reshape(-1,)
+    save_init_pose()
+    data = np.loadtxt(GT_POSE_DIR+'tagslam.txt')
+    print('data', data.shape)
     # bundletrack_time, gt_time = data[:, 0], data[:, 1] #N,
     gt_time = data[:,0]
     tagslam_poses = data[:, 1:] #N,7

@@ -6,6 +6,7 @@ import trimesh
 from scipy.spatial import cKDTree
 import open3d as o3d
 from math_utils import pos_quat_to_trans_mat, transform_bundletrack_output
+from nerf_utils import create_convex_hull
 
 def to_homo(pts):
     '''
@@ -101,7 +102,7 @@ def sample_points_from_mesh(mesh, num_points):
 def benchmark_one_video():
     gt_data = np.loadtxt(GT_POSE_DIR+'tagslam.txt')
     pred_poses, gt_poses = [], []
-    for frame_id in range(1, frame_num):
+    for frame_id in range(1, gt_data.shape[0]):
         output_pose = np.loadtxt(OUTPUT_POSE_DIR + "%04i.txt" % frame_id)
         output_pose = transform_bundletrack_output(
             output_pose,
@@ -112,7 +113,7 @@ def benchmark_one_video():
             to_world=True
         )
         pred_poses.append(output_pose)
-        tagslam_pose = gt_data[frame_id, 2:]
+        tagslam_pose = gt_data[frame_id, 1:]
         tagslam_mat = pos_quat_to_trans_mat(tagslam_pose)
         gt_poses.append(tagslam_mat)
     gt_mesh = trimesh.load(GT_MESH_FILE)
@@ -147,12 +148,12 @@ def benchmark_one_video():
         cd = chamfer_dists.mean()*100
         print("chamfer_dist(cm)",cd)
 
-        pcd = toOpen3dCloud(gt_pts)
-        o3d.io.write_point_cloud(f'{PCD_DIR}gt_pts.ply',pcd,write_ascii=True)
-        pcd = toOpen3dCloud(pred_pts)
-        o3d.io.write_point_cloud(f'{PCD_DIR}pred_pts.ply',pcd,write_ascii=True)
+        # pcd = toOpen3dCloud(gt_pts)
+        # o3d.io.write_point_cloud(f'{PCD_DIR}gt_pts_{DATASET}.ply',pcd,write_ascii=True)
+        # pcd = toOpen3dCloud(pred_pts)
+        # o3d.io.write_point_cloud(f'{PCD_DIR}pred_pts.ply_{DATASET}',pcd,write_ascii=True)
     
-    
+
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument(
@@ -163,6 +164,7 @@ if __name__ == '__main__':
     args = parser.parse_args()
     toss_id = args.toss_id
 
+    # Cube experiments
     """Ablation Studies
     1. BundleSDF 1 toss: old_toss_2/ob_in_cam + ablation1/mesh_cleaned_convex_hull.obj
     2. BundleSDF 10 tosses: ablation2/ob_in_cam_exp_2
@@ -184,8 +186,8 @@ if __name__ == '__main__':
     # OUTPUT_POSE_DIR = f"/home/cnets-vision/mengti_ws/robot_filter/ob_in_cam_exp_1/"
 
     #### Ablation 4 ####
-    OUTPUT_POSE_DIR = f"/home/cnets-vision/mengti_ws/BundleSDF/results/old_toss_{toss_id}/ob_in_cam_exp_4/"
-    PRED_MESH_FILE = "./assets/ablation4/mesh_all_tosses_convex_hull_with_normals.obj"
+    # OUTPUT_POSE_DIR = f"/home/cnets-vision/mengti_ws/BundleSDF/results/old_toss_{toss_id}/ob_in_cam_exp_4/"
+    # PRED_MESH_FILE = "./assets/ablation4/mesh_all_tosses_convex_hull_with_normals.obj"
 
     #### Ablation 5 ####
     # OUTPUT_POSE_DIR = f"/home/cnets-vision/mengti_ws/robot_filter/ob_in_cam_exp_5/"
@@ -196,12 +198,27 @@ if __name__ == '__main__':
     # PRED_MESH_FILE = "./assets/ablation6/mesh_refined_convex_hull_with_normals.obj"
 
 
-    ODOM_FILE_PATH = f"/home/cnets-vision/mengti_ws/BundleSDF/data/old_toss_{toss_id}/annotated_poses/"
-    GT_POSE_DIR = f"./dataset/old_toss_{toss_id}/tagslam_poses/"
-    GT_MESH_FILE = "./assets/contactnets_cube.obj"
+    # ODOM_FILE_PATH = f"/home/cnets-vision/mengti_ws/BundleSDF/data/old_toss_{toss_id}/annotated_poses/"
+    # GT_POSE_DIR = f"./dataset/old_toss_{toss_id}/tagslam_poses/"
+    # GT_MESH_FILE = "./assets/contactnets_cube.obj"
+    # PCD_DIR = f"./assets/"
+    # GT_PCD_DIR = f"./assets/gt_cube.ply"
+    # CAMERA_EXTRINSICS_FILE = "./assets/realsense_pose_cube_old.yaml"
+
+    # Napkin experiments
+    DATASET = f'napkin_{toss_id}'
+    OUTPUT_POSE_DIR = f'/home/cnets-vision/mengti_ws/BundleSDF/results/{DATASET}/ob_in_cam/'
+    # PRED_MESH_FILE = f'/home/cnets-vision/mengti_ws/BundleSDF/results/{DATASET}/textured_mesh.obj'
+    PRED_MESH_FILE = f'/home/cnets-vision/mengti_ws/robot_filter/convex_textured_mesh.obj'
+    PRED_MESH_FILE_CONVEX = f'/home/cnets-vision/mengti_ws/robot_filter/convex_textured_mesh.obj'
+    # PRED_MESH_FILE = f'/home/cnets-vision/mengti_ws/BundleSDF/assets/napkin_textured_mesh.obj' # from 10 tosses
+    ODOM_FILE_PATH = f"/home/cnets-vision/mengti_ws/BundleSDF/data/{DATASET}/annotated_poses/"
+    GT_POSE_DIR = f"./dataset/{DATASET}/tagslam_poses/"
+    GT_MESH_FILE = "./assets/gt_napkin.obj"
     PCD_DIR = f"./assets/"
-    GT_PCD_DIR = f"./assets/gt_cube.ply"
-    CAMERA_EXTRINSICS_FILE = "./assets/realsense_pose_cube_old.yaml"
+    GT_PCD_DIR = f"./assets/gt_napkin.ply"
+    CAMERA_EXTRINSICS_FILE = "./assets/realsense_pose_napkin.yaml"
+
     cam = 'cam0' # realsense camera name
     with open(CAMERA_EXTRINSICS_FILE, 'r') as stream:
         data_loaded = yaml.safe_load(stream)
@@ -211,4 +228,5 @@ if __name__ == '__main__':
     cam_rot_dict = data_loaded[cam]['pose']['rotation']
     cam_axis_vec = np.array([cam_rot_dict['x'], cam_rot_dict['y'], cam_rot_dict['z']])
     frame_num = len([name for name in os.listdir(OUTPUT_POSE_DIR)])
+    # create_convex_hull(PRED_MESH_FILE, PRED_MESH_FILE_CONVEX)
     benchmark_one_video()

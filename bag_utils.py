@@ -3,10 +3,20 @@
 import rosbag
 import rospy
 from datetime import timedelta
+import argparse 
 
-time_offset = 120.18
-with rosbag.Bag('adjusted_odom_50.bag', 'w') as outbag:
-    for topic, msg, t in rosbag.Bag('./rosbags/odom_50.bag').read_messages():
+parser = argparse.ArgumentParser()
+parser.add_argument(
+    "--offset",
+    type=float,
+    required=True,
+)
+args = parser.parse_args()
+offset = args.offset
+time_offset = offset
+
+with rosbag.Bag('adjusted_odom_57.bag', 'w') as outbag:
+    for topic, msg, t in rosbag.Bag('./rosbags/odom_57.bag').read_messages():
         
         # Adjust the timestamp by 20 seconds
         t_shifted = t + rospy.Duration(time_offset)

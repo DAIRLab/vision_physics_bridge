@@ -1,9 +1,9 @@
 import argparse
 import os
 import numpy as np
-from file_utils import load_field_from_yaml, load_toss_time_from_yaml
+from file_utils import load_dataset_from_yaml, load_field_from_yaml, load_toss_time_from_yaml
 from math_utils import trans_mat_to_pos_quat, transform_bundletrack_output, wxyz2xyzw, xyzw2wxyz
-from rosbag_processor import extract_timestamps
+from rosbag_processor import extract_time_versus_poses, extract_timestamps
 import rospy
 import torch
 
@@ -103,14 +103,14 @@ class DatasetManagement:
                 break
             if frame_id == self.start_frame:
                 t_start = self.timestamps[frame_id]
-            # pose = np.loadtxt(BUNDLESDF_POSE_DIR + "%04i.txt" % frame_id)
-            # pose = transform_bundletrack_output(pose, BUNDLESDF_POSE_DIR, ODOM_FILE_PATH, self.cam_trans, self.cam_axis_vec, to_world=True)
-            # q_t.append(R.from_matrix(pose[:3, :3]).as_quat()) #x,y,z,w
-            # p_t.append(pose[:3, 3])
+            pose = np.loadtxt(BUNDLESDF_POSE_DIR + "%04i.txt" % frame_id)
+            pose = transform_bundletrack_output(pose, BUNDLESDF_POSE_DIR, ODOM_FILE_PATH, self.cam_trans, self.cam_axis_vec, to_world=True)
+            q_t.append(R.from_matrix(pose[:3, :3]).as_quat()) #x,y,z,w
+            p_t.append(pose[:3, 3])
             ######
-            tagslam_pose = tagslam_data[frame_id, 2:]
-            q_t.append(tagslam_pose[3:])#xyzw
-            p_t.append(tagslam_pose[:3])
+            # tagslam_pose = tagslam_data[frame_id, 1:]
+            # q_t.append(tagslam_pose[3:])#xyzw
+            # p_t.append(tagslam_pose[:3])
             ######
             curr_t = self.timestamps[frame_id]
             t.append(curr_t - t_start)
@@ -208,8 +208,8 @@ class DatasetManagement:
         if adjust_pos: # the franka is on a plank, need to add the plank height to z
             for i in range(self.p_t.shape[0]): #N,3
                 self.p_t[i, -1] = self.p_t[i, -1] - PLANK_HEIGHT
-                if self.p_t[-1, -1] != 0.0: # force landing on the table
-                    self.p_t[-1, -1] = 0.0
+                # if self.p_t[-1, -1] != 0.0: # force landing on the table
+                #     self.p_t[-1, -1] = 0.0
                 # if self.p_t[i, -1] < 0.0:
                 #     self.p_t[i, -1] = 0.0
         filter_pos = True
@@ -222,7 +222,10 @@ class DatasetManagement:
         ##### Upsample
         quat_t = quat_t / np.linalg.norm(quat_t, axis=1).reshape(-1,1)
         print(f"quat_t: {quat_t.shape}") #N,4
-        self.q_t, self.p_t, self.t = self.upsample(quat_t, self.p_t, self.t) #xyzw
+        if quat_t.shape[0] >= 100: #if data long enough, skip upsampling
+            self.q_t, self.p_t, self.t = quat_t, self.p_t, self.t
+        else:
+            self.q_t, self.p_t, self.t = self.upsample(quat_t, self.p_t, self.t) #xyzw
         print(f'after upsample: {self.q_t.shape}, {self.p_t.shape}, {self.t.shape}')
         self.q_t = self.q_t / np.linalg.norm(self.q_t, axis=1).reshape(-1,1) #N,4
         rot_t = R.from_quat(self.q_t) #N,3,3
@@ -468,97 +471,7 @@ class DatasetManagement:
         plt.savefig(f'bundlesdf_{TOSS_TYPE}_traj_{TOSS_ID}.png')
         print(f'Saved fig bundlesdf_{TOSS_TYPE}_traj_{TOSS_ID}.png')
         plt.show()
-
-    def do_process_without_anything(self):
-        p_t = []
-        q_t = []
-        t = []
-        for frame_id in range(1, self.frame_num+1):
-            if frame_id < self.start_frame:
-                continue
-            if frame_id >= self.end_frame:
-                break
-            if frame_id == self.start_frame:
-                t_start = self.timestamps[frame_id]
-            pose = np.loadtxt(BUNDLESDF_POSE_DIR + "%04i.txt" % frame_id)
-            pose = transform_bundletrack_output(pose, BUNDLESDF_POSE_DIR, ODOM_FILE_PATH, self.cam_trans, self.cam_axis_vec, to_world=True)
-            q_t.append(R.from_matrix(pose[:3, :3]).as_quat()) #x,y,z,w
-            p_t.append(pose[:3, 3])
-            curr_t = self.timestamps[frame_id]
-            t.append(curr_t - t_start)
-        quats = np.array(q_t)
-        positions = np.array(p_t)
-        ts = np.array(t)
-        print(f'quats: {quats.shape}, positions: {positions.shape}, ts: {ts.shape}')
-        self.q_t = quats #N,4
-        self.p_t = positions.T #3,N
-        self.t = ts.T #N,
-        print(f'load_poses: self.q_t {self.q_t.shape}, self.p_t: {self.p_t.shape}, self.t: {self.t.shape}')
-        pdiff = self.p_t[:,1:] - self.p_t[:,:-1]
-        tdiff = np.tile((self.t[1:] - self.t[:-1]).reshape([1,-1]), [3,1])
-        print(f'pdiff: {pdiff.shape}, tdiff: {tdiff.shape}')
-        dp_t = pdiff / tdiff
-        dp_t = np.hstack((dp_t[:,[0]],dp_t))
-        rot_t = R.from_quat(self.q_t)
-        if True:
-            rot_diff = [rot_t[i+1] * rot_t[i].inv() for i in range(len(rot_t) - 1)]
-            w_t = np.array([rd.as_rotvec() for rd in rot_diff]).T / tdiff
-            w_t = np.hstack((w_t[:, [0]], w_t)).T
-            w_t_body = np.zeros_like(w_t)
-            for j in range(len(rot_t)):
-                rotation_matrix = rot_t[j].as_matrix()
-                w_t_body[j] = rotation_matrix.T @ w_t[j]
-        w_t_body = w_t_body.T
-        print(f'w_t_body: {w_t_body.shape}') #3, M
-        print(f'dp_t: {dp_t.shape}') #3,M
-        quat_shuffle = xyzw2wxyz(self.q_t).T #w,x,y,z
-        quat_shuffle = quat_shuffle / np.linalg.norm(quat_shuffle)
-        print(f'quat normal: {np.linalg.norm(quat_shuffle)}')
-        data = np.concatenate((quat_shuffle, self.p_t, w_t_body, dp_t), axis=0)
-        p_t = self.p_t.T
-        quat_shuffle = quat_shuffle.T
-        dp_t = dp_t.T
-        w_t_body = w_t_body.T
-        data = data.T
-        print('data: ', data.shape) #N,13
-        print(p_t.shape, quat_shuffle.shape, dp_t.shape, w_t_body.shape)
-        torch.save(torch.tensor(data), CONTACTNETS_INPUT_DIR + "{}.pt".format(self.toss_id))
-        print(f'file {self.toss_id}.pt saved at {CONTACTNETS_INPUT_DIR + "{}.pt".format(self.toss_id)}')
-        fig, ax = plt.subplots(4, 3, figsize=(15, 15))
-        ax[0, 0].plot(p_t[:, 0])
-        ax[0, 0].set_title('X Position')
-        ax[0, 1].plot(p_t[:, 1])
-        ax[0, 1].set_title('Y Position')
-        ax[0, 2].plot(p_t[:, 2])
-        ax[0, 2].set_title('Z Position')
-
-        ax[1, 0].plot(quat_shuffle[:, 0])
-        ax[1, 0].set_title('Quaternion w')
-        ax[1, 1].plot(quat_shuffle[:, 1])
-        ax[1, 1].set_title('Quaternion x')
-        ax[1, 2].plot(quat_shuffle[:, 2])
-        ax[1, 2].set_title('Quaternion y')
-        ax[2, 0].plot(quat_shuffle[:, 3])
-        ax[2, 0].set_title('Quaternion z')
-
-        ax[2, 1].plot(w_t_body[:, 0])
-        ax[2, 1].set_title('Angular Velocity X')
-        ax[2, 2].plot(w_t_body[:, 1])
-        ax[2, 2].set_title('Angular Velocity Y')
-        ax[3, 0].plot(w_t_body[:, 2])
-        ax[3, 0].set_title('Angular Velocity Z')
-
-        ax[3, 1].plot(dp_t[:, 0])
-        ax[3, 1].set_title('Linear Velocity X')
-        ax[3, 2].plot(dp_t[:, 1])
-        ax[3, 2].set_title('Linear Velocity Y')
-        plt.tight_layout()
-        fig.suptitle('Generated from BundleSDF result')
-        plt.savefig(f'bundlesdf_{TOSS_TYPE}_traj_{TOSS_ID}_wtf.png')
-        print(f'Saved fig bundlesdf_{TOSS_TYPE}_traj_{TOSS_ID}_wtf.png')
-        plt.show()
-        
-        
+ 
 #################### Plotting contactnets sample traj #################
 def visualize_trajectory(trajectory_dir, fig_name):
     # data = torch.load(file_path)   #p_t, quat_shuffle, dp_t, w_t
@@ -632,16 +545,21 @@ if __name__ == "__main__":
     TOSS_ID = args.toss_id
     TOSS_TYPE = args.type
     DATASET = f'{TOSS_TYPE}_{TOSS_ID}'
-    ROSBAG = './rosbags/raw_51.bag'
+    YAML_PATH = './assets/config.yaml'
+    ROSBAG = load_dataset_from_yaml(YAML_PATH, TOSS_TYPE)
+    DEPTH_BAG_FILE = f"./rosbags/raw_{ROSBAG}.bag"
+    ODOM_BAG_FILE = f"./rosbags/odom_{ROSBAG}.bag"
+    DEPTH_ROS_TOPIC = "/camera/aligned_depth_to_color/image_raw"
+    ODOM_ROS_TOPIC = f"/tagslam/odom/body_{TOSS_TYPE}"
     CAMERA_EXTRINSICS_FILE = f'./assets/realsense_pose_{TOSS_TYPE}.yaml'
     print(f'Processing toss {TOSS_TYPE}_{TOSS_ID}')
-    YAML_PATH = './assets/config.yaml'
+    
     DEPTH_TOPIC = '/camera/aligned_depth_to_color/image_raw'
     BUNDLESDF_POSE_DIR = f"/home/cnets-vision/mengti_ws/BundleSDF/results/{DATASET}/ob_in_cam/"
     CONTACTNETS_INPUT_DIR = f"/home/cnets-vision/mengti_ws/BundleSDF/dair_pll/assets/bundlesdf_{TOSS_TYPE}/"
     ODOM_FILE_PATH = f"/home/cnets-vision/mengti_ws/BundleSDF/data/{DATASET}/annotated_poses/"
     GT_POSE_DIR = f"/home/cnets-vision/mengti_ws/robot_filter/dataset/{DATASET}/tagslam_poses/"
-    PLANK_HEIGHT =  0.03428 #0.0145
+    PLANK_HEIGHT = -0.04839#0.03428 #0.0145
     frame_num = len([name for name in os.listdir(BUNDLESDF_POSE_DIR)])
     print(f'Total frame num: {frame_num}')
     cam = 'cam0' # realsense camera name
@@ -654,8 +572,8 @@ if __name__ == "__main__":
     
     start_time = load_toss_time_from_yaml(YAML_PATH, TOSS_TYPE, TOSS_ID, 'start_time')
     end_time = load_toss_time_from_yaml(YAML_PATH, TOSS_TYPE, TOSS_ID, 'end_time')
-    # start_frame = load_field_from_yaml(YAML_PATH, TOSS_TYPE, TOSS_ID, 'start_frame')
-    # end_frame = load_field_from_yaml(YAML_PATH, TOSS_TYPE, TOSS_ID, 'end_frame')
+    start_frame = load_field_from_yaml(YAML_PATH, TOSS_TYPE, TOSS_ID, 'start_frame')
+    end_frame = load_field_from_yaml(YAML_PATH, TOSS_TYPE, TOSS_ID, 'end_frame')
     # sync = Synchronizer(GT_POSE_DIR, frame_num, start_time, end_time, save=False)
     # bundletrack_time, gt_time = sync.bundletrack_time, sync.gt_time
     # print(len(bundletrack_time), len(gt_time))
@@ -663,8 +581,16 @@ if __name__ == "__main__":
     
     data = np.loadtxt(GT_POSE_DIR+'tagslam.txt')
     print('data loaded', data.shape)
-    bundletrack_time, gt_time = data[:, 0], data[:, 1] #N,
+    gt_time = data[:, 0] #N,
+    bundletrack_time = extract_time_versus_poses(
+        start_time,
+        end_time,
+        DEPTH_BAG_FILE,
+        ODOM_BAG_FILE,
+        DEPTH_ROS_TOPIC,
+        ODOM_ROS_TOPIC,
+        GT_POSE_DIR,
+    ).reshape(-1,)
+    print(gt_time.shape, bundletrack_time.shape)
     dataset = DatasetManagement(frame_num, start_frame, end_frame, bundletrack_time, TOSS_ID, cam_trans, cam_axis_vec, plot=True)
-    # dataset.transform()
     dataset.do_process()
-    # dataset.do_process_without_anything()

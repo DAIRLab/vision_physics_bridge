@@ -26,9 +26,14 @@ def load_toss_time_from_yaml(file_path, toss_type, toss_number, key):
 def load_field_from_yaml(file_path, toss_type, toss_number, key):
     with open(file_path, 'r') as f:
         data = yaml.safe_load(f)
-    toss_data = data['tosses'][toss_type][toss_number-1]
+    toss_data = data['tosses'][toss_type][toss_number]
     data = toss_data[key]
     return data
+
+def load_dataset_from_yaml(file_path, toss_type):
+    with open(file_path, 'r') as f:
+        data = yaml.safe_load(f)
+    return data['dataset'][toss_type]
 
 def filter(real_img, sim_img):
     """

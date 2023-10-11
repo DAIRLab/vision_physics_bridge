@@ -31,9 +31,9 @@ from scipy.spatial.transform import Rotation as R
 """Process the cube hand-tossing data.
 """
 TOSS_TYPE = 'napkin'
-TOSS_ID=10
-ROSBAG_NAME = "./rosbags/raw_51.bag"
-ODOM_ROSBAG_NAME = "./rosbags/odom_51.bag"
+TOSS_ID=13
+ROSBAG_NAME = "./rosbags/raw_53.bag"
+ODOM_ROSBAG_NAME = "./rosbags/odom_53.bag"
 DEPTH_ROS_TOPIC = "/camera/aligned_depth_to_color/image_raw"
 ODOM_ROS_TOPIC = "/tagslam/odom/body_napkin"
 JOINT_STATE_ROS_TOPIC = "/joint_states"

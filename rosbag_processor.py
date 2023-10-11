@@ -698,7 +698,8 @@ def extract_time_versus_poses(
     depth_topic,
     odom_topic,
     output_dir,
-    time_offset=0.0
+    save=False,
+    time_offset=0.0,
 ):
     depth_bag = rosbag.Bag(depth_bag_file, "r")
     odom_bag = rosbag.Bag(odom_bag_file, "r")
@@ -726,7 +727,6 @@ def extract_time_versus_poses(
                 break
         shifted_timestamp = msg.header.stamp+rospy.Duration(time_offset)
         gtime = shifted_timestamp.secs + shifted_timestamp.nsecs * 1e-9
-        # gtime = msg.header.stamp.secs + msg.header.stamp.nsecs * 1e-9
         odom_time.append(gtime)
         
         Q = np.zeros((7,))
@@ -745,8 +745,9 @@ def extract_time_versus_poses(
     odom_time = np.expand_dims(odom_time,axis=0)
     data = np.concatenate((odom_time, tagslam_poses), axis=0)
     data = data.T #N, 9
-    np.savetxt(output_dir + 'tagslam.txt', data)
-    print(output_dir + 'tagslam.txt saved!')
+    if save:
+        np.savetxt(output_dir + 'tagslam.txt', data)
+        print(output_dir + 'tagslam.txt saved!')
     depth_bag.close()
     odom_bag.close()
     return bundletrack_time.reshape(-1,)

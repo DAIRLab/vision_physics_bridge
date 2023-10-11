@@ -216,7 +216,46 @@ def pcd_to_mesh(input_ply_path, output_obj_path):
 
     # trimesh.convex.is_convex(tri_mesh)
     tri_mesh.export(output_obj_path, file_type='obj')
-    
+
+'''Process the 3D scanned napkin mesh
+'''
+def scale_and_center(input_file, output_file):
+    with open(input_file, 'r') as f:
+        lines = f.readlines()
+
+    vertices = [list(map(float, line.split()[1:])) for line in lines if line.startswith('v ')]
+    vts = [line for line in lines if line.startswith('vt ')]
+    faces = [line for line in lines if line.startswith('f ')]
+
+    min_x = min(v[0] for v in vertices)
+    max_x = max(v[0] for v in vertices)
+    min_y = min(v[1] for v in vertices)
+    max_y = max(v[1] for v in vertices)
+    min_z = min(v[2] for v in vertices)
+    max_z = max(v[2] for v in vertices)
+    scale_x = 0.2286 / (max_x - min_x)
+    scale_y = 0.089 / (max_y - min_y)
+    scale_z = 0.12 / (max_z - min_z)
+    uniform_scale = min(scale_x, scale_y, scale_z)
+    centroid_x = (max_x + min_x) / 2
+    centroid_y = (max_y + min_y) / 2
+    centroid_z = (max_z + min_z) / 2
+    scaled_and_centered = []
+    for v in vertices:
+        x = (v[0] - centroid_x) * uniform_scale
+        y = (v[1] - centroid_y) * uniform_scale
+        z = (v[2] - centroid_z) * uniform_scale
+        scaled_and_centered.append([x, y, z])
+
+    with open(output_file, 'w') as f:
+        for v in scaled_and_centered:
+            f.write(f"v {v[0]} {v[1]} {v[2]}\n")
+        for vt in vts:
+            f.write(vt)
+        for face in faces:
+            f.write(face)
+    print('File exported')
+
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument(
@@ -252,5 +291,8 @@ if __name__ == '__main__':
     # add_noise_to_mesh(original_mesh, noisy_mesh)
     
     # sample_points_from_mesh(original_mesh, sampled_mesh, num_points=5000, triangle_size=0.005)
-    sample_pcd_from_mesh(original_mesh, sampled_pcd)
-    pcd_to_mesh(sampled_pcd, sampled_mesh)
+    # sample_pcd_from_mesh(original_mesh, sampled_pcd)
+    # pcd_to_mesh(sampled_pcd, sampled_mesh)
+    scan_file = f'./assets/gt_napkin.obj'
+    output = f'./assets/gt_napkin_scale.obj'
+    scale_and_center(scan_file, output)
