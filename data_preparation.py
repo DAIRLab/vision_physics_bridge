@@ -96,21 +96,21 @@ class DatasetManagement:
         #####
         tagslam_data = np.loadtxt(GT_POSE_DIR+'tagslam.txt')
         #####
-        for frame_id in range(1, self.frame_num+1):
+        for frame_id in range(self.frame_num):
             if frame_id < self.start_frame:
                 continue
             if frame_id >= self.end_frame:
                 break
             if frame_id == self.start_frame:
                 t_start = self.timestamps[frame_id]
-            pose = np.loadtxt(BUNDLESDF_POSE_DIR + "%04i.txt" % frame_id)
-            pose = transform_bundletrack_output(pose, BUNDLESDF_POSE_DIR, ODOM_FILE_PATH, self.cam_trans, self.cam_axis_vec, to_world=True)
-            q_t.append(R.from_matrix(pose[:3, :3]).as_quat()) #x,y,z,w
-            p_t.append(pose[:3, 3])
+            # pose = np.loadtxt(BUNDLESDF_POSE_DIR + "%04i.txt" % frame_id)
+            # pose = transform_bundletrack_output(pose, BUNDLESDF_POSE_DIR, ODOM_FILE_PATH, self.cam_trans, self.cam_axis_vec, to_world=True)
+            # q_t.append(R.from_matrix(pose[:3, :3]).as_quat()) #x,y,z,w
+            # p_t.append(pose[:3, 3])
             ######
-            # tagslam_pose = tagslam_data[frame_id, 1:]
-            # q_t.append(tagslam_pose[3:])#xyzw
-            # p_t.append(tagslam_pose[:3])
+            tagslam_pose = tagslam_data[frame_id, 1:]
+            q_t.append(tagslam_pose[3:])#xyzw
+            p_t.append(tagslam_pose[:3])
             ######
             curr_t = self.timestamps[frame_id]
             t.append(curr_t - t_start)
@@ -204,14 +204,6 @@ class DatasetManagement:
         rot_t = rot_t.from_rotvec(rvecs.T)
         quat_t = rot_t.as_quat()  #x,y,z,w
         
-        adjust_pos = True
-        if adjust_pos: # the franka is on a plank, need to add the plank height to z
-            for i in range(self.p_t.shape[0]): #N,3
-                self.p_t[i, -1] = self.p_t[i, -1] - PLANK_HEIGHT
-                # if self.p_t[-1, -1] != 0.0: # force landing on the table
-                #     self.p_t[-1, -1] = 0.0
-                # if self.p_t[i, -1] < 0.0:
-                #     self.p_t[i, -1] = 0.0
         filter_pos = True
         if filter_pos:
             # self.p_t = smooth_positions(self.p_t, window_size=5)
@@ -230,6 +222,20 @@ class DatasetManagement:
         self.q_t = self.q_t / np.linalg.norm(self.q_t, axis=1).reshape(-1,1) #N,4
         rot_t = R.from_quat(self.q_t) #N,3,3
         #####
+        adjust_pos = True
+        # FINAL_Z = 0.05126618331135579
+        FINAL_Z = 0.03 #0.05148739950625105
+        PLANK_HEIGHT = FINAL_Z - self.p_t[-1, -1]
+        print(f'PLANK_HEIGHT: {PLANK_HEIGHT}')
+        if adjust_pos: # the franka is on a plank, need to add the plank height to z
+            for i in range(self.p_t.shape[0]): #N,3
+                self.p_t[i, -1] = self.p_t[i, -1] + PLANK_HEIGHT
+                # if self.p_t[-1, -1] != 0.0: # force landing on the table
+                #     self.p_t[-1, -1] = 0.0
+                # if self.p_t[i, -1] < 0.0:
+                #     self.p_t[i, -1] = 0.0
+        print(f'z position: {self.p_t[-1, -1]}')
+
         self.p_t = self.p_t.T
         pdiff = self.p_t[:,1:] - self.p_t[:,:-1]
         tdiff = np.tile((self.t[1:] - self.t[:-1]).reshape([1,-1]), [3,1])
@@ -326,7 +332,8 @@ class DatasetManagement:
         fig.suptitle('Generated from BundleSDF result')
         plt.savefig(f'bundlesdf_{TOSS_TYPE}_traj_{TOSS_ID}_tagslam.png')
         print(f'Saved fig bundlesdf_{TOSS_TYPE}_traj_{TOSS_ID}_tagslam.png')
-        plt.show()
+        if self.plot:
+            plt.show()
         
     def transform(self):
         self.p_t = self.p_t.T
@@ -559,8 +566,9 @@ if __name__ == "__main__":
     CONTACTNETS_INPUT_DIR = f"/home/cnets-vision/mengti_ws/BundleSDF/dair_pll/assets/bundlesdf_{TOSS_TYPE}/"
     ODOM_FILE_PATH = f"/home/cnets-vision/mengti_ws/BundleSDF/data/{DATASET}/annotated_poses/"
     GT_POSE_DIR = f"/home/cnets-vision/mengti_ws/robot_filter/dataset/{DATASET}/tagslam_poses/"
-    PLANK_HEIGHT = -0.04839#0.03428 #0.0145
-    frame_num = len([name for name in os.listdir(BUNDLESDF_POSE_DIR)])
+    # PLANK_HEIGHT = -0.05458#0.03428 #0.0145
+    data = np.loadtxt(GT_POSE_DIR+'tagslam.txt')
+    frame_num = data.shape[0]#len([name for name in os.listdir(BUNDLESDF_POSE_DIR)])
     print(f'Total frame num: {frame_num}')
     cam = 'cam0' # realsense camera name
     with open(CAMERA_EXTRINSICS_FILE, 'r') as stream:
@@ -592,5 +600,5 @@ if __name__ == "__main__":
         GT_POSE_DIR,
     ).reshape(-1,)
     print(gt_time.shape, bundletrack_time.shape)
-    dataset = DatasetManagement(frame_num, start_frame, end_frame, bundletrack_time, TOSS_ID, cam_trans, cam_axis_vec, plot=True)
+    dataset = DatasetManagement(frame_num, start_frame, end_frame, bundletrack_time, TOSS_ID, cam_trans, cam_axis_vec, plot=False)
     dataset.do_process()

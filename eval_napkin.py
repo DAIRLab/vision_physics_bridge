@@ -246,8 +246,8 @@ if __name__ == "__main__":
     args = parser.parse_args()
     toss_id = args.toss_id
     print(f'Processing toss {toss_id}')
-    depth_bag_file = "./rosbags/raw_53.bag"
-    odom_bag_file = "./rosbags/odom_53.bag"
+    depth_bag_file = "./rosbags/raw_51.bag"
+    odom_bag_file = "./rosbags/odom_51.bag"
     DEPTH_ROS_TOPIC = "/camera/aligned_depth_to_color/image_raw"
     ODOM_ROS_TOPIC = "/tagslam/odom/body_napkin"
     DATASET="napkin"

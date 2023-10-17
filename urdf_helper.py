@@ -291,8 +291,8 @@ if __name__ == '__main__':
     # add_noise_to_mesh(original_mesh, noisy_mesh)
     
     # sample_points_from_mesh(original_mesh, sampled_mesh, num_points=5000, triangle_size=0.005)
-    # sample_pcd_from_mesh(original_mesh, sampled_pcd)
+    sample_pcd_from_mesh(original_mesh, sampled_pcd)
     # pcd_to_mesh(sampled_pcd, sampled_mesh)
-    scan_file = f'./assets/gt_napkin.obj'
-    output = f'./assets/gt_napkin_scale.obj'
-    scale_and_center(scan_file, output)
+    # scan_file = f'./assets/gt_napkin.obj'
+    # output = f'./assets/gt_napkin_scale.obj'
+    # scale_and_center(scan_file, output)

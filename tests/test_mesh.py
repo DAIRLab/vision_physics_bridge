@@ -1,6 +1,7 @@
 import numpy as np 
 import trimesh
 import open3d as o3d
+import argparse
 
 def sample_points_from_mesh(mesh, num_points):
     """Sample points from a mesh."""
@@ -14,8 +15,17 @@ def sample_points_from_mesh(mesh, num_points):
     
 
 if __name__ == '__main__':
-    GT_MESH_FILE = "/home/cnets-vision/mengti_ws/robot_filter/assets/contactnets_cube.obj"
-    PRED_MESH_FILE = "/home/cnets-vision/mengti_ws/robot_filter/assets/mesh_cn_run_and_refined.obj"
+    parser = argparse.ArgumentParser()
+    parser.add_argument(
+        "--toss_id",
+        type=int,
+        required=True,
+    )
+    args = parser.parse_args()
+    toss_id = args.toss_id
+    DATASET = f'napkin_{toss_id}'
+    GT_MESH_FILE = "/home/cnets-vision/mengti_ws/robot_filter/assets/gt_napkin_simple.obj"
+    PRED_MESH_FILE = f'/home/cnets-vision/mengti_ws/BundleSDF/results/{DATASET}/textured_mesh.obj'
     pred_mesh = trimesh.load(PRED_MESH_FILE)
     pred_pts,_ = trimesh.sample.sample_surface(pred_mesh, 99999, face_weight=None, sample_color=False)
     print(f'pred_pt is {len(pred_pts)}')

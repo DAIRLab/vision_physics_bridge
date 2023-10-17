@@ -6,7 +6,6 @@ import trimesh
 from scipy.spatial import cKDTree
 import open3d as o3d
 from math_utils import pos_quat_to_trans_mat, transform_bundletrack_output
-from nerf_utils import create_convex_hull
 
 def to_homo(pts):
     '''
@@ -161,8 +160,14 @@ if __name__ == '__main__':
         type=int,
         required=True,
     )
+    parser.add_argument(
+        "--type",
+        type=str,
+        required=True,
+    )
     args = parser.parse_args()
     toss_id = args.toss_id
+    toss_type = args.type
 
     # Cube experiments
     """Ablation Studies
@@ -206,18 +211,17 @@ if __name__ == '__main__':
     # CAMERA_EXTRINSICS_FILE = "./assets/realsense_pose_cube_old.yaml"
 
     # Napkin experiments
-    DATASET = f'napkin_{toss_id}'
-    OUTPUT_POSE_DIR = f'/home/cnets-vision/mengti_ws/BundleSDF/results/{DATASET}/ob_in_cam/'
-    # PRED_MESH_FILE = f'/home/cnets-vision/mengti_ws/BundleSDF/results/{DATASET}/textured_mesh.obj'
-    PRED_MESH_FILE = f'/home/cnets-vision/mengti_ws/robot_filter/convex_textured_mesh.obj'
-    PRED_MESH_FILE_CONVEX = f'/home/cnets-vision/mengti_ws/robot_filter/convex_textured_mesh.obj'
+    DATASET = f'{toss_type}_{toss_id}'
+    OUTPUT_POSE_DIR = f'/home/cnets-vision/mengti_ws/BundleSDF/results/{DATASET}_icp/ob_in_cam/'
+    # PRED_MESH_FILE = f'/home/cnets-vision/mengti_ws/BundleSDF/textured_mesh.obj' # ours
+    PRED_MESH_FILE = f'/home/cnets-vision/mengti_ws/BundleSDF/results/{DATASET}_icp/textured_mesh.obj'
     # PRED_MESH_FILE = f'/home/cnets-vision/mengti_ws/BundleSDF/assets/napkin_textured_mesh.obj' # from 10 tosses
     ODOM_FILE_PATH = f"/home/cnets-vision/mengti_ws/BundleSDF/data/{DATASET}/annotated_poses/"
     GT_POSE_DIR = f"./dataset/{DATASET}/tagslam_poses/"
-    GT_MESH_FILE = "./assets/gt_napkin.obj"
+    GT_MESH_FILE = f"./assets/gt_{toss_type}_simple.obj"
     PCD_DIR = f"./assets/"
-    GT_PCD_DIR = f"./assets/gt_napkin.ply"
-    CAMERA_EXTRINSICS_FILE = "./assets/realsense_pose_napkin.yaml"
+    GT_PCD_DIR = f"./assets/gt_{toss_type}_simple.ply"
+    CAMERA_EXTRINSICS_FILE = f"./assets/realsense_pose_{toss_type}.yaml"
 
     cam = 'cam0' # realsense camera name
     with open(CAMERA_EXTRINSICS_FILE, 'r') as stream:
