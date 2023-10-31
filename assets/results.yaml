@@ -1,0 +1,23 @@
+dataset:
+  cube:
+    bundlesdf_1_toss: None
+    bundlesdf_10_toss: None
+    wo_contactnets: None
+    wo_cyclic: None
+    ours: None
+
+  bottle:
+    bundlesdf_1_toss: None
+    bundlesdf_10_toss: '/home/cnets-vision/mengti_ws/BundleSDF/assets/bottle_textured_mesh.obj' # from 10 tosses
+    wo_contactnets: None
+    # wo_cyclic: '/home/cnets-vision/mengti_ws/BundleSDF/results/bottle/runs/bottle-1/urdfs/body.obj' 
+    # wo_cyclic: '/home/cnets-vision/mengti_ws/BundleSDF/assets/dair_bottle_amp.obj'
+    wo_cyclic: '/home/cnets-vision/mengti_ws/dair_pll_latest/results/bottle_tagslam/runs/bottle-1/urdfs/body.obj'
+    ours: None
+
+  napkin:
+    bundlesdf_1_toss: None
+    bundlesdf_10_toss: '/home/cnets-vision/mengti_ws/BundleSDF/assets/napkin_textured_mesh.obj' # from 10 tosses
+    wo_contactnets: None
+    wo_cyclic: '/home/cnets-vision/mengti_ws/BundleSDF/assets/dair_napkin_amp.obj'
+    ours: None

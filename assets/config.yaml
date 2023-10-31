@@ -1,7 +1,8 @@
 dataset:
   cube: 10
   bottle: 43
-  napkin: 53
+  napkin: 53 #51
+  box: 57
 tosses:
   cube: #raw_10
     - toss: 1
@@ -117,11 +118,11 @@ tosses:
   bottle: #raw_43
     - toss: 0
       start_time: 
-        secs: 0
-        nsecs: 0
+        secs: 1691457459
+        nsecs: 193690
       end_time:
-        secs: 0
-        nsecs: 0
+        secs: 1691457518
+        nsecs: 436350
 
     - toss: 1
       start_time:
@@ -351,7 +352,7 @@ tosses:
       start_frame: 25
       end_frame: 55
     
-    - toss: 11
+    - toss: 11 #raw_53
       start_time:
         secs: 1696015461
         nsecs: 377774
@@ -384,11 +385,11 @@ tosses:
   box: #raw_57
     - toss: 0
       start_time:
-        secs: 0
-        nsecs: 0
+        secs: 1696622350
+        nsecs: 960829
       end_time:
-        secs: 0
-        nsecs: 0
+        secs: 1696622383
+        nsecs: 653126
       start_frame: 0
       end_frame: 0
     - toss: 1
@@ -398,8 +399,8 @@ tosses:
       end_time:
         secs: 1696622353
         nsecs: 123324
-      start_frame: 80
-      end_frame: 115
+      start_frame: 91
+      end_frame: 135
     - toss: 2
       start_time:
         secs: 1696622353
@@ -407,6 +408,8 @@ tosses:
       end_time:
         secs: 1696622355
         nsecs: 722905
+      start_frame: 78
+      end_frame: 112
     - toss: 3
       start_time:
         secs: 1696622356
@@ -414,6 +417,8 @@ tosses:
       end_time:
         secs: 1696622359
         nsecs: 276906
+      start_frame: 100
+      end_frame: 150
     - toss: 4
       start_time:
         secs: 1696622359
@@ -421,6 +426,8 @@ tosses:
       end_time:
         secs: 1696622362
         nsecs: 510733
+      start_frame: 120
+      end_frame: 150
     - toss: 5
       start_time:
         secs: 1696622362
@@ -428,6 +435,8 @@ tosses:
       end_time:
         secs: 1696622365
         nsecs: 363410
+      start_frame: 
+      end_frame: 
     - toss: 6
       start_time:
         secs: 1696622365
@@ -435,6 +444,8 @@ tosses:
       end_time:
         secs: 1696622368
         nsecs: 616890
+      start_frame: 
+      end_frame: 
     - toss: 7
       start_time:
         secs: 1696622368
@@ -442,6 +453,8 @@ tosses:
       end_time:
         secs: 1696622372
         nsecs: 256774
+      start_frame: 
+      end_frame: 
     - toss: 8
       start_time:
         secs: 1696622372
@@ -449,6 +462,8 @@ tosses:
       end_time:
         secs: 1696622375
         nsecs: 623855
+      start_frame: 
+      end_frame: 
     - toss: 9
       start_time:
         secs: 1696622375
@@ -456,6 +471,8 @@ tosses:
       end_time:
         secs: 1696622379
         nsecs: 462270
+      start_frame: 
+      end_frame: 
     - toss: 10
       start_time:
         secs: 1696622379
@@ -463,3 +480,8 @@ tosses:
       end_time:
         secs: 1696622383
         nsecs: 653126
+      start_frame: 
+      end_frame: 
+  
+  half: #raw_59
+    

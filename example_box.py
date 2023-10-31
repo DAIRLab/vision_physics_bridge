@@ -31,7 +31,7 @@ from scipy.spatial.transform import Rotation as R
 """Process the cube hand-tossing data.
 """
 TOSS_TYPE = 'box'
-TOSS_ID = 10
+TOSS_ID = 0
 DATASET = f'{TOSS_TYPE}_{TOSS_ID}'
 ROSBAG_NAME = "./rosbags/raw_57.bag"
 ODOM_ROSBAG_NAME = "./rosbags/odom_57.bag"
@@ -105,6 +105,7 @@ cam_axis_vec = np.array([cam_rot_dict['x'], cam_rot_dict['y'], cam_rot_dict['z']
 yaml_path = './assets/config.yaml'
 start_time = load_toss_time_from_yaml(yaml_path, TOSS_TYPE, TOSS_ID, 'start_time')
 end_time = load_toss_time_from_yaml(yaml_path, TOSS_TYPE, TOSS_ID, 'end_time')
+print(start_time.secs, start_time.nsecs, end_time.secs, end_time.nsecs)
 
 def save_init_pose():
     poses = np.loadtxt(os.path.join(TAGSLAM_POSES_DIR, "tagslam.txt"))
@@ -161,6 +162,6 @@ if __name__ == "__main__":
     bag_to_rgb_images(ROSBAG_NAME, RGB_ROS_TOPIC, BUNDLETRACK_RGB, start_time, end_time)
     # sync = Synchronizer(TAGSLAM_POSES_DIR, frame_num, start_time, end_time, save=True)
     # save_init_pose()
-    # frame_num = len([name for name in os.listdir(BUNDLETRACK_RGB)])
-    # for frame_id in range(1, frame_num+1):
-    #     create_annotated_poses(output_dir=ANNOTATED_POSES_DIR, frame_id=frame_id)
+    frame_num = len([name for name in os.listdir(BUNDLETRACK_RGB)])
+    for frame_id in range(1, frame_num+1):
+        create_annotated_poses(output_dir=ANNOTATED_POSES_DIR, frame_id=frame_id)

@@ -264,13 +264,20 @@ def main():
     toss_type = args.type
     
     DATASET = f'{toss_type}_{toss_id}'
+    ICP_DATASET = f'{DATASET}_icp'
     cam_K_file = f"/home/cnets-vision/mengti_ws/BundleSDF/data/{DATASET}/cam_K.txt"
     old_depth_folder = f"/home/cnets-vision/mengti_ws/BundleSDF/data/{DATASET}/depth"
     old_mask_folder = f"/home/cnets-vision/mengti_ws/BundleSDF/data/{DATASET}/masks"
     proj_depth_folder = f"dataset/{DATASET}/nerf/depth"
     proj_mask_folder = f"dataset/{DATASET}/nerf/masks"
-    output_depth_folder = f"/home/cnets-vision/mengti_ws/BundleSDF/data/{DATASET}/depth"
-    output_mask_folder = f"/home/cnets-vision/mengti_ws/BundleSDF/data/{DATASET}/masks"
+    output_depth_folder = f"/home/cnets-vision/mengti_ws/BundleSDF/data/{ICP_DATASET}/depth"
+    output_mask_folder = f"/home/cnets-vision/mengti_ws/BundleSDF/data/{ICP_DATASET}/masks"
+    if not os.path.exists(f"/home/cnets-vision/mengti_ws/BundleSDF/data/{ICP_DATASET}"):
+        os.makedirs(f"/home/cnets-vision/mengti_ws/BundleSDF/data/{ICP_DATASET}")
+    if not os.path.exists(output_depth_folder):
+        os.makedirs(output_depth_folder)
+    if not os.path.exists(output_mask_folder):
+        os.makedirs(output_mask_folder)
     
     # Read the file and extract intrinsic matrix values
     with open(cam_K_file, 'r') as f:

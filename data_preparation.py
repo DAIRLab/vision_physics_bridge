@@ -555,7 +555,8 @@ if __name__ == "__main__":
     YAML_PATH = './assets/config.yaml'
     ROSBAG = load_dataset_from_yaml(YAML_PATH, TOSS_TYPE)
     DEPTH_BAG_FILE = f"./rosbags/raw_{ROSBAG}.bag"
-    ODOM_BAG_FILE = f"./rosbags/odom_{ROSBAG}.bag"
+    # ODOM_BAG_FILE = f"./rosbags/odom_{ROSBAG}.bag"
+    ODOM_BAG_FILE = f"./rosbags/adjusted_odom_57.bag"
     DEPTH_ROS_TOPIC = "/camera/aligned_depth_to_color/image_raw"
     ODOM_ROS_TOPIC = f"/tagslam/odom/body_{TOSS_TYPE}"
     CAMERA_EXTRINSICS_FILE = f'./assets/realsense_pose_{TOSS_TYPE}.yaml'
@@ -598,6 +599,8 @@ if __name__ == "__main__":
         DEPTH_ROS_TOPIC,
         ODOM_ROS_TOPIC,
         GT_POSE_DIR,
+        save=True,
+        time_offset=125.19
     ).reshape(-1,)
     print(gt_time.shape, bundletrack_time.shape)
     dataset = DatasetManagement(frame_num, start_frame, end_frame, bundletrack_time, TOSS_ID, cam_trans, cam_axis_vec, plot=False)

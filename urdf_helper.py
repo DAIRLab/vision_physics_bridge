@@ -277,7 +277,7 @@ if __name__ == '__main__':
     rescale_mesh = f'./assets/{filename}_rescale.obj'
     alt_simplified_mesh = f'./assets/{filename}_rescale_simplified_alt.obj'
     sampled_mesh = f'./assets/{filename}_sampled.obj'
-    sampled_pcd = f'./assets/{filename}_sampled.ply'
+    sampled_pcd = f'./assets/{filename}.ply'
     # simplify_mesh(original_mesh, simplified_mesh, 0.01)
     # create_max_volume_obj(simplified_mesh, output_path, vertex_count=10, target_vertex_count=8, target_face_count=6)
     # add_normals_to_obj(output_path, normal_mesh)

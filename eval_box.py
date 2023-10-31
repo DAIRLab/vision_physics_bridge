@@ -299,6 +299,8 @@ if __name__ == "__main__":
     toss_type = 'box'
     start_time = load_toss_time_from_yaml(yaml_path, toss_type, toss_id, 'start_time')
     end_time = load_toss_time_from_yaml(yaml_path, toss_type, toss_id, 'end_time')
+    print(start_time.secs, start_time.nsecs)
+    print(end_time.secs, end_time.nsecs)
     frame_num = len([name for name in os.listdir(OUTPUT_POSE_DIR)])
     print(f"there are {frame_num} frames")
     # For raw and odom bag with different frame rate
@@ -310,7 +312,6 @@ if __name__ == "__main__":
         DEPTH_ROS_TOPIC,
         ODOM_ROS_TOPIC,
         GT_POSE_DIR,
-        save=True,
         time_offset=125.19
     )
     bundletrack_time = bundletrack_time.reshape(-1,)

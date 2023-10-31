@@ -465,12 +465,19 @@ if __name__ == "__main__":
     toss_type = args.type
     meshcat = StartMeshcat()
     DATASET = f'{toss_type}_{toss_id}'
-    OBJECT_URDF_DIR = "drake/../../../../../../../../BundleSDF/assets/gt_bottle.urdf"#TODO
+    OBJECT_URDF_DIR = f"drake/../../../../../../../../BundleSDF/assets/gt_{toss_type}.urdf"#TODO
     CAMERA_EXTRINSICS_FILE = f"./assets/realsense_pose_{toss_type}.yaml"
     OUTPUT_POSE_DIR = f"/home/cnets-vision/mengti_ws/BundleSDF/results/{DATASET}/ob_in_cam/"
     GT_POSE_DIR = f"/home/cnets-vision/mengti_ws/robot_filter/dataset/{DATASET}/tagslam_poses/"
+    ODOM_FILE_PATH = f"/home/cnets-vision/mengti_ws/BundleSDF/data/{DATASET}/annotated_poses/"
     NERF_DEPTH_DIR = f"./dataset/{DATASET}/nerf/depth"
     NERF_MASK_DIR = f"./dataset/{DATASET}/nerf/masks"
+    if not os.path.exists(f"./dataset/{DATASET}/nerf"):
+        os.makedirs(f"./dataset/{DATASET}/nerf")
+    if not os.path.exists(NERF_DEPTH_DIR):
+        os.makedirs(NERF_DEPTH_DIR)
+    if not os.path.exists(NERF_MASK_DIR):
+        os.makedirs(NERF_MASK_DIR)
     POSITION_FILE_PATH = f"./dataset/{DATASET}/texts/joint_position.txt"
     cam = 'cam0' # realsense camera name
     with open(CAMERA_EXTRINSICS_FILE, 'r') as stream:
@@ -479,23 +486,24 @@ if __name__ == "__main__":
     cam_trans = np.array([cam_pos_dict['x'], cam_pos_dict['y'], cam_pos_dict['z']]).reshape(-1, 1)
     cam_rot_dict = data_loaded[cam]['pose']['rotation']
     cam_axis_vec = np.array([cam_rot_dict['x'], cam_rot_dict['y'], cam_rot_dict['z']])
-    # frame_num = len([name for name in os.listdir(OUTPUT_POSE_DIR)])
-    tagslam_data = np.loadtxt(GT_POSE_DIR+'tagslam.txt')
-    frame_num = tagslam_data.shape[0]
+    frame_num = len([name for name in os.listdir(OUTPUT_POSE_DIR)])
+    # tagslam_data = np.loadtxt(GT_POSE_DIR+'tagslam.txt')
+    # frame_num = tagslam_data.shape[0]
     print(f"Total frame is {frame_num}")
     # positions = import_data(POSITION_FILE_PATH)
-    for frame_id in range(frame_num):
+    # for frame_id in range(frame_num): #for tagslam
+    for frame_id in range(1, frame_num+1): #for bundlesdf
         print(f"Processing frame {frame_id+1}")
-        # bundletrack_pose = np.loadtxt(OUTPUT_POSE_DIR + "%04i.txt" % frame_id)
-        # pose = transform_bundletrack_output(
-        #     bundletrack_pose,
-        #     OUTPUT_POSE_DIR,
-        #     ODOM_FILE_PATH,
-        #     cam_trans, 
-        #     cam_axis_vec,
-        #     to_world=True
-        # ) # cam frame
-        pose = pos_quat_to_trans_mat(tagslam_data[frame_id][1:])
+        bundletrack_pose = np.loadtxt(OUTPUT_POSE_DIR + "%04i.txt" % frame_id)
+        pose = transform_bundletrack_output(
+            bundletrack_pose,
+            OUTPUT_POSE_DIR,
+            ODOM_FILE_PATH,
+            cam_trans, 
+            cam_axis_vec,
+            to_world=True
+        ) # cam frame
+        # pose = pos_quat_to_trans_mat(tagslam_data[frame_id][1:])
         system = ObjectSim(
             meshcat,
             pose,

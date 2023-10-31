@@ -168,6 +168,8 @@ if __name__ == '__main__':
     args = parser.parse_args()
     toss_id = args.toss_id
     toss_type = args.type
+    with open('./assets/results.yaml', 'r') as stream:
+        data_loaded = yaml.safe_load(stream)
 
     # Cube experiments
     """Ablation Studies
@@ -210,12 +212,17 @@ if __name__ == '__main__':
     # GT_PCD_DIR = f"./assets/gt_cube.ply"
     # CAMERA_EXTRINSICS_FILE = "./assets/realsense_pose_cube_old.yaml"
 
-    # Napkin experiments
     DATASET = f'{toss_type}_{toss_id}'
-    OUTPUT_POSE_DIR = f'/home/cnets-vision/mengti_ws/BundleSDF/results/{DATASET}_icp/ob_in_cam/'
-    # PRED_MESH_FILE = f'/home/cnets-vision/mengti_ws/BundleSDF/textured_mesh.obj' # ours
-    PRED_MESH_FILE = f'/home/cnets-vision/mengti_ws/BundleSDF/results/{DATASET}_icp/textured_mesh.obj'
-    # PRED_MESH_FILE = f'/home/cnets-vision/mengti_ws/BundleSDF/assets/napkin_textured_mesh.obj' # from 10 tosses
+    OUTPUT_POSE_DIR = f'/home/cnets-vision/mengti_ws/BundleSDF/results/{DATASET}/ob_in_cam/'
+    # PRED_MESH_FILE = f'/home/cnets-vision/mengti_ws/BundleSDF/textured_mesh.obj' # ours - napkin box
+    # PRED_MESH_FILE = f'/home/cnets-vision/mengti_ws/BundleSDF/results/{DATASET}/textured_mesh.obj'
+
+    #### Ablation: w/o ContactNets ####
+    # PRED_MESH_FILE = data_loaded['dataset'][toss_type]['wo_contactnet']
+
+    #### Ablation: w/o cyclic ####
+    PRED_MESH_FILE = data_loaded['dataset'][toss_type]['wo_cyclic']
+
     ODOM_FILE_PATH = f"/home/cnets-vision/mengti_ws/BundleSDF/data/{DATASET}/annotated_poses/"
     GT_POSE_DIR = f"./dataset/{DATASET}/tagslam_poses/"
     GT_MESH_FILE = f"./assets/gt_{toss_type}_simple.obj"

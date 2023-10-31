@@ -291,9 +291,9 @@ def process_directory(directory_path):
                 replace_comma_with_space(file_path)
     print('Done!')
 
-def formulate_dataset():
+def formulate_dataset(dataset):
     source_root = "/home/cnets-vision/mengti_ws/BundleSDF/data/"
-    target_folder = "/home/cnets-vision/mengti_ws/BundleSDF/data/old_toss_10_tosses"
+    target_folder = f"/home/cnets-vision/mengti_ws/BundleSDF/data/{dataset}_0"
     subfolders = ["rgb", "depth", "masks"]
     total_folders = 10
     if not os.path.exists(target_folder):
@@ -309,7 +309,7 @@ def formulate_dataset():
 
         # Loop through each old_toss_X folder for the current subfolder type
         for i in range(1, total_folders + 1):
-            source_subfolder = os.path.join(source_root, f"old_toss_{i}", sf)
+            source_subfolder = os.path.join(source_root, f"{dataset}_{i}", sf)
 
             # List all files in the current subfolder
             files = sorted(os.listdir(source_subfolder))
