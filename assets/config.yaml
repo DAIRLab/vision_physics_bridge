@@ -3,6 +3,10 @@ dataset:
   bottle: 43
   napkin: 53 #51
   box: 57
+  half: 62
+  toblerone: 59
+  milk: 66
+  prism: 68
 tosses:
   cube: #raw_10
     - toss: 1
@@ -483,7 +487,7 @@ tosses:
       start_frame: 
       end_frame: 
   
-  half: #raw_59
+  half: #raw_62
     - toss: 0
       start_time:
         secs: 1698698660
@@ -564,7 +568,7 @@ tosses:
         secs: 1698698696
         nsecs: 661494
 
-  toblerone:
+  toblerone: #raw_59
     - toss: 0
       start_time:
         secs: 1698702014
@@ -642,3 +646,160 @@ tosses:
       end_time:
         secs: 1698702047
         nsecs: 748595
+  milk:
+    - toss: 0
+      start_time: 
+        secs: 1698868070
+        nsecs: 858266
+      end_time:
+        secs: 1698868147
+        nsecs: 452289
+    - toss: 1
+      start_time:
+        secs: 1698868070
+        nsecs: 858266
+      end_time:
+        secs: 1698868078
+        nsecs: 155450
+    - toss: 2
+      start_time:
+        secs: 1698868078
+        nsecs: 155450
+      end_time:
+        secs: 1698868083
+        nsecs: 361294
+    - toss: 3
+      start_time:
+        secs: 1698868083
+        nsecs: 361294
+      end_time:
+        secs: 1698868092
+        nsecs: 923694
+    - toss: 4
+      start_time:
+        secs: 1698868092
+        nsecs: 923694
+      end_time:
+        secs: 1698868098
+        nsecs: 692952
+    - toss: 5
+      start_time:
+        secs: 1698868098
+        nsecs: 692952
+      end_time:
+        secs: 1698868105
+        nsecs: 379607
+    - toss: 6
+      start_time:
+        secs: 1698868105
+        nsecs: 379607
+      end_time:
+        secs: 1698868112
+        nsecs: 871431
+    - toss: 7
+      start_time:
+        secs: 1698868112
+        nsecs: 871431
+      end_time:
+        secs: 1698868124
+        nsecs: 304364
+    - toss: 8
+      start_time:
+        secs: 1698868124
+        nsecs: 304364
+      end_time:
+        secs: 1698868133
+        nsecs: 108093
+    - toss: 9
+      start_time:
+        secs: 1698868133
+        nsecs: 108093
+      end_time:
+        secs: 1698868141
+        nsecs: 878867
+    - toss: 10
+      start_time:
+        secs: 1698868141
+        nsecs: 878867
+      end_time:
+        secs: 1698868147
+        nsecs: 452289
+  prism:
+    - toss: 0
+      start_time:
+        secs: 1698870032
+        nsecs: 193506
+      end_time:
+        secs: 1698870067
+        nsecs: 507612
+    - toss: 1
+      start_time:
+        secs: 1698870032
+        nsecs: 193506
+      end_time:
+        secs: 1698870034
+        nsecs: 926328
+    - toss: 2
+      start_time:
+        secs: 1698870034
+        nsecs: 926328
+      end_time:
+        secs: 1698870038
+        nsecs: 601738
+    - toss: 3
+      start_time:
+        secs: 1698870038
+        nsecs: 601738
+      end_time:
+        secs: 1698870041
+        nsecs: 597097
+    - toss: 4
+      start_time:
+        secs: 1698870041
+        nsecs: 597097
+      end_time:
+        secs: 1698870044
+        nsecs: 864542
+    - toss: 5
+      start_time:
+        secs: 1698870044
+        nsecs: 864542
+      end_time:
+        secs: 1698870048
+        nsecs: 503921
+    - toss: 6
+      start_time:
+        secs: 1698870048
+        nsecs: 503921
+      end_time:
+        secs: 1698870052
+        nsecs: 458979
+    - toss: 7
+      start_time:
+        secs: 1698870052
+        nsecs: 458979
+      end_time:
+        secs: 1698870056
+        nsecs: 169533
+    - toss: 8
+      start_time:
+        secs: 1698870056
+        nsecs: 169533
+      end_time:
+        secs: 1698870059
+        nsecs: 939099
+    - toss: 9
+      start_time:
+        secs: 1698870059
+        nsecs: 939099
+      end_time:
+        secs: 1698870064
+        nsecs: 306392
+    - toss: 10
+      start_time:
+        secs: 1698870064
+        nsecs: 306392
+      end_time:
+        secs: 1698870067
+        nsecs: 507612
+         

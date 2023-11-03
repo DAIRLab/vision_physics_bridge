@@ -28,14 +28,14 @@ from urdf_filter import dilate, run_urdf_filter
 import os, os.path
 import yaml
 from scipy.spatial.transform import Rotation as R
-"""Process half-half box data.
+"""Process toblerone box data.
 """
-TOSS_TYPE = 'half'
+TOSS_TYPE = 'toblerone'
 TOSS_ID=0
-ROSBAG_NAME = "./rosbags/raw_62.bag"
-ODOM_ROSBAG_NAME = "./rosbags/odom_62.bag"
+ROSBAG_NAME = "./rosbags/raw_59.bag"
+ODOM_ROSBAG_NAME = "./rosbags/odom_59.bag"
 DEPTH_ROS_TOPIC = "/camera/aligned_depth_to_color/image_raw"
-ODOM_ROS_TOPIC = "/tagslam/odom/body_half"
+ODOM_ROS_TOPIC = "/tagslam/odom/body_toblerone"
 JOINT_STATE_ROS_TOPIC = "/joint_states"
 RGB_ROS_TOPIC = "/camera/color/image_raw"
 

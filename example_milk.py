@@ -28,21 +28,22 @@ from urdf_filter import dilate, run_urdf_filter
 import os, os.path
 import yaml
 from scipy.spatial.transform import Rotation as R
-"""Process half-half box data.
+import shutil
+"""Process the milk hand-tossing data.
 """
-TOSS_TYPE = 'half'
-TOSS_ID=0
-ROSBAG_NAME = "./rosbags/raw_62.bag"
-ODOM_ROSBAG_NAME = "./rosbags/odom_62.bag"
+TOSS_TYPE = 'milk'
+TOSS_ID=1
+ROSBAG_NAME = "./rosbags/raw_66.bag"
+ODOM_ROSBAG_NAME = "./rosbags/odom_66.bag"
 DEPTH_ROS_TOPIC = "/camera/aligned_depth_to_color/image_raw"
-ODOM_ROS_TOPIC = "/tagslam/odom/body_half"
+ODOM_ROS_TOPIC = "/tagslam/odom/body_milk"
 JOINT_STATE_ROS_TOPIC = "/joint_states"
 RGB_ROS_TOPIC = "/camera/color/image_raw"
 
 ROOT_DIR = f"./dataset/{TOSS_TYPE}_{TOSS_ID}/"
 BUNDLETRACK_DATA_DIR = f"{TOSS_TYPE}_{TOSS_ID}/"
 BUNDLETRACK_DIR = "/home/cnets-vision/mengti_ws/BundleSDF/data/"
-CAMERA_EXTRINSICS_FILE = "./assets/realsense_pose_half.yaml"
+CAMERA_EXTRINSICS_FILE = "./assets/realsense_pose_milk_prism.yaml"
 
 # Create folders
 if not os.path.exists(ROOT_DIR + "texts"):
@@ -70,6 +71,7 @@ if not os.path.exists(BUNDLETRACK_DIR + BUNDLETRACK_DATA_DIR + "masks"):
 if not os.path.exists(BUNDLETRACK_DIR + BUNDLETRACK_DATA_DIR + "rgb"):
     os.makedirs(BUNDLETRACK_DIR + BUNDLETRACK_DATA_DIR + "rgb")
 
+TEXT_PATH = ROOT_DIR + "text"
 POSITION_FILE_PATH = ROOT_DIR + "texts/joint_position.txt"
 REAL_DEPTH_FILE = ROOT_DIR + "texts/real_depth_frame%04i.txt"
 SIMULATED_DEPTH_FILE = ROOT_DIR + "texts/simulated_depth_frame%04i.txt"
@@ -154,3 +156,13 @@ if __name__ == "__main__":
     print(f'frame_num is {frame_num}')
     for frame_id in range(1, frame_num+1):
         create_annotated_poses(output_dir=ANNOTATED_POSES_DIR, frame_id=frame_id)
+    # clean up
+    try:
+        shutil.rmtree(DEPTH_DATA_DIR)
+        shutil.rmtree(RGB_DATA_DIR)
+        shutil.rmtree(CUBE_SCREEN_DIR)
+        shutil.rmtree(CUBE_DEPTH_DIR)
+        shutil.rmtree(TEXT_PATH)
+        print(f"Done clean up!")
+    except Exception as e:
+        print(f"Error occurred: {e}")
