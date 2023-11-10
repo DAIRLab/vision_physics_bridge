@@ -28,7 +28,9 @@ from urdf_filter import dilate, run_urdf_filter
 import os, os.path
 import yaml
 from scipy.spatial.transform import Rotation as R
-"""Process the milk hand-tossing data.
+import shutil
+
+"""Process the prism hand-tossing data.
 """
 TOSS_TYPE = 'prism'
 TOSS_ID=0
@@ -154,3 +156,13 @@ if __name__ == "__main__":
     print(f'frame_num is {frame_num}')
     for frame_id in range(1, frame_num+1):
         create_annotated_poses(output_dir=ANNOTATED_POSES_DIR, frame_id=frame_id)
+    # clean up
+    try:
+        shutil.rmtree(DEPTH_DATA_DIR)
+        shutil.rmtree(RGB_DATA_DIR)
+        shutil.rmtree(CUBE_SCREEN_DIR)
+        shutil.rmtree(CUBE_DEPTH_DIR)
+        shutil.rmtree(TEXT_PATH)
+        print(f"Done clean up!")
+    except Exception as e:
+        print(f"Error occurred: {e}")

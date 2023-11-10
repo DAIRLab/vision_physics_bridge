@@ -21,3 +21,11 @@ dataset:
     wo_contactnets: None
     wo_cyclic: '/home/cnets-vision/mengti_ws/BundleSDF/assets/dair_napkin_amp.obj'
     ours: None
+
+  milk:
+    bundlesdf_1_toss: None
+    bundlesdf_10_toss: None
+    wo_contactnets: None
+    wo_cyclic: None
+    ours: None
+

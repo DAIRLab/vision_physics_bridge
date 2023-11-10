@@ -246,15 +246,16 @@ if __name__ == "__main__":
     args = parser.parse_args()
     toss_id = args.toss_id
     print(f'Processing toss {toss_id}')
-    DATASET="half"
+    DATASET="prism"
     DEPTH_ROS_TOPIC = "/camera/aligned_depth_to_color/image_raw"
     ODOM_ROS_TOPIC = f"/tagslam/odom/body_{DATASET}"
+    
     GT_POSE_DIR = f"/home/cnets-vision/mengti_ws/robot_filter/dataset/{DATASET}_{toss_id}/tagslam_poses/"
     OUTPUT_POSE_DIR = f"/home/cnets-vision/mengti_ws/BundleSDF/results/{DATASET}_{toss_id}/ob_in_cam/"
     
     ODOM_FILE_PATH = f"/home/cnets-vision/mengti_ws/BundleSDF/data/{DATASET}_{toss_id}/annotated_poses/"
     FIG_NAME = f"plots/result_poses_bundlesdf_{DATASET}_{toss_id}.png"
-    CAMERA_EXTRINSICS_FILE = "./assets/realsense_pose_half.yaml"
+    CAMERA_EXTRINSICS_FILE = f"./assets/realsense_pose_milk_prism.yaml"
 
     cam = 'cam0' # realsense camera name
     with open(CAMERA_EXTRINSICS_FILE, 'r') as stream:
@@ -266,13 +267,12 @@ if __name__ == "__main__":
     cam_axis_vec = np.array([cam_rot_dict['x'], cam_rot_dict['y'], cam_rot_dict['z']])
     
     yaml_path = './assets/config.yaml'
-    toss_type = 'half'
+    toss_type = 'prism'
     frame_num = len([name for name in os.listdir(OUTPUT_POSE_DIR)])
     print(f"there are {frame_num} frames")
-    yaml_path = './assets/config.yaml'
     start_time = load_toss_time_from_yaml(yaml_path, toss_type, toss_id, 'start_time')
     end_time = load_toss_time_from_yaml(yaml_path, toss_type, toss_id, 'end_time')
-    bag_num = load_dataset_from_yaml(yaml_path, toss_type)
+    bag_num = load_dataset_from_yaml(yaml_path, DATASET)
     depth_bag_file = f"./rosbags/raw_{bag_num}.bag"
     odom_bag_file = f"./rosbags/odom_{bag_num}.bag"
     bundletrack_time = extract_time_versus_poses(

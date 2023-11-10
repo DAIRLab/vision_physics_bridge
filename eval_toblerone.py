@@ -1,6 +1,6 @@
 import argparse
 import os
-from file_utils import load_toss_time_from_yaml
+from file_utils import load_dataset_from_yaml, load_toss_time_from_yaml
 from rosbag_processor import extract_time_versus_poses, extract_timestamps
 import rospy
 import numpy as np
@@ -246,17 +246,16 @@ if __name__ == "__main__":
     args = parser.parse_args()
     toss_id = args.toss_id
     print(f'Processing toss {toss_id}')
-    depth_bag_file = "./rosbags/raw_51.bag"
-    odom_bag_file = "./rosbags/odom_51.bag"
+    DATASET="toblerone"
     DEPTH_ROS_TOPIC = "/camera/aligned_depth_to_color/image_raw"
-    ODOM_ROS_TOPIC = "/tagslam/odom/body_napkin"
-    DATASET="napkin"
+    ODOM_ROS_TOPIC = f"/tagslam/odom/body_{DATASET}"
+    
     GT_POSE_DIR = f"/home/cnets-vision/mengti_ws/robot_filter/dataset/{DATASET}_{toss_id}/tagslam_poses/"
     OUTPUT_POSE_DIR = f"/home/cnets-vision/mengti_ws/BundleSDF/results/{DATASET}_{toss_id}/ob_in_cam/"
     
     ODOM_FILE_PATH = f"/home/cnets-vision/mengti_ws/BundleSDF/data/{DATASET}_{toss_id}/annotated_poses/"
-    FIG_NAME = f"result_poses_bundlesdf_{DATASET}_{toss_id}.png"
-    CAMERA_EXTRINSICS_FILE = "./assets/realsense_pose_napkin.yaml"
+    FIG_NAME = f"plots/result_poses_bundlesdf_{DATASET}_{toss_id}.png"
+    CAMERA_EXTRINSICS_FILE = "./assets/realsense_pose_toblerone.yaml"
 
     cam = 'cam0' # realsense camera name
     with open(CAMERA_EXTRINSICS_FILE, 'r') as stream:
@@ -268,13 +267,15 @@ if __name__ == "__main__":
     cam_axis_vec = np.array([cam_rot_dict['x'], cam_rot_dict['y'], cam_rot_dict['z']])
     
     yaml_path = './assets/config.yaml'
-    toss_type = 'napkin'
+    toss_type = 'toblerone'
+    bag_num = load_dataset_from_yaml(yaml_path, toss_type)
+    depth_bag_file = f"./rosbags/raw_{bag_num}.bag"
+    odom_bag_file = f"./rosbags/odom_{bag_num}.bag"
     frame_num = len([name for name in os.listdir(OUTPUT_POSE_DIR)])
     print(f"there are {frame_num} frames")
     yaml_path = './assets/config.yaml'
     start_time = load_toss_time_from_yaml(yaml_path, toss_type, toss_id, 'start_time')
     end_time = load_toss_time_from_yaml(yaml_path, toss_type, toss_id, 'end_time')
-
     bundletrack_time = extract_time_versus_poses(
         start_time,
         end_time,

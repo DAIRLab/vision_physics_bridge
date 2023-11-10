@@ -8,6 +8,7 @@ from file_utils import (
     generate_depth_img_without_robot,
     generate_rgb_image_without_robot,
     import_data,
+    load_dataset_from_yaml,
     load_toss_time_from_yaml,
     write_real_depth_as_txt,
 )
@@ -29,14 +30,14 @@ import os, os.path
 import yaml
 from scipy.spatial.transform import Rotation as R
 import shutil
-"""Process the milk hand-tossing data.
+
+"""Process the egg carton hand-tossing data.
 """
-TOSS_TYPE = 'milk'
+TOSS_TYPE = 'egg'
 TOSS_ID=0
-ROSBAG_NAME = "./rosbags/raw_66.bag"
-ODOM_ROSBAG_NAME = "./rosbags/odom_66.bag"
+
 DEPTH_ROS_TOPIC = "/camera/aligned_depth_to_color/image_raw"
-ODOM_ROS_TOPIC = "/tagslam/odom/body_milk"
+ODOM_ROS_TOPIC = f"/tagslam/odom/body_{TOSS_TYPE}"
 JOINT_STATE_ROS_TOPIC = "/joint_states"
 RGB_ROS_TOPIC = "/camera/color/image_raw"
 
@@ -44,7 +45,7 @@ ROOT_DIR = f"./dataset/{TOSS_TYPE}_{TOSS_ID}/"
 BUNDLETRACK_DATA_DIR = f"{TOSS_TYPE}_{TOSS_ID}/"
 BUNDLETRACK_DIR = "/home/cnets-vision/mengti_ws/BundleSDF/data/"
 CAMERA_EXTRINSICS_FILE = "./assets/realsense_pose_milk_prism.yaml"
-
+### NOTHING NEEDS TO BE CHANGED BELOW
 # Create folders
 if not os.path.exists(ROOT_DIR + "texts"):
     os.makedirs(ROOT_DIR + "texts")
@@ -71,12 +72,11 @@ if not os.path.exists(BUNDLETRACK_DIR + BUNDLETRACK_DATA_DIR + "masks"):
 if not os.path.exists(BUNDLETRACK_DIR + BUNDLETRACK_DATA_DIR + "rgb"):
     os.makedirs(BUNDLETRACK_DIR + BUNDLETRACK_DATA_DIR + "rgb")
 
-TEXT_PATH = ROOT_DIR + "text"
 POSITION_FILE_PATH = ROOT_DIR + "texts/joint_position.txt"
 REAL_DEPTH_FILE = ROOT_DIR + "texts/real_depth_frame%04i.txt"
 SIMULATED_DEPTH_FILE = ROOT_DIR + "texts/simulated_depth_frame%04i.txt"
 IMAGE_TXT_PATH = ROOT_DIR + "texts/images.txt"  # depth image in the form of txt
-
+TEXT_PATH = ROOT_DIR + "texts/"
 DEPTH_DATA_DIR = ROOT_DIR + "depth_data/"
 RGB_DATA_DIR = ROOT_DIR + "rgb_data/"
 CUBE_SCREEN_DIR = ROOT_DIR + "cube_data/screen_image_frame%04i.png"
@@ -107,6 +107,9 @@ yaml_path = './assets/config.yaml'
 start_time = load_toss_time_from_yaml(yaml_path, TOSS_TYPE, TOSS_ID, 'start_time')
 end_time = load_toss_time_from_yaml(yaml_path, TOSS_TYPE, TOSS_ID, 'end_time')
 print(f'start_time:{start_time.secs}.{start_time.nsecs}, end_time:{end_time.secs}.{end_time.nsecs}')
+bag_num = load_dataset_from_yaml(yaml_path, TOSS_TYPE)
+ROSBAG_NAME = f"./rosbags/raw_{bag_num}.bag"
+ODOM_ROSBAG_NAME = f"./rosbags/odom_{bag_num}.bag"
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()

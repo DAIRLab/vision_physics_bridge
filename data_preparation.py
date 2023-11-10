@@ -555,11 +555,13 @@ if __name__ == "__main__":
     YAML_PATH = './assets/config.yaml'
     ROSBAG = load_dataset_from_yaml(YAML_PATH, TOSS_TYPE)
     DEPTH_BAG_FILE = f"./rosbags/raw_{ROSBAG}.bag"
-    # ODOM_BAG_FILE = f"./rosbags/odom_{ROSBAG}.bag"
-    ODOM_BAG_FILE = f"./rosbags/adjusted_odom_57.bag"
+    ODOM_BAG_FILE = f"./rosbags/odom_{ROSBAG}.bag"
+    # ODOM_BAG_FILE = f"./rosbags/adjusted_odom_{ROSBAG}.bag"
     DEPTH_ROS_TOPIC = "/camera/aligned_depth_to_color/image_raw"
     ODOM_ROS_TOPIC = f"/tagslam/odom/body_{TOSS_TYPE}"
     CAMERA_EXTRINSICS_FILE = f'./assets/realsense_pose_{TOSS_TYPE}.yaml'
+    if TOSS_TYPE == 'milk' or TOSS_TYPE == 'prism':
+        CAMERA_EXTRINSICS_FILE = f'./assets/realsense_pose_milk_prism.yaml'
     print(f'Processing toss {TOSS_TYPE}_{TOSS_ID}')
     
     DEPTH_TOPIC = '/camera/aligned_depth_to_color/image_raw'
