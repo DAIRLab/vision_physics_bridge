@@ -68,7 +68,7 @@ def smooth_quaternions_pyquat(quats, alpha=0.5):
     return smoothed_quats #xyzw
 
 class DatasetManagement:
-    def __init__(self, frame_num, start_frame, end_frame, timestamps, toss_id, cam_trans, cam_axis_vec, plot=False):
+    def __init__(self, frame_num, start_frame, end_frame, timestamps, toss_id, cam_trans, cam_axis_vec, plot=False, use_gt=False):
         self.frame_num = frame_num
         self.start_frame = start_frame
         self.end_frame = end_frame
@@ -87,6 +87,7 @@ class DatasetManagement:
         self.plot = plot
         self.cam_trans = cam_trans
         self.cam_axis_vec = cam_axis_vec
+        self.use_gt = use_gt
         self.load_poses()
         
     def load_poses(self):
@@ -103,14 +104,18 @@ class DatasetManagement:
                 break
             if frame_id == self.start_frame:
                 t_start = self.timestamps[frame_id]
-            # pose = np.loadtxt(BUNDLESDF_POSE_DIR + "%04i.txt" % frame_id)
-            # pose = transform_bundletrack_output(pose, BUNDLESDF_POSE_DIR, ODOM_FILE_PATH, self.cam_trans, self.cam_axis_vec, to_world=True)
-            # q_t.append(R.from_matrix(pose[:3, :3]).as_quat()) #x,y,z,w
-            # p_t.append(pose[:3, 3])
+            if not self.use_gt:
+                print('>>>>>>>>>>> Using bundlesdf results')
+                pose = np.loadtxt(BUNDLESDF_POSE_DIR + "%04i.txt" % frame_id)
+                pose = transform_bundletrack_output(pose, BUNDLESDF_POSE_DIR, ODOM_FILE_PATH, self.cam_trans, self.cam_axis_vec, to_world=True)
+                q_t.append(R.from_matrix(pose[:3, :3]).as_quat()) #x,y,z,w
+                p_t.append(pose[:3, 3])
             ######
-            tagslam_pose = tagslam_data[frame_id, 1:]
-            q_t.append(tagslam_pose[3:])#xyzw
-            p_t.append(tagslam_pose[:3])
+            else:
+                print(">>>>>>>>>>> Using ground-truth")
+                tagslam_pose = tagslam_data[frame_id, 1:]
+                q_t.append(tagslam_pose[3:])#xyzw
+                p_t.append(tagslam_pose[:3])
             ######
             curr_t = self.timestamps[frame_id]
             t.append(curr_t - t_start)
@@ -223,8 +228,8 @@ class DatasetManagement:
         rot_t = R.from_quat(self.q_t) #N,3,3
         #####
         adjust_pos = True
-        # FINAL_Z = 0.05126618331135579
-        FINAL_Z = 0.03 #0.05148739950625105
+        FINAL_Z = 0.04 #0.032  #0.050924062270897685 #0.025 #0.05126618331135579
+        # FINAL_Z = 0.03 #0.05148739950625105
         PLANK_HEIGHT = FINAL_Z - self.p_t[-1, -1]
         print(f'PLANK_HEIGHT: {PLANK_HEIGHT}')
         if adjust_pos: # the franka is on a plank, need to add the plank height to z
@@ -548,9 +553,15 @@ if __name__ == "__main__":
         type=str,
         required=True,
     )
+    parser.add_argument(
+        "--use_gt",
+        type=bool,
+        required=False
+    )
     args = parser.parse_args()
     TOSS_ID = args.toss_id
     TOSS_TYPE = args.type
+    USE_GT = args.use_gt
     DATASET = f'{TOSS_TYPE}_{TOSS_ID}'
     YAML_PATH = './assets/config.yaml'
     ROSBAG = load_dataset_from_yaml(YAML_PATH, TOSS_TYPE)
@@ -566,7 +577,8 @@ if __name__ == "__main__":
     
     DEPTH_TOPIC = '/camera/aligned_depth_to_color/image_raw'
     BUNDLESDF_POSE_DIR = f"/home/cnets-vision/mengti_ws/BundleSDF/results/{DATASET}/ob_in_cam/"
-    CONTACTNETS_INPUT_DIR = f"/home/cnets-vision/mengti_ws/BundleSDF/dair_pll/assets/bundlesdf_{TOSS_TYPE}/"
+    # CONTACTNETS_INPUT_DIR = f"/home/cnets-vision/mengti_ws/BundleSDF/dair_pll/assets/bundlesdf_{TOSS_TYPE}/"
+    CONTACTNETS_INPUT_DIR = f"/home/cnets-vision/mengti_ws/dair_pll_latest/assets/bundlesdf_{TOSS_TYPE}/"
     ODOM_FILE_PATH = f"/home/cnets-vision/mengti_ws/BundleSDF/data/{DATASET}/annotated_poses/"
     GT_POSE_DIR = f"/home/cnets-vision/mengti_ws/robot_filter/dataset/{DATASET}/tagslam_poses/"
     # PLANK_HEIGHT = -0.05458#0.03428 #0.0145
@@ -602,8 +614,8 @@ if __name__ == "__main__":
         ODOM_ROS_TOPIC,
         GT_POSE_DIR,
         save=True,
-        time_offset=125.19
+        # time_offset=125.19
     ).reshape(-1,)
     print(gt_time.shape, bundletrack_time.shape)
-    dataset = DatasetManagement(frame_num, start_frame, end_frame, bundletrack_time, TOSS_ID, cam_trans, cam_axis_vec, plot=False)
+    dataset = DatasetManagement(frame_num, start_frame, end_frame, bundletrack_time, TOSS_ID, cam_trans, cam_axis_vec, plot=False, use_gt=USE_GT)
     dataset.do_process()

@@ -28,4 +28,31 @@ dataset:
     wo_contactnets: None
     wo_cyclic: None
     ours: None
+  
+  prism:
+    bundlesdf_1_toss: None
+    bundlesdf_10_toss: None
+    wo_contactnets: None
+    wo_cyclic: None
+    ours: None
 
+  toblerone:
+    bundlesdf_1_toss: None
+    bundlesdf_10_toss: None
+    wo_contactnets: None
+    wo_cyclic: None
+    ours: None
+  
+  half:
+    bundlesdf_1_toss: None
+    bundlesdf_10_toss: None
+    wo_contactnets: None
+    wo_cyclic: None
+    ours: None
+  
+  egg:
+    bundlesdf_1_toss: None
+    bundlesdf_10_toss: None
+    wo_contactnets: None
+    wo_cyclic: None
+    ours: None

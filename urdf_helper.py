@@ -217,6 +217,13 @@ def pcd_to_mesh(input_ply_path, output_obj_path):
     # trimesh.convex.is_convex(tri_mesh)
     tri_mesh.export(output_obj_path, file_type='obj')
 
+def mm_to_meters(input, output):
+    mesh = trimesh.load(input)
+    scale_factor = 0.001
+    mesh.apply_scale(scale_factor)
+    mesh.export(output)
+    print('mesh in meters exported!')
+
 '''Process the 3D scanned napkin mesh
 '''
 def scale_and_center(input_file, output_file):
@@ -278,21 +285,11 @@ if __name__ == '__main__':
     alt_simplified_mesh = f'./assets/{filename}_rescale_simplified_alt.obj'
     sampled_mesh = f'./assets/{filename}_sampled.obj'
     sampled_pcd = f'./assets/{filename}.ply'
+    name = filename.split('_scan')[0]
+    simple_gt_pcd = f'./assets/gt_{name}_simple.obj'
     # simplify_mesh(original_mesh, simplified_mesh, 0.01)
     # create_max_volume_obj(simplified_mesh, output_path, vertex_count=10, target_vertex_count=8, target_face_count=6)
     # add_normals_to_obj(output_path, normal_mesh)
-    # mesh_to_cube(original_mesh, output_path)
-    
-    # shrink_mesh_file(original_mesh, 8.7, rescale_mesh)
-    # simplify_mesh(rescale_mesh, simplified_mesh, 0.5)
-    # add_normals_to_obj(simplified_mesh, normal_mesh)
-    
-    # noisy_mesh = f'./assets/{filename}_noise.obj'
-    # add_noise_to_mesh(original_mesh, noisy_mesh)
-    
-    # sample_points_from_mesh(original_mesh, sampled_mesh, num_points=5000, triangle_size=0.005)
-    sample_pcd_from_mesh(original_mesh, sampled_pcd)
-    # pcd_to_mesh(sampled_pcd, sampled_mesh)
-    # scan_file = f'./assets/gt_napkin.obj'
-    # output = f'./assets/gt_napkin_scale.obj'
-    # scale_and_center(scan_file, output)
+
+    # mm_to_meters(original_mesh, simple_gt_pcd)
+    simplify_mesh(simple_gt_pcd, simple_gt_pcd, 0.5)

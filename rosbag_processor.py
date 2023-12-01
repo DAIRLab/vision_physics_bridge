@@ -743,6 +743,7 @@ def extract_time_versus_poses(
     tagslam_poses = np.array(tagslam_poses).T
     bundletrack_time = np.expand_dims(bundletrack_time,axis=0)
     odom_time = np.expand_dims(odom_time,axis=0)
+    print(odom_time.shape, bundletrack_time.shape)
     data = np.concatenate((odom_time, tagslam_poses), axis=0)
     data = data.T #N, 9
     if save:

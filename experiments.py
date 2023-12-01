@@ -152,7 +152,15 @@ def benchmark_one_video():
         # pcd = toOpen3dCloud(pred_pts)
         # o3d.io.write_point_cloud(f'{PCD_DIR}pred_pts.ply_{DATASET}',pcd,write_ascii=True)
     
-
+def sample_pcd_from_mesh(input_obj_path, output_ply_path, num_points=1000):
+    mesh = trimesh.load(input_obj_path, force='mesh')
+    if np.asarray(mesh.triangles).shape[0] == 0:
+        raise ValueError("The mesh doesn't contain any triangles.")
+    pts = mesh.sample(99999)
+    pcd = toOpen3dCloud(np.array(pts))
+    o3d.io.write_point_cloud(output_ply_path,pcd,write_ascii=True)
+    print(f'pcd exported to {output_ply_path}')
+    
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument(
@@ -169,7 +177,7 @@ if __name__ == '__main__':
     toss_id = args.toss_id
     toss_type = args.type
     with open('./assets/results.yaml', 'r') as stream:
-        data_loaded = yaml.safe_load(stream)
+        dir_loaded = yaml.safe_load(stream)
 
     # Cube experiments
     """Ablation Studies
@@ -228,6 +236,8 @@ if __name__ == '__main__':
     GT_MESH_FILE = f"./assets/gt_{toss_type}_simple.obj"
     PCD_DIR = f"./assets/"
     GT_PCD_DIR = f"./assets/gt_{toss_type}_simple.ply"
+    if not os.path.exists(GT_PCD_DIR):
+        sample_pcd_from_mesh(GT_MESH_FILE, GT_PCD_DIR)
     CAMERA_EXTRINSICS_FILE = f"./assets/realsense_pose_{toss_type}.yaml"
     if toss_type == 'milk' or toss_type == 'prism':
         CAMERA_EXTRINSICS_FILE = f"./assets/realsense_pose_milk_prism.yaml"

@@ -76,6 +76,7 @@ POSITION_FILE_PATH = ROOT_DIR + "texts/joint_position.txt"
 REAL_DEPTH_FILE = ROOT_DIR + "texts/real_depth_frame%04i.txt"
 SIMULATED_DEPTH_FILE = ROOT_DIR + "texts/simulated_depth_frame%04i.txt"
 IMAGE_TXT_PATH = ROOT_DIR + "texts/images.txt"  # depth image in the form of txt
+TEXT_PATH = ROOT_DIR + "texts"
 
 DEPTH_DATA_DIR = ROOT_DIR + "depth_data/"
 RGB_DATA_DIR = ROOT_DIR + "rgb_data/"
@@ -160,8 +161,6 @@ if __name__ == "__main__":
     try:
         shutil.rmtree(DEPTH_DATA_DIR)
         shutil.rmtree(RGB_DATA_DIR)
-        shutil.rmtree(CUBE_SCREEN_DIR)
-        shutil.rmtree(CUBE_DEPTH_DIR)
         shutil.rmtree(TEXT_PATH)
         print(f"Done clean up!")
     except Exception as e:
