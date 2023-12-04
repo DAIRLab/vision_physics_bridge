@@ -1,6 +1,7 @@
 import argparse
 import os
 from file_utils import load_toss_time_from_yaml
+from rosbag_processor import extract_time_versus_poses
 import rospy
 import numpy as np
 import scipy.spatial as sp
@@ -230,8 +231,8 @@ def plot_with_time(bundletrack_time, gt_time, bundletrack_pose_dir, gt_poses):
 def draw_coords_to_image():
     """Draw rgb axes onto images to indicate the pose.
     """
-    SEGMENT_IMAGE_DIR = f"/home/cnets-vision/mengti_ws/BundleSDF/results/old_toss_{toss_id}/color_segmented/"
-    OUTPUT_SEGMENT_DIR = f"./dataset/old_toss_{toss_id}/color_segmented_coords/"
+    SEGMENT_IMAGE_DIR = f"/home/cnets-vision/mengti_ws/BundleSDF/results/cube_{toss_id}/color_segmented/"
+    OUTPUT_SEGMENT_DIR = f"./dataset/cube_{toss_id}/color_segmented_coords/"
     if not os.path.exists(OUTPUT_SEGMENT_DIR):
         os.mkdir(OUTPUT_SEGMENT_DIR)
         print(f'Made dir {OUTPUT_SEGMENT_DIR}')
@@ -240,7 +241,7 @@ def draw_coords_to_image():
                             [axis_length,0,0], 
                             [0,axis_length,0], 
                             [0,0,axis_length]])
-    intrinsic = np.loadtxt(f"/home/cnets-vision/mengti_ws/BundleSDF/data/old_toss_{toss_id}/cam_K.txt")
+    intrinsic = np.loadtxt(f"/home/cnets-vision/mengti_ws/BundleSDF/data/cube_{toss_id}/cam_K.txt")
     # tagslam_data = np.loadtxt(GT_POSE_DIR+'tagslam.txt')
     for frame_id in range(1, frame_num):
         output_pose = np.loadtxt(OUTPUT_POSE_DIR + "%04i.txt" % frame_id)
@@ -288,7 +289,7 @@ if __name__ == "__main__":
     odom_bag_file = "./rosbags/odom_10.bag"
     DEPTH_ROS_TOPIC = "/camera/aligned_depth_to_color/image_raw"
     ODOM_ROS_TOPIC = "/tagslam/odom/body_cube"
-    DATASET="old_toss_1"
+    DATASET=f"cube_{toss_id}"
     GT_POSE_DIR = f"/home/cnets-vision/mengti_ws/robot_filter/dataset/{DATASET}/tagslam_poses/"
     OUTPUT_POSE_DIR = f"/home/cnets-vision/mengti_ws/BundleSDF/results/{DATASET}/ob_in_cam/"
     #### Ablation 1 ####
@@ -311,7 +312,7 @@ if __name__ == "__main__":
     
     ODOM_FILE_PATH = f"/home/cnets-vision/mengti_ws/BundleSDF/data/{DATASET}/annotated_poses/"
     FIG_NAME = f"result_poses_bundlesdf_{DATASET}.png"
-    CAMERA_EXTRINSICS_FILE = "./assets/realsense_pose_cube_old.yaml"
+    CAMERA_EXTRINSICS_FILE = "./assets/realsense_pose_cube.yaml"
 
     cam = 'cam0' # realsense camera name
     with open(CAMERA_EXTRINSICS_FILE, 'r') as stream:
@@ -326,11 +327,23 @@ if __name__ == "__main__":
     toss_type = 'cube'
     frame_num = len([name for name in os.listdir(OUTPUT_POSE_DIR)])
     print(f"there are {frame_num} frames")
+    start_time = load_toss_time_from_yaml(yaml_path, toss_type, toss_id, 'start_time')
+    end_time = load_toss_time_from_yaml(yaml_path, toss_type, toss_id, 'end_time')
+    bundletrack_time = extract_time_versus_poses(
+        start_time,
+        end_time,
+        depth_bag_file,
+        odom_bag_file,
+        DEPTH_ROS_TOPIC,
+        ODOM_ROS_TOPIC,
+        GT_POSE_DIR,
+        save=True
+    ).reshape(-1,)
     
     data = np.loadtxt(GT_POSE_DIR+'tagslam.txt')
     print('data', data.shape)
-    bundletrack_time, gt_time = data[:, 0], data[:, 1] #N,
-    tagslam_poses = data[:, 2:] #N,7
+    gt_time = data[:, 0] #N,
+    tagslam_poses = data[:, 1:] #N,7
     print(bundletrack_time.shape, gt_time.shape, tagslam_poses.shape)
     plot_with_time(bundletrack_time, gt_time, OUTPUT_POSE_DIR, tagslam_poses)
     # draw_coords_to_image()

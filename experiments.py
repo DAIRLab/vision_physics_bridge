@@ -223,8 +223,9 @@ if __name__ == '__main__':
     DATASET = f'{toss_type}_{toss_id}'
     OUTPUT_POSE_DIR = f'/home/cnets-vision/mengti_ws/BundleSDF/results/{DATASET}/ob_in_cam/'
     # PRED_MESH_FILE = f'/home/cnets-vision/mengti_ws/BundleSDF/textured_mesh.obj' # ours - napkin box
-    PRED_MESH_FILE = f'/home/cnets-vision/mengti_ws/BundleSDF/results/{DATASET}/textured_mesh.obj'
-
+    # PRED_MESH_FILE = f'/home/cnets-vision/mengti_ws/BundleSDF/results/{DATASET}/textured_mesh.obj'
+    PRED_MESH_FILE = f'/home/cnets-vision/Desktop/textured_mesh_cube_original_cluster.obj' # without contact pts loss 
+    # PRED_MESH_FILE = f'/home/cnets-vision/Desktop/textured_mesh_cube_cluster.obj' # with contact pts loss
     #### Ablation: w/o ContactNets ####
     # PRED_MESH_FILE = data_loaded['dataset'][toss_type]['wo_contactnet']
 
