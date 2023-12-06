@@ -127,9 +127,9 @@ def benchmark_one_video():
         add_errs.append(add)
     adi_errs = np.array(adi_errs)
     add_errs = np.array(add_errs)
-    ADDS_AUC = compute_auc(adi_errs)*100
-    ADD_AUC = compute_auc(add_errs)*100
-    print(f'ADD: {ADD_AUC}, ADDS: {ADDS_AUC}')
+    # ADDS_AUC = compute_auc(adi_errs)*100
+    # ADD_AUC = compute_auc(add_errs)*100
+    # print(f'ADD: {ADD_AUC}, ADDS: {ADDS_AUC}')
     
     ### mesh 
     cd = np.inf
@@ -224,8 +224,9 @@ if __name__ == '__main__':
     OUTPUT_POSE_DIR = f'/home/cnets-vision/mengti_ws/BundleSDF/results/{DATASET}/ob_in_cam/'
     # PRED_MESH_FILE = f'/home/cnets-vision/mengti_ws/BundleSDF/textured_mesh.obj' # ours - napkin box
     # PRED_MESH_FILE = f'/home/cnets-vision/mengti_ws/BundleSDF/results/{DATASET}/textured_mesh.obj'
-    PRED_MESH_FILE = f'/home/cnets-vision/Desktop/textured_mesh_cube_original_cluster.obj' # without contact pts loss 
-    # PRED_MESH_FILE = f'/home/cnets-vision/Desktop/textured_mesh_cube_cluster.obj' # with contact pts loss
+    # PRED_MESH_FILE = f'/home/cnets-vision/Desktop/textured_mesh_cube_original_cluster_2.obj' # without contact pts loss 
+    # PRED_MESH_FILE = f'/home/cnets-vision/Desktop/textured_mesh_cube_cluster_2.obj' # with contact pts loss
+    PRED_MESH_FILE = f'/home/cnets-vision/Desktop/tests/textured_mesh_2.obj'
     #### Ablation: w/o ContactNets ####
     # PRED_MESH_FILE = data_loaded['dataset'][toss_type]['wo_contactnet']
 

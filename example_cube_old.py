@@ -1,4 +1,5 @@
 import argparse
+import shutil
 import numpy as np
 from tqdm import tqdm
 from depth_filter import DepthFilter
@@ -44,8 +45,8 @@ JOINT_STATE_ROS_TOPIC = "/joint_states"
 RGB_ROS_TOPIC = "/camera/color/image_raw"
 ODOM_ROS_TOPIC = "/tagslam/odom/body_cube"
 
-ROOT_DIR = f"./dataset/old_toss_{toss_id}/"
-BUNDLETRACK_DATA_DIR = f"old_toss_{toss_id}/"
+ROOT_DIR = f"./dataset/cube_{toss_id}/"
+BUNDLETRACK_DATA_DIR = f"cube_{toss_id}/"
 BUNDLETRACK_DIR = "/home/cnets-vision/mengti_ws/BundleSDF/data/"
 
 # Create folders
@@ -78,6 +79,7 @@ POSITION_FILE_PATH = ROOT_DIR + "texts/joint_position.txt"
 REAL_DEPTH_FILE = ROOT_DIR + "texts/real_depth_frame%04i.txt"
 SIMULATED_DEPTH_FILE = ROOT_DIR + "texts/simulated_depth_frame%04i.txt"
 IMAGE_TXT_PATH = ROOT_DIR + "texts/images.txt"  # depth image in the form of txt
+TEXT_PATH = ROOT_DIR + "texts/"
 
 DEPTH_DATA_DIR = ROOT_DIR + "depth_data/"
 RGB_DATA_DIR = ROOT_DIR + "rgb_data/"
@@ -94,7 +96,7 @@ DENOISE_MASK_DIR = BUNDLETRACK_DIR + BUNDLETRACK_DATA_DIR + "masks"
 ANNOTATED_POSES_DIR = BUNDLETRACK_DIR + BUNDLETRACK_DATA_DIR + "annotated_poses"
 BUNDLETRACK_DEPTH = BUNDLETRACK_DIR + BUNDLETRACK_DATA_DIR + "depth"
 BUNDLETRACK_RGB = BUNDLETRACK_DIR + BUNDLETRACK_DATA_DIR + "rgb"
-CAMERA_EXTRINSICS_FILE = "./assets/realsense_pose_cube_old.yaml"
+CAMERA_EXTRINSICS_FILE = "./assets/realsense_pose_cube.yaml"
 
 cam = 'cam0' # realsense camera name
 with open(CAMERA_EXTRINSICS_FILE, 'r') as stream:
@@ -175,7 +177,7 @@ for frame_id in tqdm(range(1, frame_num + 1)):
         frame_id,
         img_dir=CUBE_DEPTH_DIR,
         denoise_mask_dir=DENOISE_MASK_DIR,
-        region=(11, 11),
+        region=(8, 8),
     )
     create_annotated_poses(output_dir=ANNOTATED_POSES_DIR, frame_id=frame_id)
 check_empty_img(DENOISE_MASK_DIR)
@@ -189,3 +191,11 @@ np.savetxt(
     os.path.join(ANNOTATED_POSES_DIR, "%04i.txt" % 0), init_pose_mat_cam
 )  # save init cube pose in camera frame
 print(f'Saved init pose at {os.path.join(ANNOTATED_POSES_DIR, "%04i.txt" % 0)}')
+# clean up
+try:
+    shutil.rmtree(DEPTH_DATA_DIR)
+    shutil.rmtree(RGB_DATA_DIR)
+    shutil.rmtree(TEXT_PATH)
+    print(f"Done clean up!")
+except Exception as e:
+    print(f"Error occurred: {e}")

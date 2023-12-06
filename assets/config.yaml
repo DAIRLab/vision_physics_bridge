@@ -10,6 +10,16 @@ dataset:
   egg: 72
 tosses:
   cube: #raw_10
+    - toss: 0
+      start_time: 
+        secs: 1655404893
+        nsecs: 899137
+      end_time:
+        secs: 1655405023
+        nsecs: 293250
+      start_frame: 0
+      end_frame: 0
+
     - toss: 1
       start_time:
         secs: 1655404893
