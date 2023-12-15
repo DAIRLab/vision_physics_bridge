@@ -98,6 +98,27 @@ def sample_points_from_mesh(mesh, num_points):
     sampled_points = [trimesh.sample.sample_surface(mesh, 1, face) for face in sampled_faces]
     return np.vstack(sampled_points)
 
+def trimesh_clean(mesh):
+  mesh.merge_vertices()
+  mesh.remove_degenerate_faces()
+  mesh.remove_duplicate_faces()
+  mesh.remove_infinite_values()
+  mesh.remove_unreferenced_vertices()
+  return mesh
+
+def trimesh_split(mesh, min_edge=1000):
+  '''!NOTE mesh.split takes too much memory for large mesh. That's why we have this function
+  '''
+  components = trimesh.graph.connected_components(mesh.edges, min_len=min_edge, nodes=None, engine=None)
+  meshes = []
+  for i,c in enumerate(components):
+    mask = np.zeros(len(mesh.vertices),dtype=bool)
+    mask[c] = 1
+    cur_mesh = mesh.copy()
+    cur_mesh.update_vertices(mask=mask.astype(bool))
+    meshes.append(cur_mesh)
+  return meshes
+
 def benchmark_one_video():
     gt_data = np.loadtxt(GT_POSE_DIR+'tagslam.txt')
     pred_poses, gt_poses = [], []
@@ -134,6 +155,21 @@ def benchmark_one_video():
     ### mesh 
     cd = np.inf
     if gt_mesh and pred_mesh is not None:
+        pred_mesh = trimesh_clean(pred_mesh)
+        components = trimesh_split(pred_mesh, min_edge=1000)
+        if len(components)==0:
+            components = trimesh_split(pred_mesh, min_edge=3)
+        best_component = None
+        best_size = 0
+        for component in components:
+            dists = np.linalg.norm(component.vertices,axis=-1)
+            if dists.min()>0.1:
+                continue
+            if len(component.vertices)>best_size:
+                best_size = len(component.vertices)
+                best_component = component
+        pred_mesh = best_component
+
         pred_pts,_ = trimesh.sample.sample_surface(pred_mesh, 99999, face_weight=None, sample_color=False)
         pcd_pred = toOpen3dCloud(pred_pts)
         pcd_pred = pcd_pred.voxel_down_sample(0.005)
@@ -224,9 +260,9 @@ if __name__ == '__main__':
     OUTPUT_POSE_DIR = f'/home/cnets-vision/mengti_ws/BundleSDF/results/{DATASET}/ob_in_cam/'
     # PRED_MESH_FILE = f'/home/cnets-vision/mengti_ws/BundleSDF/textured_mesh.obj' # ours - napkin box
     # PRED_MESH_FILE = f'/home/cnets-vision/mengti_ws/BundleSDF/results/{DATASET}/textured_mesh.obj'
-    # PRED_MESH_FILE = f'/home/cnets-vision/Desktop/textured_mesh_cube_original_cluster_2.obj' # without contact pts loss 
-    # PRED_MESH_FILE = f'/home/cnets-vision/Desktop/textured_mesh_cube_cluster_2.obj' # with contact pts loss
-    PRED_MESH_FILE = f'/home/cnets-vision/Desktop/tests/textured_mesh_2.obj'
+    # PRED_MESH_FILE = f'/home/cnets-vision/Desktop/textured_mesh_cube2_original_2.obj' # without contact pts loss 
+    # PRED_MESH_FILE = f'/home/cnets-vision/Desktop/textured_mesh_cube2_gt3.obj' # with contact pts loss
+    PRED_MESH_FILE = f'/home/cnets-vision/Desktop/textured_mesh_cube2_try2.obj'
     #### Ablation: w/o ContactNets ####
     # PRED_MESH_FILE = data_loaded['dataset'][toss_type]['wo_contactnet']
 

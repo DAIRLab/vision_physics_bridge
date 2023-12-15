@@ -10,3 +10,6 @@
 *.png
 .vscode
 /ob_in_cams
+*.npy
+*.obj
+*.ply
