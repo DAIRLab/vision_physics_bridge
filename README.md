@@ -12,3 +12,6 @@ Run `experiment.py` with correct `type` and `toss_id`. This script will output A
 ```
 python3 experiment.py --type=cube --toss_id=1
 ```
+
+### Data Conversion
+To convert poses in `ob_in_cam` from BundleSDF results to `dair_pll` format, you need to run `data_preparation.py` with correct `toss_id`, `type` arguments. `use_gt` means whether generate trajectory data with `TagSLAM` output or not.
