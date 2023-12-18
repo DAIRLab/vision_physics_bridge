@@ -2,7 +2,9 @@
 A package that prepares images and pose data for 6D pose tracking. 
 
 ### Data generation
-To process a new object, you first need to add the start time and end time of each toss to [config.yaml](./assets/config.yaml). To process a rosbag, run `example_{object}.py`. Replace `ROSBAG_NAME` and `ODOM_ROSBAG_NAME` with `raw_XXX.bag` and `odom_XXX.bag`. Replace `TOSS_ID` with your toss id. Every object has its own file.
+To process a new object, you first need to add the start time and end time of each toss to [config.yaml](./assets/config.yaml). To process a rosbag, run `example_{object}.py`. Replace `ROSBAG_NAME` and `ODOM_ROSBAG_NAME` with `raw_XXX.bag` and `odom_XXX.bag`. Replace `TOSS_ID` with your toss id. Every object has its own file. This file generates `/depth`, `/rgb` and `/annotated_poses` data. 
+
+To generate masks, you need to select a few rgb images (must include the first frame) and generate binary masks. Then run XMem to get segmentation and put in `/masks`. 
 
 ### Pose Evaluation
 To evaluate a trajectory tracking, run `eval_{object}.py` with your `toss_id`. Replace `ROSBAG_NAME` and `ODOM_ROSBAG_NAME` with `raw_XXX.bag` and `odom_XXX.bag`. Replace `TOSS_ID` with your toss id. 
