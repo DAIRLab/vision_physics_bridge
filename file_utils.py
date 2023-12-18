@@ -30,10 +30,10 @@ def load_field_from_yaml(file_path, toss_type, toss_number, key):
     data = toss_data[key]
     return data
 
-def load_dataset_from_yaml(file_path, toss_type):
+def load_dataset_from_yaml(file_path, toss_type, toss_id):
     with open(file_path, 'r') as f:
         data = yaml.safe_load(f)
-    return data['dataset'][toss_type]
+    return data['dataset'][toss_type][toss_id]
 
 def filter(real_img, sim_img):
     """

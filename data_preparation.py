@@ -228,9 +228,9 @@ class DatasetManagement:
         rot_t = R.from_quat(self.q_t) #N,3,3
         #####
         adjust_pos = True
-        FINAL_Z = 0.04 #0.032  #0.050924062270897685 #0.025 #0.05126618331135579
-        # FINAL_Z = 0.03 #0.05148739950625105
+        # FINAL _Z = 0.05 #0.032  #0.050924062270897685 #0.025 #0.05126618331135579
         PLANK_HEIGHT = FINAL_Z - self.p_t[-1, -1]
+        # PLANK_HEIGHT = 1.0
         print(f'PLANK_HEIGHT: {PLANK_HEIGHT}')
         if adjust_pos: # the franka is on a plank, need to add the plank height to z
             for i in range(self.p_t.shape[0]): #N,3
@@ -558,10 +558,16 @@ if __name__ == "__main__":
         type=bool,
         required=False
     )
+    parser.add_argument(
+        "--zshift",
+        type=float,
+        default=0.05148739950625105
+    )
     args = parser.parse_args()
     TOSS_ID = args.toss_id
     TOSS_TYPE = args.type
     USE_GT = args.use_gt
+    FINAL_Z = args.zshift
     DATASET = f'{TOSS_TYPE}_{TOSS_ID}'
     YAML_PATH = './assets/config.yaml'
     ROSBAG = load_dataset_from_yaml(YAML_PATH, TOSS_TYPE)

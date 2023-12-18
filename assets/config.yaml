@@ -1,5 +1,26 @@
-dataset:
-  cube: 10
+dataset: #toss_id:rosbag_id
+  cube: 
+    1: 10
+    2: 10
+    3: 10
+    4: 10
+    5: 10
+    6: 10
+    7: 10
+    8: 10
+    9: 10
+    10: 10
+    11: 8
+    12: 8
+    13: 8
+    14: 8
+    15: 8
+    16: 8
+    17: 8
+    18: 8
+    19: 8
+    20: 8
+
   bottle: 43
   napkin: 51 #51
   box: 57
@@ -122,13 +143,86 @@ tosses:
     
     - toss: 11
       start_time:
-        secs: 1655404893
-        nsecs: 899137
+        secs: 1655403978
+        nsecs: 752271
       end_time:
-        secs: 1655405023
-        nsecs: 293250
+        secs: 1655403989
+        nsecs: 410871
       start_frame: 0
       end_frame: 0
+    
+    - toss: 12
+      start_time:
+        secs: 1655403991
+        nsecs: 194458
+      end_time:
+        secs: 1655404002
+        nsecs: 156479
+
+    - toss: 13
+      start_time:
+        secs: 1655404004
+        nsecs: 283253
+      end_time:
+        secs: 1655404014
+        nsecs: 239407
+
+    - toss: 14
+      start_time:
+        secs: 1655404016
+        nsecs: 634398
+      end_time:
+        secs: 1655404027
+        nsecs: 914313
+  
+    - toss: 15
+      start_time:
+        secs: 1655404029
+        nsecs: 746787
+      end_time:
+        secs: 1655404038
+        nsecs: 543605
+  
+    - toss: 16
+      start_time:
+        secs: 1655404040
+        nsecs: 709757
+      end_time:
+        secs: 1655404050
+        nsecs: 991296
+
+    - toss: 17
+      start_time:
+        secs: 1655404053
+        nsecs: 433332
+      end_time:
+        secs: 1655404062
+        nsecs: 560136
+
+    - toss: 18
+      start_time:
+        secs: 1655404064
+        nsecs: 785577
+      end_time:
+        secs: 1655404075
+        nsecs: 654772
+    
+    - toss: 19
+      start_time:
+        secs: 1655404095
+        nsecs: 206314
+      end_time:
+        secs: 1655404105
+        nsecs: 484169
+      
+    - toss: 20
+      start_time:
+        secs: 1655404106
+        nsecs: 652434
+      end_time:
+        secs: 1655404116
+        nsecs: 167159
+                                     
 
   bottle: #raw_43
     - toss: 0

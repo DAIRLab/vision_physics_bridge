@@ -5,6 +5,9 @@ import rospy
 from datetime import timedelta
 import argparse 
 
+"""Align the starting timestamps of odom.bag and raw.bag if they are collected on different computers.
+"""
+
 parser = argparse.ArgumentParser()
 parser.add_argument(
     "--offset",
