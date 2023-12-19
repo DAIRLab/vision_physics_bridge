@@ -20,6 +20,16 @@ dataset: #toss_id:rosbag_id
     18: 8
     19: 8
     20: 8
+    21: 12
+    22: 12
+    23: 12
+    24: 12
+    25: 12
+    26: 12
+    27: 12
+    28: 12
+    29: 12
+    30: 12
 
   bottle: 43
   napkin: 51 #51
@@ -222,7 +232,86 @@ tosses:
       end_time:
         secs: 1655404116
         nsecs: 167159
-                                     
+      
+    - toss: 21
+      start_time:
+        secs: 1655405622
+        nsecs: 873571
+      end_time: 
+        secs: 1655405632
+        nsecs: 283986
+
+    - toss: 22
+      start_time:
+        secs: 1655405635
+        nsecs: 725001
+      end_time:
+        secs: 1655405646
+        nsecs: 476229
+
+    - toss: 23
+      start_time:
+        secs: 1655405648
+        nsecs: 862640
+      end_time:
+        secs: 1655405657
+        nsecs: 629961
+          
+    - toss: 24
+      start_time:
+        secs: 1655405659
+        nsecs: 564506
+      end_time:
+        secs: 1655405669
+        nsecs: 190475
+
+    - toss: 25
+      start_time:
+        secs: 1655405671
+        nsecs: 473979
+      end_time:
+        secs: 1655405680
+        nsecs: 587370  
+    
+    - toss: 26
+      start_time:
+        secs: 1655405683
+        nsecs: 519824
+      end_time:
+        secs: 1655405692
+        nsecs: 650427
+
+    - toss: 27
+      start_time:
+        secs: 1655405694
+        nsecs: 868077
+      end_time:
+        secs: 1655405704
+        nsecs: 387344
+  
+    - toss: 28
+      start_time:
+        secs: 1655405706
+        nsecs: 272031
+      end_time:
+        secs: 1655405715
+        nsecs: 323722
+  
+    - toss: 29
+      start_time:
+        secs: 1655405746
+        nsecs: 879271
+      end_time:
+        secs: 1655405759
+        nsecs: 176906
+
+    - toss: 30
+      start_time:
+        secs: 1655405762
+        nsecs: 437883
+      end_time:
+        secs: 1655405773
+        nsecs: 183160
 
   bottle: #raw_43
     - toss: 0

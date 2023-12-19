@@ -1,6 +1,6 @@
 import argparse
 import os
-from file_utils import load_toss_time_from_yaml
+from file_utils import load_dataset_from_yaml, load_toss_time_from_yaml
 from rosbag_processor import extract_time_versus_poses
 import rospy
 import numpy as np
@@ -9,7 +9,7 @@ import matplotlib.pyplot as plt
 from scipy.spatial.transform import Rotation as R
 import cv2
 
-from math_utils import pos_quat_to_trans_mat, trans_mat_to_pos_quat, transform_bundletrack_output
+from math_utils import pos_quat_to_trans_mat, trans_mat_to_pos_quat, transform_bundletrack_output, world_to_camera
 
 from sync_data import Synchronizer
 import yaml
@@ -274,6 +274,14 @@ def draw_coords_to_image():
         cv2.line(image_with_axes, tuple(image_points[0].ravel()), tuple(image_points[3].ravel()), (255,0,0), 5)  # Z-axis (Blue)
         cv2.imwrite(OUTPUT_SEGMENT_DIR+filename, image_with_axes)
         print(f'Wrote image {OUTPUT_SEGMENT_DIR+filename}')
+
+def save_init_pose():
+    poses = np.loadtxt(os.path.join(GT_POSE_DIR, "tagslam.txt"))
+    init_pose = poses[0, 1:]
+    mat = pos_quat_to_trans_mat(init_pose)
+    mat_cam = world_to_camera(mat, cam_trans, cam_axis_vec)
+    np.savetxt(os.path.join(ODOM_FILE_PATH, "%04i.txt" % 0), mat_cam)
+    print(f'Initial pose saved to {ODOM_FILE_PATH}')
     
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
@@ -285,8 +293,12 @@ if __name__ == "__main__":
     args = parser.parse_args()
     toss_id = args.toss_id
     print(f'Processing toss {toss_id}')
-    depth_bag_file = "./rosbags/raw_10.bag"
-    odom_bag_file = "./rosbags/odom_10.bag"
+    TOSS_TYPE = 'cube'
+    yaml_path = './assets/config.yaml'
+    bag_num = load_dataset_from_yaml(yaml_path, TOSS_TYPE, toss_id)
+    print(f'bag num: {bag_num}')
+    depth_bag_file = f"./rosbags/raw_{bag_num}.bag"
+    odom_bag_file = f"./rosbags/odom_{bag_num}.bag"
     DEPTH_ROS_TOPIC = "/camera/aligned_depth_to_color/image_raw"
     ODOM_ROS_TOPIC = "/tagslam/odom/body_cube"
     DATASET=f"cube_{toss_id}"
@@ -339,7 +351,7 @@ if __name__ == "__main__":
         GT_POSE_DIR,
         save=True
     ).reshape(-1,)
-    
+    save_init_pose()
     data = np.loadtxt(GT_POSE_DIR+'tagslam.txt')
     print('data', data.shape)
     gt_time = data[:, 0] #N,

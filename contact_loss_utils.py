@@ -144,7 +144,8 @@ def generate_contact_loss_data(path, output_path, output_w_path, ob_init_cam, tr
       pC_prime = TC_C_prime @ TW_C @ TB_W @ p_B.
 
     @path:  body frame contact points, aka p_B
-    @output_path: bundlesdf output, aka pC_prime
+    @output_path: bundlesdf output in normalized space, aka mesh_cleaned.obj
+    @output_w_path: bundlesdf output transformed to real world unit, aka textured_mesh.obj
     @ob_init_cam: object's initial pose in camera frame, aka TB_C
     @cam_extrinsic: World to camera transformation, aka TW_C
     
@@ -158,9 +159,6 @@ def generate_contact_loss_data(path, output_path, output_w_path, ob_init_cam, tr
 
     normalized_mesh = trimesh.load(output_path, force='mesh')
     normalized_pts = normalized_mesh.sample(num_samples)
-    
-    # textured_pts = output_w_mesh.sample(num_samples)
-    # textured_pts_w = transform_points(textured_pts_cam, extrinsic)
     
     pred_mesh = trimesh.load(output_w_path, force='mesh') #in cam
     
@@ -244,6 +242,36 @@ def get_near_surface_pts_and_sdf(obj_file, distance=0.05, num_pts=2, surface_poi
     # visualize_pts(sdf_points)
     return sdf_points, sdf_values
 
+def get_transformed_obj_for_nerf_init(gt_path, output_path, ob_init_cam, num_samples=1000):
+    """
+    Given a ground-truth .obj, transform to BundleSDF's normalized space for Octree initialization.
+    @gt_path: path of ground-truth .obj
+    @output_path: path of mesh_cleaned.obj
+    @ob_init_cam: object's initial pose in camera frame, aka TB_C
+    @num_samples: number of sampled points
+    """
+    gt_mesh = trimesh.load(gt_path, force='mesh')
+    contact_pts = gt_mesh.sample(num_samples)
+    contact_cam = transform_pts_to_normalized_space(contact_pts, ob_init_cam, translation, sc_factor)
+
+    normalized_mesh = trimesh.load(output_path, force='mesh')
+    normalized_pts = normalized_mesh.sample(num_samples)
+    T, _ = icp(contact_cam, normalized_pts)
+    transformed_mesh = transform_mesh_to_normalized_space(gt_mesh, ob_init_cam, T, translation, sc_factor)
+    transformed_pts = transformed_mesh.sample(num_samples)
+
+    fig = plt.figure(figsize=(8, 8))
+    ax = fig.add_subplot(111, projection='3d')
+    contact_pts_cpu = transformed_pts
+    output_pts = normalized_pts
+    ax.scatter(contact_pts_cpu[:, 0], contact_pts_cpu[:, 1], contact_pts_cpu[:, 2], color='blue', label='transformed pts')
+    ax.scatter(output_pts[:,0], output_pts[:,1], output_pts[:,2], color='red', label='output pts')
+    ax.set_xlabel('X axis')
+    ax.set_ylabel('Y axis')
+    ax.set_zlabel('Z axis')
+    ax.legend()
+    plt.show()
+
 def visualize_pts(pts):
     fig = plt.figure(figsize=(8, 8))
     ax = fig.add_subplot(111, projection='3d')
@@ -261,7 +289,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--save",
         type=bool,
-        required=True,
+        required=False,
     )
     args = parser.parse_args()
     save = args.save
@@ -296,5 +324,5 @@ if __name__ == "__main__":
 
     translation = np.array([0.027168031322692257, -0.006110663910054243, 0.020553499466653358])
     sc_factor = 6.294841024247843
-    generate_contact_loss_data(gt_mesh, output_path, output_w_path, ob_init_pose, translation, sc_factor, save=save)
-    # get_near_surface_pts_and_sdf(gt_mesh)
+    # generate_contact_loss_data(gt_mesh, output_path, output_w_path, ob_init_pose, translation, sc_factor, save=save)
+    get_transformed_obj_for_nerf_init(gt_mesh, output_path, ob_init_pose, num_samples=2000)

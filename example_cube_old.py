@@ -116,7 +116,7 @@ yaml_path = './assets/config.yaml'
 toss_type = 'cube'
 start_time = load_toss_time_from_yaml(yaml_path, toss_type, toss_id, 'start_time')
 end_time = load_toss_time_from_yaml(yaml_path, toss_type, toss_id, 'end_time')
-print(f'start time: {start_time.secs}, end time: {end_time.secs}')
+print(f'start_time:{start_time.secs}.{start_time.nsecs}, end_time:{end_time.secs}.{end_time.nsecs}')
 bag_to_depth_images(
     ROSBAG_NAME,
     DEPTH_ROS_TOPIC,
@@ -132,6 +132,14 @@ frame_num = len([name for name in os.listdir(BUNDLETRACK_RGB)])
 print(f'frame_num is {frame_num}')
 for frame_id in range(1, frame_num+1):
     create_annotated_poses(output_dir=ANNOTATED_POSES_DIR, frame_id=frame_id)
+# clean up
+try:
+    shutil.rmtree(DEPTH_DATA_DIR)
+    shutil.rmtree(RGB_DATA_DIR)
+    shutil.rmtree(TEXT_PATH)
+    print(f"Done clean up!")
+except Exception as e:
+    print(f"Error occurred: {e}")
 # extract_poses_with_timestamps(
 #     ROSBAG_NAME,
 #     DEPTH_ROS_TOPIC,
@@ -202,13 +210,3 @@ for frame_id in range(1, frame_num+1):
 #     os.path.join(ANNOTATED_POSES_DIR, "%04i.txt" % 0), init_pose_mat_cam
 # )  # save init cube pose in camera frame
 # print(f'Saved init pose at {os.path.join(ANNOTATED_POSES_DIR, "%04i.txt" % 0)}')
-    
-
-# clean up
-try:
-    shutil.rmtree(DEPTH_DATA_DIR)
-    shutil.rmtree(RGB_DATA_DIR)
-    shutil.rmtree(TEXT_PATH)
-    print(f"Done clean up!")
-except Exception as e:
-    print(f"Error occurred: {e}")
