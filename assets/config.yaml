@@ -168,6 +168,8 @@ tosses:
       end_time:
         secs: 1655404002
         nsecs: 156479
+      start_frame: 283
+      end_frame: 300
 
     - toss: 13
       start_time:
@@ -176,6 +178,8 @@ tosses:
       end_time:
         secs: 1655404014
         nsecs: 239407
+      start_frame: 258
+      end_frame: 275
 
     - toss: 14
       start_time:
@@ -184,6 +188,8 @@ tosses:
       end_time:
         secs: 1655404027
         nsecs: 914313
+      start_frame: 303
+      end_frame: 325
   
     - toss: 15
       start_time:
@@ -192,14 +198,18 @@ tosses:
       end_time:
         secs: 1655404038
         nsecs: 543605
+      start_frame: 247
+      end_frame: 265
   
     - toss: 16
       start_time:
         secs: 1655404040
         nsecs: 709757
       end_time:
-        secs: 1655404050
-        nsecs: 991296
+        secs: 1655404052
+        nsecs: 187029
+      start_frame: 295
+      end_frame: 315
 
     - toss: 17
       start_time:
@@ -208,14 +218,18 @@ tosses:
       end_time:
         secs: 1655404062
         nsecs: 560136
+      start_frame: 246
+      end_frame: 270
 
     - toss: 18
       start_time:
         secs: 1655404064
         nsecs: 785577
       end_time:
-        secs: 1655404075
+        secs: 1655404078
         nsecs: 654772
+      start_frame: 313
+      end_frame: 335
     
     - toss: 19
       start_time:
@@ -224,6 +238,8 @@ tosses:
       end_time:
         secs: 1655404105
         nsecs: 484169
+      start_frame: 252
+      end_frame: 282
       
     - toss: 20
       start_time:
@@ -232,6 +248,8 @@ tosses:
       end_time:
         secs: 1655404116
         nsecs: 167159
+      start_frame: 266
+      end_frame: 286
       
     - toss: 21
       start_time:
@@ -248,6 +266,8 @@ tosses:
       end_time:
         secs: 1655405646
         nsecs: 476229
+      start_frame: 299
+      end_frame: 325
 
     - toss: 23
       start_time:
@@ -256,7 +276,9 @@ tosses:
       end_time:
         secs: 1655405657
         nsecs: 629961
-          
+      start_frame: 240
+      end_frame: 269
+
     - toss: 24
       start_time:
         secs: 1655405659
@@ -264,14 +286,18 @@ tosses:
       end_time:
         secs: 1655405669
         nsecs: 190475
+      start_frame: 266
+      end_frame: 287
 
     - toss: 25
       start_time:
         secs: 1655405671
         nsecs: 473979
       end_time:
-        secs: 1655405680
-        nsecs: 587370  
+        secs: 1655405682
+        nsecs: 206052  
+      start_frame: 255
+      end_frame: 275
     
     - toss: 26
       start_time:
@@ -280,6 +306,8 @@ tosses:
       end_time:
         secs: 1655405692
         nsecs: 650427
+      start_frame: 250
+      end_frame: 270
 
     - toss: 27
       start_time:
@@ -288,6 +316,8 @@ tosses:
       end_time:
         secs: 1655405704
         nsecs: 387344
+      start_frame: 350
+      end_frame: 370
   
     - toss: 28
       start_time:
@@ -296,7 +326,9 @@ tosses:
       end_time:
         secs: 1655405715
         nsecs: 323722
-  
+      start_frame: 250
+      end_frame: 266
+
     - toss: 29
       start_time:
         secs: 1655405746
@@ -304,6 +336,8 @@ tosses:
       end_time:
         secs: 1655405759
         nsecs: 176906
+      start_frame: 350
+      end_frame: 370
 
     - toss: 30
       start_time:
@@ -312,6 +346,8 @@ tosses:
       end_time:
         secs: 1655405773
         nsecs: 183160
+      start_frame: 295
+      end_frame: 317
 
   bottle: #raw_43
     - toss: 0

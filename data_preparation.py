@@ -570,7 +570,7 @@ if __name__ == "__main__":
     FINAL_Z = args.zshift
     DATASET = f'{TOSS_TYPE}_{TOSS_ID}'
     YAML_PATH = './assets/config.yaml'
-    ROSBAG = load_dataset_from_yaml(YAML_PATH, TOSS_TYPE)
+    ROSBAG = load_dataset_from_yaml(YAML_PATH, TOSS_TYPE, TOSS_ID)
     DEPTH_BAG_FILE = f"./rosbags/raw_{ROSBAG}.bag"
     ODOM_BAG_FILE = f"./rosbags/odom_{ROSBAG}.bag"
     # ODOM_BAG_FILE = f"./rosbags/adjusted_odom_{ROSBAG}.bag"
@@ -579,7 +579,7 @@ if __name__ == "__main__":
     CAMERA_EXTRINSICS_FILE = f'./assets/realsense_pose_{TOSS_TYPE}.yaml'
     if TOSS_TYPE == 'milk' or TOSS_TYPE == 'prism':
         CAMERA_EXTRINSICS_FILE = f'./assets/realsense_pose_milk_prism.yaml'
-    print(f'Processing toss {TOSS_TYPE}_{TOSS_ID}')
+    print(f'Processing toss {TOSS_TYPE}_{TOSS_ID} in raw_{ROSBAG}.bag')
     
     DEPTH_TOPIC = '/camera/aligned_depth_to_color/image_raw'
     BUNDLESDF_POSE_DIR = f"/home/cnets-vision/mengti_ws/BundleSDF/results/{DATASET}/ob_in_cam/"
