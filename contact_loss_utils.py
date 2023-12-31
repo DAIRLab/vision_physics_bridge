@@ -272,6 +272,35 @@ def get_transformed_obj_for_nerf_init(gt_path, output_path, ob_init_cam, num_sam
     ax.legend()
     plt.show()
 
+def augment_contact_points(contact_pts, normals, num_samples, min_distance, max_distance):
+    """Augment the contact points from contactnets due to its sparsity.
+    @contact_pts: contact points from contactnets
+    @normals: surface normals from contactnets
+    """
+    augmented_points = []
+    signed_distances = []
+
+    for point, normal in zip(contact_pts, normals):
+        normal /= np.linalg.norm(normal)
+        augmented_points.append(point)
+        signed_distances.append(0)
+
+        for _ in range(num_samples):
+            distance = np.random.uniform(min_distance, max_distance)
+
+            # Step outwards
+            outward_point = point + normal * distance
+            augmented_points.append(outward_point)
+            signed_distances.append(distance)  # Positive distance
+
+            # Step inwards
+            inward_point = point - normal * distance
+            augmented_points.append(inward_point)
+            signed_distances.append(-distance)  # Negative distance
+
+    return np.array(augmented_points), np.array(signed_distances)
+
+
 def visualize_pts(pts):
     fig = plt.figure(figsize=(8, 8))
     ax = fig.add_subplot(111, projection='3d')
