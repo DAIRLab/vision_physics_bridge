@@ -1,5 +1,6 @@
 dataset: #toss_id:rosbag_id
   cube: 
+    0: 10
     1: 10
     2: 10
     3: 10
@@ -40,14 +41,14 @@ dataset: #toss_id:rosbag_id
   prism: 68
   egg: 72
 tosses:
-  cube: #raw_10
-    - toss: 0
+  cube:
+    - toss: 0 #toss 1-5
       start_time: 
         secs: 1655404893
         nsecs: 899137
       end_time:
-        secs: 1655405023
-        nsecs: 293250
+        secs: 1655404955
+        nsecs: 463919
       start_frame: 0
       end_frame: 0
 
@@ -304,10 +305,10 @@ tosses:
         secs: 1655405683
         nsecs: 519824
       end_time:
-        secs: 1655405692
-        nsecs: 650427
+        secs: 1655405694
+        nsecs: 187640
       start_frame: 250
-      end_frame: 270
+      end_frame: 276
 
     - toss: 27
       start_time:
@@ -316,8 +317,8 @@ tosses:
       end_time:
         secs: 1655405704
         nsecs: 387344
-      start_frame: 350
-      end_frame: 370
+      start_frame: 269
+      end_frame: 290
   
     - toss: 28
       start_time:

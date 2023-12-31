@@ -357,5 +357,5 @@ if __name__ == "__main__":
     gt_time = data[:, 0] #N,
     tagslam_poses = data[:, 1:] #N,7
     print(bundletrack_time.shape, gt_time.shape, tagslam_poses.shape)
-    plot_with_time(bundletrack_time, gt_time[1:], OUTPUT_POSE_DIR, tagslam_poses)
+    plot_with_time(bundletrack_time, gt_time, OUTPUT_POSE_DIR, tagslam_poses)
     # draw_coords_to_image()

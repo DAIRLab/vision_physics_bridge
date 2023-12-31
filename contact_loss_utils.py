@@ -289,7 +289,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--save",
         type=bool,
-        required=False,
+        default=False
     )
     args = parser.parse_args()
     save = args.save
@@ -324,5 +324,5 @@ if __name__ == "__main__":
 
     translation = np.array([0.027168031322692257, -0.006110663910054243, 0.020553499466653358])
     sc_factor = 6.294841024247843
-    # generate_contact_loss_data(gt_mesh, output_path, output_w_path, ob_init_pose, translation, sc_factor, save=save)
-    get_transformed_obj_for_nerf_init(gt_mesh, output_path, ob_init_pose, num_samples=2000)
+    generate_contact_loss_data(gt_mesh, output_path, output_w_path, ob_init_pose, translation, sc_factor, save=save)
+    # get_transformed_obj_for_nerf_init(gt_mesh, output_path, ob_init_pose, num_samples=2000)
