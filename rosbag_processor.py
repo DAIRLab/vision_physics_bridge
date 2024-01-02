@@ -126,6 +126,50 @@ def bag_to_depth_images(
     bag.close()
     return
 
+def bag_to_depth_rgb_images(
+    rosbag_name,
+    depth_ros_topic,
+    rgb_ros_topic,
+    start_time,
+    end_time,
+    bundletrack_depth_dir,
+    bundletrack_rgb_dir
+):
+    """Extract synchronous depth and rgb images from a rosbag."""
+    print(
+        "Extract images from %s on depth topic %s rgb topic %s into %s and %s"
+        % (rosbag_name, depth_ros_topic, rgb_ros_topic, bundletrack_depth_dir, bundletrack_rgb_dir)
+    )
+
+    bag = rosbag.Bag(rosbag_name, "r")
+    bridge = CvBridge()
+    filename = 1
+    depth_images = {}
+    rgb_images = {}
+    time_tolerance=0.1
+    for _, msg, _ in bag.read_messages(topics=[depth_ros_topic]):
+        timestamp = msg.header.stamp
+        if start_time <= timestamp < end_time:
+            cv_img_depth = bridge.imgmsg_to_cv2(msg, desired_encoding="16UC1")
+            depth_images[timestamp] = cv_img_depth
+
+    for _, msg, _ in bag.read_messages(topics=[rgb_ros_topic]):
+        timestamp = msg.header.stamp
+        if start_time <= timestamp < end_time:
+            cv_img_rgb = bridge.imgmsg_to_cv2(msg, "bgr8")
+            rgb_images[timestamp] = cv_img_rgb
+    for depth_time in depth_images:
+        depth_time_sec = depth_time.to_sec()
+        closest_rgb_time = min(rgb_images.keys(), key=lambda t: abs(t.to_sec() - depth_time_sec))
+        diff = abs(closest_rgb_time.to_sec() - depth_time_sec)
+        if diff <= time_tolerance:
+            imageio.imwrite(os.path.join(bundletrack_depth_dir, "%04i.png" % filename), np.uint16(depth_images[depth_time]))
+            imageio.imwrite(os.path.join(bundletrack_rgb_dir, "%04i.png" % filename), rgb_images[closest_rgb_time])
+            print("Wrote synchronized depth and RGB images %04i" % filename)
+            filename += 1
+    bag.close()
+    print("Depth and RGB images saved!")
+    return
 
 def bag_to_pose(
     bagfile, pose_topic, outfile_position, outfile_velocity, start_frame, end_frame

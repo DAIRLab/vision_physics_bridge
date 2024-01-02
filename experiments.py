@@ -120,7 +120,7 @@ def trimesh_split(mesh, min_edge=1000):
   return meshes
 
 def benchmark_one_video():
-    gt_data = np.loadtxt(GT_POSE_DIR+'tagslam.txt')
+    gt_data = np.loadtxt(GT_POSE_DIR+'tagslam.txt')[:3812]
     pred_poses, gt_poses = [], []
     for frame_id in range(1, gt_data.shape[0]):
         output_pose = np.loadtxt(OUTPUT_POSE_DIR + "%04i.txt" % frame_id)
@@ -262,7 +262,8 @@ if __name__ == '__main__':
     # PRED_MESH_FILE = f'/home/cnets-vision/mengti_ws/BundleSDF/results/{DATASET}/textured_mesh.obj'
     # PRED_MESH_FILE = f'/home/cnets-vision/Desktop/textured_mesh_cube2_original.obj' # without contact pts loss 
     # PRED_MESH_FILE = f'/home/cnets-vision/Desktop/textured_mesh_cube2_gt3.obj' # with contact pts loss
-    PRED_MESH_FILE = f'/home/cnets-vision/Desktop/textured_mesh_try.obj'
+    # PRED_MESH_FILE = f'/home/cnets-vision/Desktop/textured_mesh_try.obj'
+    PRED_MESH_FILE = f'/home/cnets-vision/Desktop/textured_mesh_10_toss.obj'
     #### Ablation: w/o ContactNets ####
     # PRED_MESH_FILE = data_loaded['dataset'][toss_type]['wo_contactnet']
 

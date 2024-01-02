@@ -17,6 +17,7 @@ from math_utils import pos_quat_to_trans_mat, world_to_camera
 from pydrake.all import StartMeshcat
 from rosbag_processor import (
     bag_to_depth_images,
+    bag_to_depth_rgb_images,
     bag_to_rgb_images,
     extract_cube_pose,
     extract_poses_with_timestamps,
@@ -117,17 +118,25 @@ toss_type = 'cube'
 start_time = load_toss_time_from_yaml(yaml_path, toss_type, toss_id, 'start_time')
 end_time = load_toss_time_from_yaml(yaml_path, toss_type, toss_id, 'end_time')
 print(f'start_time:{start_time.secs}.{start_time.nsecs}, end_time:{end_time.secs}.{end_time.nsecs}')
-bag_to_depth_images(
+# bag_to_depth_images(
+#     ROSBAG_NAME,
+#     DEPTH_ROS_TOPIC,
+#     DEPTH_DATA_DIR,
+#     start_time,
+#     end_time,
+#     img_dir=IMAGE_TXT_PATH,
+#     bundletrack_depth_dir=BUNDLETRACK_DEPTH,
+# )
+# print("Depth images generated")
+# bag_to_rgb_images(ROSBAG_NAME, RGB_ROS_TOPIC, BUNDLETRACK_RGB, start_time, end_time)
+bag_to_depth_rgb_images(
     ROSBAG_NAME,
     DEPTH_ROS_TOPIC,
-    DEPTH_DATA_DIR,
+    RGB_ROS_TOPIC,
     start_time,
     end_time,
-    img_dir=IMAGE_TXT_PATH,
     bundletrack_depth_dir=BUNDLETRACK_DEPTH,
-)
-print("Depth images generated")
-bag_to_rgb_images(ROSBAG_NAME, RGB_ROS_TOPIC, BUNDLETRACK_RGB, start_time, end_time)
+    bundletrack_rgb_dir=BUNDLETRACK_RGB)
 frame_num = len([name for name in os.listdir(BUNDLETRACK_RGB)])
 print(f'frame_num is {frame_num}')
 for frame_id in range(1, frame_num+1):
