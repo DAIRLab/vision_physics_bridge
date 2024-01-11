@@ -262,8 +262,8 @@ if __name__ == '__main__':
     # PRED_MESH_FILE = f'/home/cnets-vision/mengti_ws/BundleSDF/results/{DATASET}/textured_mesh.obj'
     # PRED_MESH_FILE = f'/home/cnets-vision/Desktop/textured_mesh_cube2_original.obj' # without contact pts loss 
     # PRED_MESH_FILE = f'/home/cnets-vision/Desktop/textured_mesh_cube2_gt3.obj' # with contact pts loss
-    # PRED_MESH_FILE = f'/home/cnets-vision/Desktop/textured_mesh_try.obj'
-    PRED_MESH_FILE = f'/home/cnets-vision/Desktop/textured_mesh_10_toss.obj'
+    PRED_MESH_FILE = f'/home/cnets-vision/Desktop/textured_mesh_try2.obj'
+    # PRED_MESH_FILE = f'/home/cnets-vision/Desktop/textured_mesh_10_toss.obj' # original 10 toss
     #### Ablation: w/o ContactNets ####
     # PRED_MESH_FILE = data_loaded['dataset'][toss_type]['wo_contactnet']
 

@@ -68,7 +68,7 @@ def smooth_quaternions_pyquat(quats, alpha=0.5):
     return smoothed_quats #xyzw
 
 class DatasetManagement:
-    def __init__(self, frame_num, start_frame, end_frame, timestamps, toss_id, cam_trans, cam_axis_vec, plot=False, use_gt=False):
+    def __init__(self, frame_num, start_frame, end_frame, timestamps, toss_id, cam_trans, cam_axis_vec, frame_rate, plot=False, use_gt=False):
         self.frame_num = frame_num
         self.start_frame = start_frame
         self.end_frame = end_frame
@@ -88,6 +88,7 @@ class DatasetManagement:
         self.cam_trans = cam_trans
         self.cam_axis_vec = cam_axis_vec
         self.use_gt = use_gt
+        self.frame_rate = frame_rate
         self.load_poses()
         
     def load_poses(self):
@@ -144,10 +145,11 @@ class DatasetManagement:
     #     print(len())
     #     return q_t, p_t, t
 
-    def upsample(self, quats, positions, ts):
+    def upsample(self, quats, positions, ts, frame_rate, original_frame_rate=30):
         """
-        quats: (N, 4), x,y,z,w
-        positions: (N, 3)
+        @quats: (N, 4), x,y,z,w
+        @positions: (N, 3)
+        @frame_rate: final frame rate of the trajectorys
         """
         quats = xyzw2wxyz(quats) #w,x,y,z
         quats = quats / np.linalg.norm(quats, axis=1)[:, np.newaxis]
@@ -158,7 +160,8 @@ class DatasetManagement:
                 quats[i] = -quats[i]
 
         # Upsample factor
-        M = 100
+        duration = (N-1)/original_frame_rate
+        M = int(duration*frame_rate)+1
         new_times = np.linspace(0, 1, M)
 
         # Interpolate positions using linear interpolation
@@ -219,11 +222,13 @@ class DatasetManagement:
         ##### Upsample
         quat_t = quat_t / np.linalg.norm(quat_t, axis=1).reshape(-1,1)
         print(f"quat_t: {quat_t.shape}") #N,4
-        if quat_t.shape[0] >= 100: #if data long enough, skip upsampling
-            self.q_t, self.p_t, self.t = quat_t, self.p_t, self.t
-        else:
-            self.q_t, self.p_t, self.t = self.upsample(quat_t, self.p_t, self.t) #xyzw
-        print(f'after upsample: {self.q_t.shape}, {self.p_t.shape}, {self.t.shape}')
+        # if quat_t.shape[0] >= 100: #if data long enough, skip upsampling
+        #     self.q_t, self.p_t, self.t = quat_t, self.p_t, self.t
+        # else:
+        #     self.q_t, self.p_t, self.t = self.upsample(quat_t, self.p_t, self.t) #xyzw
+        if self.frame_rate != 30:
+            self.q_t, self.p_t, self.t = self.upsample(quat_t, self.p_t, self.t, frame_rate=self.frame_rate, original_frame_rate=30) #xyzw
+            print(f'after upsample: {self.q_t.shape}, {self.p_t.shape}, {self.t.shape}')
         self.q_t = self.q_t / np.linalg.norm(self.q_t, axis=1).reshape(-1,1) #N,4
         rot_t = R.from_quat(self.q_t) #N,3,3
         #####
@@ -623,5 +628,5 @@ if __name__ == "__main__":
         # time_offset=125.19
     ).reshape(-1,)
     print(gt_time.shape, bundletrack_time.shape)
-    dataset = DatasetManagement(frame_num, start_frame, end_frame, bundletrack_time, TOSS_ID, cam_trans, cam_axis_vec, plot=False, use_gt=USE_GT)
+    dataset = DatasetManagement(frame_num, start_frame, end_frame, bundletrack_time, TOSS_ID, cam_trans, cam_axis_vec, frame_rate=30, plot=False, use_gt=USE_GT)
     dataset.do_process()

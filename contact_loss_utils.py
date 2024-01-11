@@ -185,8 +185,8 @@ def generate_contact_loss_data(path, output_path, output_w_path, ob_init_cam, tr
     print(all_sdf[2000:2100])
     print(all_pts.shape, all_sdf.shape)
     if save:
-        np.save('./contact_and_near_surface_pts_with_various_dist.npy', all_pts)
-        np.save('./contact_and_near_surface_sdf_with_various_dist.npy', all_sdf)
+        np.save(f'./contact_and_near_surface_pts_with_various_dist_{num_samples}.npy', all_pts)
+        np.save(f'./contact_and_near_surface_sdf_with_various_dist_{num_samples}.npy', all_sdf)
     
     fig = plt.figure(figsize=(8, 8))
     ax = fig.add_subplot(111, projection='3d')
@@ -353,5 +353,5 @@ if __name__ == "__main__":
 
     translation = np.array([0.027168031322692257, -0.006110663910054243, 0.020553499466653358])
     sc_factor = 6.294841024247843
-    generate_contact_loss_data(gt_mesh, output_path, output_w_path, ob_init_pose, translation, sc_factor, save=save)
+    generate_contact_loss_data(gt_mesh, output_path, output_w_path, ob_init_pose, translation, sc_factor, save=save, num_samples=3000)
     # get_transformed_obj_for_nerf_init(gt_mesh, output_path, ob_init_pose, num_samples=2000)
