@@ -594,7 +594,7 @@ if __name__ == "__main__":
     GT_POSE_DIR = f"/home/cnets-vision/mengti_ws/robot_filter/dataset/{DATASET}/tagslam_poses/"
     # PLANK_HEIGHT = -0.05458#0.03428 #0.0145
     data = np.loadtxt(GT_POSE_DIR+'tagslam.txt')
-    frame_num = data.shape[0]#len([name for name in os.listdir(BUNDLESDF_POSE_DIR)])
+    frame_num = len([name for name in os.listdir(BUNDLESDF_POSE_DIR)]) #data.shape[0]
     print(f'Total frame num: {frame_num}')
     cam = 'cam0' # realsense camera name
     with open(CAMERA_EXTRINSICS_FILE, 'r') as stream:

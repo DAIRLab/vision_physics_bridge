@@ -1,6 +1,6 @@
 import argparse
 import os
-from file_utils import load_toss_time_from_yaml
+from file_utils import load_dataset_from_yaml, load_toss_time_from_yaml
 from rosbag_processor import extract_time_versus_poses, extract_timestamps
 import rospy
 import numpy as np
@@ -246,11 +246,13 @@ if __name__ == "__main__":
     args = parser.parse_args()
     toss_id = args.toss_id
     print(f'Processing toss {toss_id}')
-    depth_bag_file = "./rosbags/raw_51.bag"
-    odom_bag_file = "./rosbags/odom_51.bag"
+    yaml_path = "./assets/config.yaml"
+    DATASET="napkin"
+    bag_num = load_dataset_from_yaml(yaml_path, DATASET, toss_id)
+    depth_bag_file = f"./rosbags/raw_{bag_num}.bag"
+    odom_bag_file = f"./rosbags/odom_{bag_num}.bag"
     DEPTH_ROS_TOPIC = "/camera/aligned_depth_to_color/image_raw"
     ODOM_ROS_TOPIC = "/tagslam/odom/body_napkin"
-    DATASET="napkin"
     GT_POSE_DIR = f"/home/cnets-vision/mengti_ws/robot_filter/dataset/{DATASET}_{toss_id}/tagslam_poses/"
     OUTPUT_POSE_DIR = f"/home/cnets-vision/mengti_ws/BundleSDF/results/{DATASET}_{toss_id}/ob_in_cam/"
     
