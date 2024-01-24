@@ -448,6 +448,24 @@ class DatasetManagement:
 
     def get_linear_velocity(self, curr_trans, next_trans, dt):
         return (next_trans - curr_trans) / dt
+    
+    def transform_bundlesdf_to_tagslam_body_frame(self, tagslam_pos_b, tagslam_orient_b):
+        """BundleSDF's body frame is defined by the centroid of initial point cloud, whereas TagSLAM's body frame is defined by tag pose. Need to align their body frames to get exact center of mass for dair_pll.
+        @tagslam_pos_b: TagSLAM's body frame position defined in build_XXX_tagslam.yaml.
+        @tagslam_orient_b: TagSLAM's body frame orientation defined in build_XXX_tagslam.yaml.
+        """
+        tagslam_rotation = R.from_quat(tagslam_orient_b)
+        self.p_t = self.p_t - tagslam_pos_b
+        for i in range(len(self.q_t)):
+            # Convert BundleSDF quaternion to a rotation object
+            bundlesdf_rotation = R.from_quat(self.q_t[i])
+
+            # Apply rotation transformation
+            transformed_rotation = tagslam_rotation.inv() * bundlesdf_rotation
+
+            # Update quaternion
+            self.q_t[i] = transformed_rotation.as_quat()
+
 
     def plot_data(self):
         positions = np.array(self.positions)

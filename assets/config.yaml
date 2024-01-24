@@ -1335,3 +1335,99 @@ tosses:
         nsecs: 745548
       start_frame: 62
       end_frame: 87
+    
+body_frame:
+  cube:
+    pose:
+      position:
+        x: -0.02350000
+        y: 0.02350000
+        z: 0.05005000
+      rotation:
+        x: 0
+        y: 0
+        z: 0
+      position_noise:
+        x: 0.0001
+        y: 0.0001
+        z: 0.0001
+      rotation_noise:
+        x: 1.0e-05
+        y: 1.0e-05
+        z: 1.0e-05
+  
+  prism:
+    pose:
+      position:
+        x: 0
+        y: 0
+        z: 0
+      rotation:
+        x: 0
+        y: 0
+        z: 0
+      position_noise:
+        x: 0.0001
+        y: 0.0001
+        z: 0.0001
+      rotation_noise:
+        x: 1.0e-05
+        y: 1.0e-05
+        z: 1.0e-05
+  
+  napkin:
+    pose:
+      position:
+        x: 0.08275
+        y: 0.023
+        z: 0.0445
+      rotation:
+        x: 0
+        y: 0
+        z: 0
+      position_noise:
+        x: 0.0001
+        y: 0.0001
+        z: 0.0001
+      rotation_noise:
+        x: 1.0e-05
+        y: 1.0e-05
+        z: 1.0e-05
+  
+  toblerone:
+    pose:
+      position:
+        x: 0.0
+        y: 0.0
+        z: 0.1059
+      rotation:
+        x: 0
+        y: 0
+        z: 0
+      position_noise:
+        x: 0.0001
+        y: 0.0001
+        z: 0.0001
+      rotation_noise:
+        x: 1.0e-05
+        y: 1.0e-05
+        z: 1.0e-05
+  
+  half:
+    pose:
+      position:
+        x: 0.0
+        y: 0.0
+        z: -0.11416
+      rotation:
+        x: 0
+        y: 0
+        z: 0
+      position_noise:
+        x: 0.0001
+        y: 0.0001
+        z: 0.0001
+      rotation_noise:
+        x: 1.0e-05
+        y: 1.0e-05
+        z: 1.0e-05

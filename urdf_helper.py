@@ -291,5 +291,5 @@ if __name__ == '__main__':
     # create_max_volume_obj(simplified_mesh, output_path, vertex_count=10, target_vertex_count=8, target_face_count=6)
     # add_normals_to_obj(output_path, normal_mesh)
 
-    # mm_to_meters(original_mesh, simple_gt_pcd)
+    mm_to_meters(original_mesh, simple_gt_pcd)
     simplify_mesh(simple_gt_pcd, simple_gt_pcd, 0.5)
