@@ -35,6 +35,16 @@ def load_dataset_from_yaml(file_path, toss_type, toss_id):
         data = yaml.safe_load(f)
     return data['dataset'][toss_type][toss_id]
 
+def load_body_frame_pos_from_yaml(file_path, toss_type):
+    with open(file_path, 'r') as f:
+        data = yaml.safe_load(f)
+    return data['body_frame'][toss_type]['pose']['position']
+
+def load_body_frame_rot_from_yaml(file_path, toss_type):
+    with open(file_path, 'r') as f:
+        data = yaml.safe_load(f)
+    return data['body_frame'][toss_type]['pose']['rotation']
+
 def filter(real_img, sim_img):
     """
     Filter the simulated image from the real depth image.

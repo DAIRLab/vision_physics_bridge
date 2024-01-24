@@ -1,7 +1,7 @@
 import argparse
 import os
 import numpy as np
-from file_utils import load_dataset_from_yaml, load_field_from_yaml, load_toss_time_from_yaml
+from file_utils import load_body_frame_pos_from_yaml, load_body_frame_rot_from_yaml, load_dataset_from_yaml, load_field_from_yaml, load_toss_time_from_yaml
 from math_utils import trans_mat_to_pos_quat, transform_bundletrack_output, wxyz2xyzw, xyzw2wxyz
 from rosbag_processor import extract_time_versus_poses, extract_timestamps
 import rospy
@@ -68,7 +68,7 @@ def smooth_quaternions_pyquat(quats, alpha=0.5):
     return smoothed_quats #xyzw
 
 class DatasetManagement:
-    def __init__(self, frame_num, start_frame, end_frame, timestamps, toss_id, cam_trans, cam_axis_vec, frame_rate, plot=False, use_gt=False):
+    def __init__(self, frame_num, start_frame, end_frame, timestamps, toss_id, cam_trans, cam_axis_vec, frame_rate, plot=False, use_gt=False, tagslam_pos_b=None, tagslam_rot_b=None):
         self.frame_num = frame_num
         self.start_frame = start_frame
         self.end_frame = end_frame
@@ -90,6 +90,10 @@ class DatasetManagement:
         self.use_gt = use_gt
         self.frame_rate = frame_rate
         self.load_poses()
+        if tagslam_pos_b and tagslam_rot_b and not self.use_gt:
+            print('Transforming body frame!')
+            print(f'{tagslam_pos_b=}, {tagslam_rot_b=}')
+            self.transform_bundlesdf_to_tagslam_body_frame(tagslam_pos_b, tagslam_rot_b)
         
     def load_poses(self):
         p_t = []
@@ -449,12 +453,14 @@ class DatasetManagement:
     def get_linear_velocity(self, curr_trans, next_trans, dt):
         return (next_trans - curr_trans) / dt
     
-    def transform_bundlesdf_to_tagslam_body_frame(self, tagslam_pos_b, tagslam_orient_b):
+    def transform_bundlesdf_to_tagslam_body_frame(self, tagslam_pos_b, tagslam_rot_b):
         """BundleSDF's body frame is defined by the centroid of initial point cloud, whereas TagSLAM's body frame is defined by tag pose. Need to align their body frames to get exact center of mass for dair_pll.
         @tagslam_pos_b: TagSLAM's body frame position defined in build_XXX_tagslam.yaml.
-        @tagslam_orient_b: TagSLAM's body frame orientation defined in build_XXX_tagslam.yaml.
+        @tagslam_rot_b: TagSLAM's body frame orientation defined in build_XXX_tagslam.yaml.
         """
-        tagslam_rotation = R.from_quat(tagslam_orient_b)
+        tagslam_pos_b = np.array([tagslam_pos_b['x'], tagslam_pos_b['y'], tagslam_pos_b['z']])
+        tagslam_rot_b = R.from_rotvec([tagslam_rot_b['x'], tagslam_rot_b['y'], tagslam_rot_b['z']]).as_quat()
+        tagslam_rotation = R.from_quat(tagslam_rot_b)
         self.p_t = self.p_t - tagslam_pos_b
         for i in range(len(self.q_t)):
             # Convert BundleSDF quaternion to a rotation object
@@ -465,7 +471,6 @@ class DatasetManagement:
 
             # Update quaternion
             self.q_t[i] = transformed_rotation.as_quat()
-
 
     def plot_data(self):
         positions = np.array(self.positions)
@@ -582,6 +587,12 @@ if __name__ == "__main__":
         required=False
     )
     parser.add_argument(
+        "--use_tagslam_b",
+        type=bool,
+        required=False,
+        help="Whether to use TagSLAM's body frame or BundleSDF's body frame"
+    )
+    parser.add_argument(
         "--zshift",
         type=float,
         default=0.05148739950625105
@@ -591,6 +602,7 @@ if __name__ == "__main__":
     TOSS_TYPE = args.type
     USE_GT = args.use_gt
     FINAL_Z = args.zshift
+    USE_TAGSLAM_B = args.use_tagslam_b
     DATASET = f'{TOSS_TYPE}_{TOSS_ID}'
     YAML_PATH = './assets/config.yaml'
     ROSBAG = load_dataset_from_yaml(YAML_PATH, TOSS_TYPE, TOSS_ID)
@@ -630,7 +642,12 @@ if __name__ == "__main__":
     # bundletrack_time, gt_time = sync.bundletrack_time, sync.gt_time
     # print(len(bundletrack_time), len(gt_time))
     # bundletrack_time = extract_timestamps(rosbag, ros_topic, start_time, end_time)
-    
+    if USE_TAGSLAM_B:
+        tagslam_body_frame_pos = load_body_frame_pos_from_yaml(YAML_PATH, TOSS_TYPE)
+        tagslam_body_frame_rot = load_body_frame_rot_from_yaml(YAML_PATH, TOSS_TYPE)
+    else:
+        tagslam_body_frame_pos = None
+        tagslam_body_frame_rot = None
     data = np.loadtxt(GT_POSE_DIR+'tagslam.txt')
     print('data loaded', data.shape)
     gt_time = data[:, 0] #N,
@@ -646,5 +663,5 @@ if __name__ == "__main__":
         # time_offset=125.19
     ).reshape(-1,)
     print(gt_time.shape, bundletrack_time.shape)
-    dataset = DatasetManagement(frame_num, start_frame, end_frame, bundletrack_time, TOSS_ID, cam_trans, cam_axis_vec, frame_rate=30, plot=False, use_gt=USE_GT)
+    dataset = DatasetManagement(frame_num, start_frame, end_frame, bundletrack_time, TOSS_ID, cam_trans, cam_axis_vec, frame_rate=30, plot=False, use_gt=USE_GT, tagslam_pos_b=tagslam_body_frame_pos, tagslam_rot_b=tagslam_body_frame_rot)
     dataset.do_process()
