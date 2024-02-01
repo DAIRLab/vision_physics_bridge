@@ -584,7 +584,8 @@ if __name__ == "__main__":
     parser.add_argument(
         "--use_gt",
         type=bool,
-        required=False
+        required=False,
+        help="Whether to use TagSLAM trajectory or BundleSDF-generated trajectory or not"
     )
     parser.add_argument(
         "--use_tagslam_b",
@@ -595,7 +596,8 @@ if __name__ == "__main__":
     parser.add_argument(
         "--zshift",
         type=float,
-        default=0.05148739950625105
+        default=0.05148739950625105,
+        help="Offset from the table to the origin of the data"
     )
     args = parser.parse_args()
     TOSS_ID = args.toss_id
