@@ -113,8 +113,100 @@ dataset: #toss_id:rosbag_id
     8: 72
     9: 72
     10: 72
+  cube_hand:
+    0: 50
+    1: 50
+    2: 50
+    3: 50
+    4: 50
+    5: 50
+    6: 50
+    7: 50
+    8: 50
+    9: 50
+    10: 50
 
 tosses:
+  cube_hand:
+    - toss: 0 # toss 1-10
+      start_time: 
+        secs: 
+        nsecs: 
+      end_time:
+        secs: 
+        nsecs: 
+
+    - toss: 1
+      start_time: 
+        secs: 
+        nsecs: 
+      end_time:
+        secs: 
+        nsecs: 
+    - toss: 2
+      start_time: 
+        secs: 
+        nsecs: 
+      end_time:
+        secs: 
+        nsecs: 
+    - toss: 3
+      start_time: 
+        secs: 
+        nsecs: 
+      end_time:
+        secs: 
+        nsecs: 
+    - toss: 4
+      start_time: 
+        secs: 
+        nsecs: 
+      end_time:
+        secs: 
+        nsecs: 
+    - toss: 5
+      start_time: 
+        secs: 
+        nsecs: 
+      end_time:
+        secs: 
+        nsecs: 
+    - toss: 6
+      start_time: 
+        secs: 
+        nsecs: 
+      end_time:
+        secs: 
+        nsecs: 
+    - toss: 7
+      start_time: 
+        secs: 
+        nsecs: 
+      end_time:
+        secs: 
+        nsecs: 
+    - toss: 8
+      start_time: 
+        secs: 
+        nsecs: 
+      end_time:
+        secs: 
+        nsecs: 
+    - toss: 9
+      start_time: 
+        secs: 
+        nsecs: 
+      end_time:
+        secs: 
+        nsecs: 
+    - toss: 10
+      start_time: 
+        secs: 
+        nsecs: 
+      end_time:
+        secs: 
+        nsecs: 
+
   cube:
     - toss: 0 #toss 1-10
       start_time: 
