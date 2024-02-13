@@ -113,8 +113,100 @@ dataset: #toss_id:rosbag_id
     8: 72
     9: 72
     10: 72
+  cube_hand:
+    0: 50
+    1: 50
+    2: 50
+    3: 50
+    4: 50
+    5: 50
+    6: 50
+    7: 50
+    8: 50
+    9: 50
+    10: 50
 
 tosses:
+  cube_hand:
+    - toss: 0 # toss 1-10
+      start_time: 
+        secs: 
+        nsecs: 
+      end_time:
+        secs: 
+        nsecs: 
+
+    - toss: 1
+      start_time: 
+        secs: 1695415477
+        nsecs: 543619
+      end_time:
+        secs: 1695415478
+        nsecs: 902376
+    - toss: 2
+      start_time: 
+        secs: 1695415485
+        nsecs: 748484
+      end_time:
+        secs: 1695415487
+        nsecs: 118689
+    - toss: 3
+      start_time: 
+        secs: 1695415493
+        nsecs: 809881
+      end_time:
+        secs: 1695415495
+        nsecs: 282533
+    - toss: 4
+      start_time: 
+        secs: 1695415503
+        nsecs: 579586
+      end_time:
+        secs: 1695415505
+        nsecs: 169494
+    - toss: 5
+      start_time: 
+        secs: 1695415513
+        nsecs: 337955
+      end_time:
+        secs: 1695415515
+        nsecs: 033583
+    - toss: 6
+      start_time: 
+        secs: 1695415522
+        nsecs: 776303
+      end_time:
+        secs: 1695415525
+        nsecs: 296194
+    - toss: 7
+      start_time: 
+        secs: 1695415533
+        nsecs: 405671
+      end_time:
+        secs: 1695415535
+        nsecs: 249354
+    - toss: 8
+      start_time: 
+        secs: 1695415543
+        nsecs: 011538
+      end_time:
+        secs: 1695415545
+        nsecs: 047358
+    - toss: 9
+      start_time: 
+        secs: 1695415554
+        nsecs: 081926
+      end_time:
+        secs: 1695415556
+        nsecs: 505787
+    - toss: 10
+      start_time: 
+        secs: 1695415564
+        nsecs: 893286
+      end_time:
+        secs: 1695415567
+        nsecs: 220366
+
   cube:
     - toss: 0 #toss 1-10
       start_time: 
