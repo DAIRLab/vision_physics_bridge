@@ -124,19 +124,52 @@ def camera_to_world(m, translation, axis_vec):
 def transform_bundletrack_output(
     pred_pose, output_pose_dir, odom_file_dir, translation, axis_vec, to_world=False
 ):
-    """
+    """This function uses the equation from the below BundleTrack issue:
+
     https://github.com/wenbowen123/BundleTrack/issues/38
+
+    The expression involves the below transformations:
+        - camera_T_Bn (pred_pose):  BundleSDF's reported pose of the BundleSDF
+            origin at the nth time stamp, in camera frame.
+        - camera_T_B1 (init_pose):  BundleSDF's reported pose of the BundleSDF
+            origin at the first time stamp, in camera frame.
+        - camera_T_T0 (init_pose_new):  TagSLAM's reported pose of the TagSLAM
+            origin at the 0th time stamp, in camera frame.
+        - camera_T_Tn (pred_new):  The desired pose of the TagSLAM origin at the
+            nth time stamp, in camera frame.
+        - world_T_Tn (pred_new_world):  The desired pose of the TagSLAM origin
+            at the nth time stamp, in world frame.
+        - world_T_camera:  Required camera extrinsics.
+
+    The first desired result is camera_T_Tn, which is obtained using the
+    following identity:
+
+        Bn_T_Tn = B0_T_T0  <-- due to rigid body, relative origin offset fixed.
+
+    Thus camera_T_Tn is obtained via:
+
+        camera_T_Tn = camera_T_Bn * Bn_T_Tn
+                    = camera_T_Bn * B0_T_T0
+                    = camera_T_Bn * B0_T_camera * camera_T_T0
+                    = camera_T_Bn * inv(camera_T_B0) * camera_T_T0
+
+    Or:    pred_new =    pred     *  inv(init_pose)  * init_pose_new
     """
-    init_pose = np.loadtxt(
-        output_pose_dir + "%04i.txt" % 1
-    )  # initial cube pose in camera frame, bundletrack's internal coordinate system
-    init_pose_new = np.loadtxt(
-        odom_file_dir + "%04i.txt" % 0
-    )  # initial cube pose represented in camera frame, matching tagslam
+    # This is camera_T_B1, the BundleSDF origin wrt camera at 1st timestamp.
+    init_pose = np.loadtxt(output_pose_dir + "%04i.txt" % 1)
+
+    # This is camera_T_T0, the TagSLAM origin wrt camera at 0th timestamp.
+    init_pose_new = np.loadtxt(odom_file_dir + "%04i.txt" % 0)
+
+    # This converts camera_T_Bn to camera_T_Tn, switching from reporting pose of
+    # BundleSDF origin to TagSLAM origin.
     pred_new = (pred_pose @ np.linalg.inv(init_pose)) @ init_pose_new
+
     if to_world:
+        # This yields world_T_Tn.
         pred_new_world = camera_to_world(pred_new, translation, axis_vec)
         return pred_new_world
+    
     return pred_new
 
 
