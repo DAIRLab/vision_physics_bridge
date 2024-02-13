@@ -54,7 +54,7 @@ def calculate_success_rate(
     success_rate = (success_count / num_frames) * 100
     return success_rate
 
-def plot_with_time(bundletrack_time, gt_time, bundletrack_pose_dir, gt_poses):
+def plot_with_time(bundletrack_time, gt_time, bundletrack_pose_dir, gt_poses, no_show=False):
     """Plot the x, y, z of BundleTrack output versus ground-truth poses of tagslam."""
     bundletrack_time = np.array(bundletrack_time)
     output_x, output_y, output_z = [], [], []  # translation
@@ -187,11 +187,14 @@ def plot_with_time(bundletrack_time, gt_time, bundletrack_pose_dir, gt_poses):
         translation_threshold,
         np.radians(rotation_threshold),
     )
-    print(f"Translation Error: {np.mean(translation_errors):.4f}")
-    print(f"Rotation Error: {np.degrees(np.mean(rotation_errors)):.4f} degrees")
+    mean_trans_err = np.mean(translation_errors)
+    mean_rot_err = np.degrees(np.mean(rotation_errors))
+    print(f"Translation Error: {mean_trans_err:.4f}")
+    print(f"Rotation Error: {mean_rot_err:.4f} degrees")
     print(f"Success Rate: {success_rate:.2f}%")
 
     fig, axs = plt.subplots(2, 4)
+    fig.suptitle(f"{mean_trans_err:.2f}, {mean_rot_err:.2f} deg, {success_rate:.2f}%")
     axs[0, 0].plot(bundletrack_time, output_x, label="BundleTrack")
     axs[0, 0].plot(gt_time, gt_x, label="ground-truth")
     axs[0, 0].set_title("Position x")
@@ -226,7 +229,8 @@ def plot_with_time(bundletrack_time, gt_time, bundletrack_pose_dir, gt_poses):
     fig.subplots_adjust(bottom=spacing)
     plt.savefig(FIG_NAME)
     print(f'Figure saved to {FIG_NAME}')
-    plt.show()
+    if not no_show:
+        plt.show()
 
 def draw_coords_to_image():
     """Draw rgb axes onto images to indicate the pose.
@@ -286,24 +290,34 @@ def save_init_pose():
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument(
-        "--toss_id",
+        "toss_id",
         type=int,
-        required=False,
+    )
+    parser.add_argument(
+        "trial_id",
+        type=int,
+    )
+    parser.add_argument(
+        "--no_show",
+        action="store_true"
     )
     args = parser.parse_args()
     toss_id = args.toss_id
-    print(f'Processing toss {toss_id}')
+    trial_id = args.trial_id
+    print(f'Processing toss {toss_id}, trial {trial_id}')
     TOSS_TYPE = 'cube'
     yaml_path = './assets/config.yaml'
     bag_num = load_dataset_from_yaml(yaml_path, TOSS_TYPE, toss_id)
     print(f'bag num: {bag_num}')
-    depth_bag_file = f"./rosbags/raw_{bag_num}.bag"
-    odom_bag_file = f"./rosbags/odom_{bag_num}.bag"
+    depth_bag_file = f"/home/cnets-vision/mengti_ws/robot_filter/rosbags/raw_{bag_num}.bag"
+    odom_bag_file = f"/home/cnets-vision/mengti_ws/robot_filter/rosbags/odom_{bag_num}.bag"
     DEPTH_ROS_TOPIC = "/camera/aligned_depth_to_color/image_raw"
     ODOM_ROS_TOPIC = "/tagslam/odom/body_cube"
     DATASET=f"cube_{toss_id}"
+    DATASET_OUT=f"cube_{toss_id}_{trial_id}"
     GT_POSE_DIR = f"/home/cnets-vision/mengti_ws/robot_filter/dataset/{DATASET}/tagslam_poses/"
-    OUTPUT_POSE_DIR = f"/home/cnets-vision/mengti_ws/BundleSDF/results/{DATASET}/ob_in_cam/"
+    OUTPUT_POSE_DIR = f"/home/cnets-vision/mengti_ws/BundleSDF/results/find_good_case/{DATASET_OUT}/ob_in_cam/"
+    print(f"{OUTPUT_POSE_DIR=}")
     #### Ablation 1 ####
     # OUTPUT_POSE_DIR = f"/home/cnets-vision/mengti_ws/robot_filter/ob_in_cams/ob_in_cam_exp_1/"
     
@@ -323,7 +337,9 @@ if __name__ == "__main__":
     # OUTPUT_POSE_DIR = f"/home/cnets-vision/mengti_ws/robot_filter/ob_in_cams/ob_in_cam_exp_6/"
     
     ODOM_FILE_PATH = f"/home/cnets-vision/mengti_ws/BundleSDF/data/{DATASET}/annotated_poses/"
-    FIG_NAME = f"result_poses_bundlesdf_{DATASET}.png"
+    FIG_NAME = f"results/find_good_case/result_poses_bundlesdf_{DATASET_OUT}.png"
+    if not os.path.exists(os.path.dirname(FIG_NAME)):
+        os.makedirs(os.path.dirname(FIG_NAME))
     CAMERA_EXTRINSICS_FILE = "./assets/realsense_pose_cube.yaml"
 
     cam = 'cam0' # realsense camera name
@@ -338,7 +354,7 @@ if __name__ == "__main__":
     yaml_path = './assets/config.yaml'
     toss_type = 'cube'
     frame_num = len([name for name in os.listdir(OUTPUT_POSE_DIR)])
-    print(f"there are {frame_num} frames")
+    print(f"There are {frame_num} frames in output")
     start_time = load_toss_time_from_yaml(yaml_path, toss_type, toss_id, 'start_time')
     end_time = load_toss_time_from_yaml(yaml_path, toss_type, toss_id, 'end_time')
     bundletrack_time = extract_time_versus_poses(
@@ -353,9 +369,9 @@ if __name__ == "__main__":
     ).reshape(-1,)
     save_init_pose()
     data = np.loadtxt(GT_POSE_DIR+'tagslam.txt')
-    print('data', data.shape)
+    print('tagslam.txt', data.shape)
     gt_time = data[:, 0] #N,
     tagslam_poses = data[:, 1:] #N,7
-    print(bundletrack_time.shape, gt_time.shape, tagslam_poses.shape)
-    plot_with_time(bundletrack_time, gt_time, OUTPUT_POSE_DIR, tagslam_poses)
+    print(f"{bundletrack_time.shape=}", f"{gt_time.shape=}", f"{tagslam_poses.shape=}")
+    plot_with_time(bundletrack_time, gt_time, OUTPUT_POSE_DIR, tagslam_poses, args.no_show)
     # draw_coords_to_image()

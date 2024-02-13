@@ -760,7 +760,7 @@ def extract_time_versus_poses(
         btime = msg.header.stamp.secs + msg.header.stamp.nsecs * 1e-9
         bundletrack_time.append(btime)
         frame+=1
-    print("The length of the bundletrack_time is {}".format(len(bundletrack_time)))
+    print("The length of the bundletrack_time (depth_topic) is {}".format(len(bundletrack_time)))
 
     frame_id = 1
     for (topic, msg, ts) in odom_bag.read_messages(topics=str(odom_topic)):
@@ -785,9 +785,17 @@ def extract_time_versus_poses(
         tagslam_poses.append(Q)
         frame_id += 1
     tagslam_poses = np.array(tagslam_poses).T
+    print("The length of the odom_time (odom_topic) is {}".format(len(odom_time)))
+    if len(odom_time) < len(bundletrack_time):
+        bundletrack_time = bundletrack_time[:len(odom_time)]
+        print("bundletrack_time CLIPPED to the same length as odom_time!")
+    elif len(odom_time) > len(bundletrack_time):
+        odom_time = odom_time[:len(bundletrack_time)]
+        tagslam_poses = tagslam_poses[:, :len(bundletrack_time)]
+        print("odom_time CLIPPED to the same length as bundletrack_time!")
     bundletrack_time = np.expand_dims(bundletrack_time,axis=0)
     odom_time = np.expand_dims(odom_time,axis=0)
-    print(odom_time.shape, bundletrack_time.shape)
+    print(f"{odom_time.shape=}", f"{bundletrack_time.shape=}")
     data = np.concatenate((odom_time, tagslam_poses), axis=0)
     data = data.T #N, 9
     if save:
