@@ -1,19 +1,14 @@
-from fileinput import close
 import math
 import os
-from tracemalloc import start
 import cv2
 import rosbag
 import rospy
 import pdb
 import imageio
-from PIL import Image
 from cv_bridge import CvBridge
 import numpy as np
-import matplotlib.pyplot as plt
 from tqdm import tqdm
-import tf
-from math_utils import world_to_camera
+import math_utils
 from dataclasses import dataclass
 from nav_msgs.msg import Odometry
 from scipy.spatial.transform import Rotation as R
@@ -424,7 +419,7 @@ def extract_cube_pose(
             result = np.vstack(
                 (np.hstack((rotation_matrix, translation)), np.array([0, 0, 0, 1]))
             )
-            result = world_to_camera(result, cam_translation, cam_axis_vec)
+            result = math_utils.world_to_camera(result, cam_translation, cam_axis_vec)
             np.savetxt(
                 os.path.join(odom_file_path, "%04i.txt" % frame_id), result
             )  # save cube pose in camera frame
@@ -734,24 +729,53 @@ def find_nearest_neighbor(depth_timestamp):
     return msg
 
 
+def save_initial_tagslam_pose_in_camera_frame(
+        tagslam_world_poses_dir: str, annotated_poses_dir: str,
+        cam_trans: np.ndarray, cam_rot_axis_angle: np.ndarray
+) -> None:
+    """Given the extracted TagSLAM poses in world frame stored in tagslam.txt,
+    write the 0th annotated pose as the TagSLAM origin's initial pose in camera
+    frame.
+
+    Args:
+        tagslam_world_poses_dir
+        annotated_poses_dir
+        cam_trans
+        cam_rot_axis_angle
+    """
+    # Load the previously extracted TagSLAM world-frame trajectory.
+    data = np.loadtxt(os.path.join(tagslam_world_poses_dir, "tagslam.txt"))
+
+    # Get the first pose by eliminating the timestamp and all subsequent poses.
+    init_pose = data[0, 1:]
+
+    # Represent initial pose as a 4x4 transformation matrix in camera frame.
+    mat = math_utils.pos_quat_to_trans_mat(init_pose)
+    mat_cam = math_utils.world_to_camera(mat, cam_trans, cam_rot_axis_angle)
+
+    # Write the 4x4 transformation matrix in annotated poses directory.
+    np.savetxt(os.path.join(annotated_poses_dir, "0000.txt"), mat_cam)
+    print(f'Initial pose saved to {annotated_poses_dir}/0000.txt.')
+
+
 def extract_time_versus_poses(
     start_time,
     end_time,
     depth_bag_file,
     odom_bag_file,
-    depth_topic,
     odom_topic,
     output_dir,
     save=False,
     time_offset=0.0,
 ):
+    # Get the times associated with BundleSDF's eventual output poses, based on
+    # the timestamps associated with the depth images.
     depth_bag = rosbag.Bag(depth_bag_file, "r")
     odom_bag = rosbag.Bag(odom_bag_file, "r")
     bundletrack_time = []
     odom_time = []
-    frame = 1
     tagslam_poses = []
-    for (topic, msg, ts) in depth_bag.read_messages(topics=str(depth_topic)):
+    for (_topic, msg, _ts) in depth_bag.read_messages(topics=str(DEPTH_ROS_TOPIC)):
         if start_time and end_time:
             if msg.header.stamp < start_time:
                 continue
@@ -759,11 +783,11 @@ def extract_time_versus_poses(
                 break
         btime = msg.header.stamp.secs + msg.header.stamp.nsecs * 1e-9
         bundletrack_time.append(btime)
-        frame+=1
     print("The length of the bundletrack_time is {}".format(len(bundletrack_time)))
 
-    frame_id = 1
-    for (topic, msg, ts) in odom_bag.read_messages(topics=str(odom_topic)):
+    # Get the times and poses associated with TagSLAM, based on the information
+    # in the odometry bag file.
+    for (_topic, msg, _ts) in odom_bag.read_messages(topics=str(odom_topic)):
         if start_time and end_time:
             if msg.header.stamp+rospy.Duration(time_offset) < start_time:
                 continue
@@ -783,7 +807,6 @@ def extract_time_versus_poses(
         Q[5] = msg.pose.pose.orientation.z
         Q[6] = msg.pose.pose.orientation.w
         tagslam_poses.append(Q)
-        frame_id += 1
     tagslam_poses = np.array(tagslam_poses).T
     bundletrack_time = np.expand_dims(bundletrack_time,axis=0)
     odom_time = np.expand_dims(odom_time,axis=0)
@@ -800,7 +823,8 @@ def extract_time_versus_poses(
 
 def extract_toss_duration(bagfile, topic, threshold):
     """
-    Get start and end timestamps of tosses. New toss is defined as remainig static for longer than 3 seconds.
+    Get start and end timestamps of tosses. New toss is defined as remaining
+    static for longer than 3 seconds.
 
     :param threshold: rospy.Duration in second
     """

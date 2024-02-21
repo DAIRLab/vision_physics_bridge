@@ -1,6 +1,6 @@
 from copy import deepcopy
+from typing import Tuple
 import numpy as np
-import math
 from PIL import Image
 import matplotlib.pyplot as plt
 import imageio
@@ -11,40 +11,139 @@ import cv2
 import glob
 import shutil
 import os
+import os.path as op
 import re
 import yaml
 import rospy
 
-def load_toss_time_from_yaml(file_path, toss_type, toss_number, key):
-    with open(file_path, 'r') as f:
+
+REALSENSE_CAMERA_NAME = 'cam0'
+
+BUNDLESDF_REPO_DIR =  op.dirname(op.dirname(__file__))
+PROCESSING_YAML_FILE = op.join(BUNDLESDF_REPO_DIR,
+                               'cnets-data-generation/assets/config.yaml')
+
+
+def assure_created(directory: str) -> str:
+    """Wrapper to put around directory paths which ensure their existence.
+
+    Args:
+        directory: Path of directory that may not exist.
+
+    Returns:
+        ``directory``, Which is ensured to exist by recursive mkdir.
+    """
+    directory = op.abspath(directory)
+    if not op.exists(directory):
+        assure_created(op.dirname(directory))
+        os.mkdir(directory)
+    return directory
+
+
+"""Directory utilities."""
+def bundlesdf_pose_dir(dataset: str) -> str:
+    """BundleSDF's output pose directory for a particular dataset.  Contains
+    XXXX.txt files for every pose."""
+    path = op.join(BUNDLESDF_REPO_DIR, f'results/{dataset}/ob_in_cam/')
+    assert op.exists(path), f'Requires {path} to exist but not found.'
+    return path
+
+def bundlesdf_annotated_poses_dir(dataset: str) -> str:
+    """BundleSDF's input annotated pose directory for a particular dataset.
+    Contains 0000.txt file with the first TagSLAM origin's pose represented in
+    camera frame."""
+    path = op.join(BUNDLESDF_REPO_DIR, f'data/{dataset}/annotated_poses/')
+    assert op.exists(path), f'Requires {path} to exist but not found.'
+    return path
+
+def tagslam_pose_dir(dataset: str) -> str:
+    """TagSLAM's pose directory for a particular dataset.  Contains tagslam.txt
+    file."""
+    path = op.join(
+        BUNDLESDF_REPO_DIR,
+        f'cnets-data-generation/dataset/{dataset}/tagslam_poses/'
+    )
+    assert op.exists(path), f'Requires {path} to exist but not found.'
+    return path
+
+def contactnets_input_dir(toss_type: str) -> str:
+    """ContactNets' input directory for a particular experiment."""
+    return assure_created(
+        op.join(BUNDLESDF_REPO_DIR, f'dair_pll/assets/bundlesdf_{toss_type}')
+    )
+
+def contactnets_input_dir_tagslam(toss_type: str, full: bool = True) -> str:
+    """ContactNets' input directory for a particular experiment from TagSLAM."""
+    subdir = 'tagslam_full' if full else 'tagslam_toss'
+    return assure_created(op.join(contactnets_input_dir(toss_type), subdir))
+
+def contactnets_input_dir_bundlesdf(toss_type: str, iteration: int,
+                                    full: bool = True) -> str:
+    """ContactNets' input directory for a particular experiment from a
+    particular iteration of BundleSDF."""
+    subdir = f'bundlesdf_full_iteration_{iteration}' if full else \
+        f'bundlesdf_toss_iteration_{iteration}'
+    return assure_created(op.join(contactnets_input_dir(toss_type), subdir))
+
+"""Yaml file parsing utilities."""
+def load_camera_extrinsics(toss_type: str) -> Tuple[np.ndarray, np.ndarray]:
+    """Given the toss type, return the camera extrinsics in terms of a camera
+    translation and rotation."""
+
+    # Camera extrinsics file depends on the toss type.
+    camera_extrinsics_file = f'./assets/realsense_pose_{toss_type}.yaml'
+    if toss_type == 'milk' or toss_type == 'prism':
+        camera_extrinsics_file = f'./assets/realsense_pose_milk_prism.yaml'
+
+    # Load the data from the extrinsics file.
+    with open(camera_extrinsics_file, 'r') as stream:
+        data_loaded = yaml.safe_load(stream)
+
+    # Gather the position and rotation information.
+    cam_pos_dict = data_loaded[REALSENSE_CAMERA_NAME]['pose']['position']
+    cam_trans = np.array(
+        [cam_pos_dict['x'], cam_pos_dict['y'], cam_pos_dict['z']]
+    ).reshape(-1, 1)
+    
+    cam_rot_dict = data_loaded[REALSENSE_CAMERA_NAME]['pose']['rotation']
+    cam_rot_axis_angle = np.array(
+        [cam_rot_dict['x'], cam_rot_dict['y'], cam_rot_dict['z']]
+    ).reshape(-1, 1)
+    
+    return cam_trans, cam_rot_axis_angle
+
+def load_toss_time_from_yaml(toss_type, toss_number, key):
+    with open(PROCESSING_YAML_FILE, 'r') as f:
         data = yaml.safe_load(f)
     toss_data = data['tosses'][toss_type][toss_number]
     start_time_data = toss_data[key]
     time = rospy.rostime.Time(secs=start_time_data['secs'], nsecs=start_time_data['nsecs'])
     return time
 
-def load_field_from_yaml(file_path, toss_type, toss_number, key):
-    with open(file_path, 'r') as f:
+def load_field_from_yaml(toss_type, toss_number, key):
+    with open(PROCESSING_YAML_FILE, 'r') as f:
         data = yaml.safe_load(f)
     toss_data = data['tosses'][toss_type][toss_number]
     data = toss_data[key]
     return data
 
-def load_dataset_from_yaml(file_path, toss_type, toss_id):
-    with open(file_path, 'r') as f:
+def load_dataset_from_yaml(toss_type, toss_id):
+    with open(PROCESSING_YAML_FILE, 'r') as f:
         data = yaml.safe_load(f)
     return data['dataset'][toss_type][toss_id]
 
-def load_body_frame_pos_from_yaml(file_path, toss_type):
-    with open(file_path, 'r') as f:
+def load_body_frame_pos_from_yaml(toss_type):
+    with open(PROCESSING_YAML_FILE, 'r') as f:
         data = yaml.safe_load(f)
     return data['body_frame'][toss_type]['pose']['position']
 
-def load_body_frame_rot_from_yaml(file_path, toss_type):
-    with open(file_path, 'r') as f:
+def load_body_frame_rot_from_yaml(toss_type):
+    with open(PROCESSING_YAML_FILE, 'r') as f:
         data = yaml.safe_load(f)
     return data['body_frame'][toss_type]['pose']['rotation']
 
+
+"""Filtering/visualization."""
 def filter(real_img, sim_img):
     """
     Filter the simulated image from the real depth image.

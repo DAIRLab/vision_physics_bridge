@@ -102,8 +102,8 @@ cam_axis_vec = np.array([cam_rot_dict['x'], cam_rot_dict['y'], cam_rot_dict['z']
 yaml_path = './assets/config.yaml'
 toss_type = 'cube_new'
 toss_id=1
-start_time = load_toss_time_from_yaml(yaml_path, toss_type, toss_id, 'start_time')
-end_time = load_toss_time_from_yaml(yaml_path, toss_type, toss_id, 'end_time')
+start_time = load_toss_time_from_yaml(toss_type, toss_id, 'start_time')
+end_time = load_toss_time_from_yaml(toss_type, toss_id, 'end_time')
 
 # CUBE_HALF_LENGTH = 0.1048 / 2
 # X_OFFSET = -CUBE_HALF_LENGTH

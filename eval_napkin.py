@@ -248,7 +248,7 @@ if __name__ == "__main__":
     print(f'Processing toss {toss_id}')
     yaml_path = "./assets/config.yaml"
     DATASET="napkin"
-    bag_num = load_dataset_from_yaml(yaml_path, DATASET, toss_id)
+    bag_num = load_dataset_from_yaml(DATASET, toss_id)
     depth_bag_file = f"./rosbags/raw_{bag_num}.bag"
     odom_bag_file = f"./rosbags/odom_{bag_num}.bag"
     DEPTH_ROS_TOPIC = "/camera/aligned_depth_to_color/image_raw"
@@ -274,8 +274,8 @@ if __name__ == "__main__":
     frame_num = len([name for name in os.listdir(OUTPUT_POSE_DIR)])
     print(f"there are {frame_num} frames")
     yaml_path = './assets/config.yaml'
-    start_time = load_toss_time_from_yaml(yaml_path, toss_type, toss_id, 'start_time')
-    end_time = load_toss_time_from_yaml(yaml_path, toss_type, toss_id, 'end_time')
+    start_time = load_toss_time_from_yaml(toss_type, toss_id, 'start_time')
+    end_time = load_toss_time_from_yaml(toss_type, toss_id, 'end_time')
 
     bundletrack_time = extract_time_versus_poses(
         start_time,

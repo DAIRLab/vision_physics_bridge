@@ -1,24 +1,35 @@
 import argparse
-import os
+import os.path as op
 import numpy as np
-from file_utils import load_body_frame_pos_from_yaml, load_body_frame_rot_from_yaml, load_dataset_from_yaml, load_field_from_yaml, load_toss_time_from_yaml
-from math_utils import trans_mat_to_pos_quat, transform_bundletrack_output, wxyz2xyzw, xyzw2wxyz
-from rosbag_processor import extract_time_versus_poses, extract_timestamps
-import rospy
 import torch
-
-from sync_data import Synchronizer
-from scipy.spatial.transform import Rotation as R, RotationSpline
+from scipy.spatial.transform import Rotation
 from scipy import signal
-from scipy.interpolate import CubicSpline, interp1d
 from pyquaternion import Quaternion
 import matplotlib.pyplot as plt
-import yaml
 import pdb
 import math
+from typing import Tuple
 
-"""Class for generating and managing datasets for ContactNets.
-"""
+import file_utils
+import math_utils
+import rosbag_processor
+import sync_data
+
+
+FILTER_ORIENTATIONS = True
+FILTER_POSITIONS = True
+FILTER_LINEAR_VELOCITIES = True
+FILTER_ANGULAR_VELOCITIES = True
+
+FILTER_TYPE = 'median'              # Can be median or savgol.
+SAVGOL_FILTER_WINDOW_LENGTH = 15
+SAVGOL_FILTER_POLYORDER = 3
+MEDIAN_FILTER_KERNEL_SIZE = 3
+
+ADJUST_POSITION = True
+
+YAML_PATH = file_utils.PROCESSING_YAML_FILE
+
 
 def rotvecfix(rv):
     for i in range(rv.shape[0]-1):
@@ -55,7 +66,7 @@ def smooth_quaternions_pyquat(quats, alpha=0.5):
     :param alpha: Interpolation factor (0.0 <= alpha <= 1.0).
     :return: Smoothed Nx4 array of quaternions.
     """
-    quats = xyzw2wxyz(quats)
+    quats = math_utils.xyzw2wxyz(quats)
     smoothed_quats = np.zeros_like(quats)
     smoothed_quats[0] = quats[0]
 
@@ -64,509 +75,548 @@ def smooth_quaternions_pyquat(quats, alpha=0.5):
         q1 = Quaternion(quats[i])
         smoothed = Quaternion.slerp(q0, q1, alpha)
         smoothed_quats[i] = [smoothed.w, smoothed.x, smoothed.y, smoothed.z]
-    smoothed_quats = wxyz2xyzw(smoothed_quats)
+    smoothed_quats = math_utils.wxyz2xyzw(smoothed_quats)
     return smoothed_quats #xyzw
 
+
 class DatasetManagement:
-    def __init__(self, frame_num, start_frame, end_frame, timestamps, toss_id, cam_trans, cam_axis_vec, frame_rate, plot=False, use_gt=False, tagslam_pos_b=None, tagslam_rot_b=None):
-        self.frame_num = frame_num
+    """Class for processing pose data from BundleSDF.  Can load corresponding
+    poses from TagSLAM, convert between BundleSDF and TagSLAM origins and
+    between camera and world frames.
+
+    Since the ContactNets toss's start and end are defined based on indexing
+    into the BundleSDF trajectories, the corresponding TagSLAM trajectories
+    are selected to be the same number of frames most closely time-
+    synchronized with the BundleSDF messages.
+
+    Because of this, the poses may not actually be identical at the beginning
+    of the toss, since BundleSDF and TagSLAM are forced to be identical at the
+    beginning of the _BundleSDF trajectory_, not at the _ContactNets
+    trajectory_.  The BundleSDF trajectories are usually ~10 seconds, start with
+    the object unmoving on the table, and include the toss wind-up and
+    execution.  The ContactNets trajectories are usually < 1 second and include
+    only the object immediately after it has been released at the beginning of
+    the toss.
+    """
+    def __init__(self, start_frame: int, end_frame: int,
+                 timestamps: np.ndarray, toss_id: int, toss_type: str,
+                 iteration_num: int, cam_trans: np.ndarray,
+                 cam_rot_axis_angle: np.ndarray, frame_rate: int,
+                 z_shift: float, plot: bool = False) -> None:
+        """Prepare for processing data from TagSLAM and BundleSDF.
+
+        Args:
+            start_frame:  BundleSDF frame index at which a PLL toss begins.
+            end_frame:  BundleSDF frame index at which a PLL toss ends.
+            timestamps (N,):  BundleSDF timestamps.
+            toss_id:  Toss index.
+            toss_type:  The tossed object name.
+            iteration_num:  The cycle iteration number of the BundleSDF/
+                ContactNets cycle.
+            cam_trans (3,):  Position of the camera in world coordinates.
+            cam_rot_axis_angle (3,):  Orientation of the camera is world
+                coordinates in Rodrigues form.
+            frame_rate:  The expected frame rate of the data.  This isn't used
+                for processing but can be used to manually inspect that the
+                data's timestamps result in a similar frame rate as expected.
+            z_shift:  Amount to shift the z positions throughout the trajectory.
+            plot:  Whether to show the overlay plot of BundleSDF and TagSLAM
+                trajectories.
+        """
         self.start_frame = start_frame
         self.end_frame = end_frame
-        self.timestamps = timestamps
-        self.toss_id = toss_id-1
-        self.positions = [] #(N, 3)
-        self.quats = []  #(N, 4)
-        self.interpolated_ang_vels = [] #(N,3)
-        self.interpolated_lin_vels = [] #(N,3)
-        self.rot_t = None
-        ###### sophter ########
-        self.t = None # N,
-        self.q_t = None # 4,N, x,y,z,w
-        self.p_t = None #3,N
-        #######################
+        self.toss_id = toss_id
+        self.toss_type = toss_type
+        self.iteration_num = iteration_num
+
         self.plot = plot
         self.cam_trans = cam_trans
-        self.cam_axis_vec = cam_axis_vec
-        self.use_gt = use_gt
+        self.cam_rot_axis_angle = cam_rot_axis_angle
         self.frame_rate = frame_rate
-        self.load_poses()
-        if tagslam_pos_b and tagslam_rot_b and not self.use_gt:
-            print('Transforming body frame!')
-            print(f'{tagslam_pos_b=}, {tagslam_rot_b=}')
-            self.transform_bundlesdf_to_tagslam_body_frame(tagslam_pos_b, tagslam_rot_b)
+        self.z_shift = z_shift
+
+        self._set_up_directories()
+
+        # Load the poses from TagSLAM and BundleSDF.
+        self._load_poses(bsdf_times=timestamps)
+
+    def _set_up_directories(self) -> None:
+        """Given the stored toss_type and toss_id, loads the following
+        attributes:
+            - self.tagslam_dir
+            - self.bundlesdf_dir
+            - self.annotated_dir
+            - self.contactnets_dir
+        """
+        dataset = f'{self.toss_type}_{self.toss_id}'
+
+        self.tagslam_dir = file_utils.tagslam_pose_dir(dataset)
+        self.bundlesdf_dir = file_utils.bundlesdf_pose_dir(dataset)
+        self.annotated_dir = file_utils.bundlesdf_annotated_poses_dir(dataset)
+        self.contactnets_dir = file_utils.contactnets_input_dir(self.toss_type)
         
-    def load_poses(self):
-        p_t = []
-        q_t = []
-        t = []
-        #####
-        tagslam_data = np.loadtxt(GT_POSE_DIR+'tagslam.txt')
-        #####
-        for frame_id in range(self.frame_num):
-            if frame_id < self.start_frame:
-                continue
-            if frame_id >= self.end_frame:
-                break
-            if frame_id == self.start_frame:
-                t_start = self.timestamps[frame_id]
-            if not self.use_gt:
-                print('>>>>>>>>>>> Using bundlesdf results')
-                pose = np.loadtxt(BUNDLESDF_POSE_DIR + "%04i.txt" % frame_id)
-                pose = transform_bundletrack_output(pose, BUNDLESDF_POSE_DIR, ODOM_FILE_PATH, self.cam_trans, self.cam_axis_vec, to_world=True)
-                q_t.append(R.from_matrix(pose[:3, :3]).as_quat()) #x,y,z,w
-                p_t.append(pose[:3, 3])
-            ######
+    def _load_poses(self, bsdf_times: np.ndarray) -> None:
+        """Load the timestamped poses reported from TagSLAM and BundleSDF,
+        saving the results in attributes:
+            - self.tagslam_full_times
+            - self.tagslam_full_poses
+            - self.bundlesdf_full_times
+            - self.bundlesdf_full_poses
+        
+        The TagSLAM information comes from the ground truth pose directory's
+        file tagslam.txt, which is generated by rosbag_processor.py's
+        extract_time_versus_poses.  The BundleSDF information comes from the
+        BundleSDF output directory's XXXX.txt files, which are generated by
+        running BundleSDF and are timestamped according to this method's
+        provided bsdf_times (which come from the timestamps associated with the
+        RGBD images).
+
+        Inputs:
+            bsdf_times (N,)
+        """
+        self._load_tagslam_poses()
+        self._load_bundlesdf_poses(bsdf_times)
+
+        print(f'\nTarget frame rate: {self.frame_rate}\n')
+
+        tagslam_full_dts = np.mean(
+            self.tagslam_full_times[1:] - self.tagslam_full_times[:-1]
+        )
+        print(f'TagSLAM full trajectory information:' + \
+              f'\n\t{self.tagslam_full_poses.shape=}' + \
+              f'\n\t{self.tagslam_full_times[0]=}' + \
+              f'\n\tAverage frame rate (full): {1/tagslam_full_dts}\n')
+
+        bsdf_full_dts = np.mean(
+            self.bundlesdf_full_times[1:] - self.bundlesdf_full_times[:-1]
+        )
+        print(f'BundleSDF full trajectory information:' + \
+              f'\n\t{self.bundlesdf_full_poses.shape=}' + \
+              f'\n\t{self.bundlesdf_full_times[0]=}' + \
+              f'\n\tAverage frame rate (full): {1/bsdf_full_dts}\n')
+        
+    def _load_tagslam_poses(self) -> None:
+        """Load all the poses reported by TagSLAM.  These are in world
+        coordinates of the TagSLAM body origin with the following ordering:
+            [x, y, z, qx, qy, qz, qw]
+        """
+        tagslam_data = np.loadtxt(op.join(self.tagslam_dir, 'tagslam.txt'))
+
+        self.tagslam_full_times = tagslam_data[:, 0]
+        self.tagslam_full_poses = tagslam_data[:, 1:]
+
+    def _load_bundlesdf_poses(self, timestamps: np.ndarray) -> None:
+        """Load all the poses reported by BundleSDF.  These are in world
+        coordinates of the **TagSLAM body origin (converted from BundleSDF
+        origin in cameracoordinates via math_utils.transform_bundletrack_output)
+        with the following ordering:
+            [x, y, z, qx, qy, qz, qw]
+        """
+        bundlesdf_poses, bundlesdf_times = [], []
+
+        for i in range(1, len(timestamps)):
+            trans_mat = np.loadtxt(op.join(self.bundlesdf_dir, "%04i.txt" % i))
+            trans_mat = math_utils.transform_bundletrack_output(
+                trans_mat, self.bundlesdf_dir, self.annotated_dir,
+                self.cam_trans, self.cam_rot_axis_angle, to_world=True
+            )
+            pos_quat = math_utils.trans_mat_to_pos_quat(trans_mat).reshape(7)
+            bundlesdf_poses.append(pos_quat)
+            bundlesdf_times.append(timestamps[i])
+
+        self.bundlesdf_full_poses = np.array(bundlesdf_poses)
+        self.bundlesdf_full_times = np.array(bundlesdf_times)
+
+    def _estimate_linear_velocities(
+            self, ts, ps, filter=FILTER_LINEAR_VELOCITIES) -> np.ndarray:
+        """From times and positions, estimate the linear velocities at each time
+        step.
+
+        Args:
+            ts (N,)
+            ps (N, 3)
+            filter:  whether or not to filter the result.
+
+        Outputs:
+            vs (N, 3)
+        """
+        # Do some input checking.
+        assert ts.ndim == 1, f'{ts.shape=} not of expected size (N,).'
+        assert ps.shape == (ts.shape[0], 3), f'{ps.shape=} not of expected ' + \
+            f'size ({ts.shape[0]}, 3).'
+
+        # Compute time differences.
+        t_start = ts[0]
+        t = ts - t_start
+        tdiff = np.tile((t[1:] - t[:-1]).reshape([-1, 1]), [1, 3])
+
+        # Compute velocities based on differences in position over time step.
+        pdiff = ps[1:, :] - ps[:-1, :]
+        vs = pdiff / tdiff
+
+        # Repeat first row so that \delta p = v' \delta t.
+        vs = np.vstack((vs[[0], :], vs))
+
+        if filter:
+            if FILTER_TYPE == 'savgol':
+                vs = signal.savgol_filter(
+                    vs, window_length=SAVGOL_FILTER_WINDOW_LENGTH,
+                    polyorder=SAVGOL_FILTER_POLYORDER, axis=0)
+            elif FILTER_TYPE == 'median':
+                for i in range(3):
+                    vs[:, i] = signal.medfilt(
+                        vs[:, i], kernel_size=MEDIAN_FILTER_KERNEL_SIZE)
             else:
-                print(">>>>>>>>>>> Using ground-truth")
-                tagslam_pose = tagslam_data[frame_id, 1:]
-                q_t.append(tagslam_pose[3:])#xyzw
-                p_t.append(tagslam_pose[:3])
-            ######
-            curr_t = self.timestamps[frame_id]
-            t.append(curr_t - t_start)
-        # q_t, p_t, t = self.force_landing(q_t, p_t, t) #force the final configuraton
-        quats = np.array(q_t)
-        positions = np.array(p_t)
-        ts = np.array(t)
-        print(f'quats: {quats.shape}, positions: {positions.shape}, ts: {ts.shape}')
-        self.q_t = quats
-        self.p_t = positions
-        self.t = ts
-        print(f'load_poses: self.q_t {self.q_t.shape}, self.p_t: {self.p_t.shape}, self.t: {self.t.shape}')
+                raise NotImplementedError
+
+        return vs
+
+    def _estimate_angular_velocities(
+            self, ts, qs, filter=FILTER_ANGULAR_VELOCITIES) -> np.ndarray:
+        """From times and orientations, estimate the angular velocities at each
+        time step.  These angular velocities are reported in body frame.
+
+        Args:
+            ts (N,)
+            qs (N, 4)
+            filter:  whether or not to filter the result.
+
+        Outputs:
+            ws (N, 3)
+        """
+        # Do some input checking.
+        assert ts.ndim == 1, f'{ts.shape=} not of expected size (N,).'
+        assert qs.shape == (ts.shape[0], 4), f'{qs.shape=} not of expected ' + \
+            f'size ({ts.shape[0]}, 4).'
+
+        # Compute time differences.
+        t_start = ts[0]
+        t = ts - t_start
+        tdiff = np.tile((t[1:] - t[:-1]).reshape([-1, 1]), [1, 3])
+
+        # Compute velocities based on differences in orientation over time step.
+        rot_t = Rotation.from_quat(qs)
+        rot_rel = rot_t[:-1].inv() * rot_t[1:]
+        rel_vecs = rot_rel.as_rotvec()
+        ws = rel_vecs / tdiff     # (N, 3)
+        
+        # Repeat first row so that \delta q = w' \delta t.
+        ws = np.vstack((ws[[0], :], ws))
+
+        if filter:
+            if FILTER_TYPE == 'savgol':
+                ws = signal.savgol_filter(
+                    ws, window_length=SAVGOL_FILTER_WINDOW_LENGTH,
+                    polyorder=SAVGOL_FILTER_POLYORDER, axis=0)
+            elif FILTER_TYPE == 'median':
+                for i in range(3):
+                    ws[:, i] = signal.medfilt(
+                        ws[:, i], kernel_size=MEDIAN_FILTER_KERNEL_SIZE)
+            else:
+                raise NotImplementedError
+
+        return ws
+
+    def _filter_quaternions(self, quat):
+        """Filter and process reported quaternions."""
+        # Do some input checking.
+        assert quat.shape[1] == 4, f'{quat.shape=} not of expected size (N, 4).'
+        assert quat.ndim == 2, f'{quat.shape=} not of expected size (N, 4).'
+
+        quat /= np.linalg.norm(quat, axis=1).reshape(-1,1)
+        rot_t = Rotation.from_quat(quat)
+
+        # Fix and filter quaternions.
+        rvecs = rotvecfix(rot_t.as_rotvec())
+        for i in range(3):
+            # Always use medfilt no matter FILTER_TYPE.
+            rvecs[:, i] = signal.medfilt(
+                rvecs[:, i], kernel_size=MEDIAN_FILTER_KERNEL_SIZE)
+        rot_t = rot_t.from_rotvec(rvecs)
+
+        return rot_t.as_quat()
     
-    # def force_landing(self, q_t, p_t, t):
-    #     data = np.loadtxt(GT_POSE_DIR+'tagslam.txt')
-    #     s = self.end_frame-10
-    #     e = self.end_frame-1
-    #     tagslam_final_poses = data[s:e, 2:]
-    #     q_t.append(tagslam_final_poses[:, 3:])#xyzw
-    #     p_t.append(tagslam_final_poses[:, :3])
-    #     prev_tdiff = self.timestamps[self.end_frame-1] - self.timestamps[self.end_frame-2]
-    #     t_start = self.timestamps[self.start_frame]
-    #     for i in range(s,e):
-    #         curr_t = self.timestamps[i] + prev_tdiff
-    #         t.append(curr_t - t_start)
-    #     print(len())
-    #     return q_t, p_t, t
-
-    def upsample(self, quats, positions, ts, frame_rate, original_frame_rate=30):
-        """
-        @quats: (N, 4), x,y,z,w
-        @positions: (N, 3)
-        @frame_rate: final frame rate of the trajectorys
-        """
-        quats = xyzw2wxyz(quats) #w,x,y,z
-        quats = quats / np.linalg.norm(quats, axis=1)[:, np.newaxis]
-        # upsample the trajectory
-        N = quats.shape[0]
-        for i in range(1, N):
-            if np.dot(quats[0], quats[i]) < 0:
-                quats[i] = -quats[i]
-
-        # Upsample factor
-        duration = (N-1)/original_frame_rate
-        M = int(duration*frame_rate)+1
-        new_times = np.linspace(0, 1, M)
-
-        # Interpolate positions using linear interpolation
-        interp_func_x = interp1d(np.linspace(0, 1, N), positions[:, 0], kind='linear')
-        interp_func_y = interp1d(np.linspace(0, 1, N), positions[:, 1], kind='linear')
-        interp_func_z = interp1d(np.linspace(0, 1, N), positions[:, 2], kind='linear')
-
-        new_positions = np.vstack([
-            interp_func_x(new_times),
-            interp_func_y(new_times),
-            interp_func_z(new_times)
-        ]).T
-
-        new_quaternions = np.zeros((M, 4))
-        for i in range(N-1):  # Adjusted loop condition
-            start_idx = i * (M // (N-1))
-            end_idx = start_idx + (M // (N-1))
-            t_array = np.linspace(0, 1, M//(N-1))
-            q0 = Quaternion(quats[i, :])
-            q1 = Quaternion(quats[i+1, :]) if i < N-2 else Quaternion(quats[-1, :])
-            interpolated_quats = [Quaternion.slerp(q0, q1, amount=t).elements for t in t_array]
-            new_quaternions[start_idx:end_idx, :] = np.array(interpolated_quats)
-        if end_idx < M:
-            new_quaternions[end_idx:] = quats[-1]
-        
-        interp_func_timestamps = interp1d(np.linspace(0, 1, N), ts, kind='linear')
-        new_timestamps = interp_func_timestamps(new_times)
-        new_quaternions = wxyz2xyzw(new_quaternions) #x,y,z,w
-        return new_quaternions, new_positions, new_timestamps
-            
-    def do_process(self):
-        """
-        Generate contactnets trajectory.
-        The PLL format is in:
-	    [ quaternion  position  angular_velocity  linear_velocity ]
+    def _process_poses(
+            self, poses, times, filter_rot=FILTER_ORIENTATIONS,
+            filter_pos=FILTER_POSITIONS,
+            filter_lin_vel=FILTER_LINEAR_VELOCITIES,
+            filter_ang_vel=FILTER_ANGULAR_VELOCITIES,
+            adjust_position=ADJUST_POSITION
+    ) -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+        """Generate contactnets-format trajectory components.  This requires
+        estimating velocities from differences in pose and converting everything
+        to PLL format.  The PLL format is in:
+	        [ quaternion  position  angular_velocity  linear_velocity ]
         where:
-            - position:  		[x, y, z] in meters
             - quaternion: 		[qw, qx, qy, qz]
-            - linear_velocity: 	[vx, vy, vz] in meters/second
+            - position:  		[x, y, z] in meters
             - angular_velocity:	[wx, wy, wz] in rad/second in body frame
+            - linear_velocity: 	[vx, vy, vz] in meters/second
+
+        Args:
+            poses (N, 7):  Poses in order of [x, y, z, qx, qy, qz, qw].
+            times (N,)
+
+        Outputs:
+            qs_wxyz (N, 4)
+            ps (N, 3)
+            ws (N, 3)
+            vs (N, 3)
         """
-        rot_t = R.from_quat(self.q_t)
-        filter_rot = True
+        # Do some input checking.
+        assert times.ndim == 1, f'{times.shape=} not of expected size (N,).'
+        assert poses.shape == (times.shape[0], 7), f'{poses.shape=} not of ' + \
+            f'expected size ({times.shape[0]}, 7).'
+
+        # Split the poses into positions and quaternions.
+        ps = poses[:, :3]
+        qs_xyzw = poses[:, 3:7]
+        t = times
+
+        # Do orientation filtering if desired.
         if filter_rot:
-            rvecs = rotvecfix(rot_t.as_rotvec()).T
-            for i in range(3):
-                rvecs[i,:] = signal.medfilt(rvecs[i,:],kernel_size=3)
-        rot_t = rot_t.from_rotvec(rvecs.T)
-        quat_t = rot_t.as_quat()  #x,y,z,w
-        
-        filter_pos = True
+            qs_xyzw = self._filter_quaternions(qs_xyzw)
+
+        # Do position filtering if desired.
         if filter_pos:
-            # self.p_t = smooth_positions(self.p_t, window_size=5)
-            print("self.p_t before smoothing:", self.p_t.shape) #N,3
-            for i in range(3):
-                self.p_t[:, i] = signal.savgol_filter(self.p_t[:, i], window_length=15, polyorder=3)
-            print("self.p_t:", self.p_t.shape) #N,3
-        ##### Upsample
-        quat_t = quat_t / np.linalg.norm(quat_t, axis=1).reshape(-1,1)
-        print(f"quat_t: {quat_t.shape}") #N,4
-        # if quat_t.shape[0] >= 100: #if data long enough, skip upsampling
-        #     self.q_t, self.p_t, self.t = quat_t, self.p_t, self.t
-        # else:
-        #     self.q_t, self.p_t, self.t = self.upsample(quat_t, self.p_t, self.t) #xyzw
-        if self.frame_rate != 30:
-            self.q_t, self.p_t, self.t = self.upsample(quat_t, self.p_t, self.t, frame_rate=self.frame_rate, original_frame_rate=30) #xyzw
-            print(f'after upsample: {self.q_t.shape}, {self.p_t.shape}, {self.t.shape}')
-        self.q_t = self.q_t / np.linalg.norm(self.q_t, axis=1).reshape(-1,1) #N,4
-        rot_t = R.from_quat(self.q_t) #N,3,3
-        #####
-        adjust_pos = True
-        # FINAL _Z = 0.05 #0.032  #0.050924062270897685 #0.025 #0.05126618331135579
-        PLANK_HEIGHT = FINAL_Z - self.p_t[-1, -1]
-        # PLANK_HEIGHT = 1.0
-        print(f'PLANK_HEIGHT: {PLANK_HEIGHT}')
-        if adjust_pos: # the franka is on a plank, need to add the plank height to z
-            for i in range(self.p_t.shape[0]): #N,3
-                self.p_t[i, -1] = self.p_t[i, -1] + PLANK_HEIGHT
-                # if self.p_t[-1, -1] != 0.0: # force landing on the table
-                #     self.p_t[-1, -1] = 0.0
-                # if self.p_t[i, -1] < 0.0:
-                #     self.p_t[i, -1] = 0.0
-        print(f'z position: {self.p_t[-1, -1]}')
+            if FILTER_TYPE == 'savgol':
+                ps = signal.savgol_filter(
+                    ps, window_length=SAVGOL_FILTER_WINDOW_LENGTH,
+                    polyorder=SAVGOL_FILTER_POLYORDER, axis=0)
+            elif FILTER_TYPE == 'median':
+                for i in range(3):
+                    ps[:, i] = signal.medfilt(
+                        ps[:, i], kernel_size=MEDIAN_FILTER_KERNEL_SIZE)
+            else:
+                raise NotImplementedError
 
-        self.p_t = self.p_t.T
-        pdiff = self.p_t[:,1:] - self.p_t[:,:-1]
-        tdiff = np.tile((self.t[1:] - self.t[:-1]).reshape([1,-1]), [3,1])
-        dp_t = pdiff / tdiff
-        dp_t = np.hstack((dp_t[:,[0]],dp_t))
-        to_body = True
-        if to_body:
-            rot_diff = [rot_t[i+1] * rot_t[i].inv() for i in range(len(rot_t) - 1)]
-            w_t = np.array([rd.as_rotvec() for rd in rot_diff]).T / tdiff
-            w_t = np.hstack((w_t[:, [0]], w_t)).T
-            w_t_body = np.zeros_like(w_t)
-            for j in range(len(rot_t)):
-                rotation_matrix = rot_t[j].as_matrix()
-                w_t_body[j] = rotation_matrix.T @ w_t[j]
-        w_t_body = w_t_body.T
-        print(f'w_t_body: {w_t_body.shape}') #3, M
-        print(f'dp_t: {dp_t.shape}') #3,M
-        # butterworth filter of order 2 to smooth velocity states
-        # sampling frequency
-        fs = 148.
+        # Adjust position height if desired.
+        if adjust_position:
+            self.z_shift -= ps[-1, 2]
+        ps[:, 2] += self.z_shift
 
-        # Cut-off frequency of angular velocity filter. < fs/2 (Nyquist)
-        fc_w = 60.
+        # Calculate derivatives.
+        vs = self._estimate_linear_velocities(ts=t, ps=ps, filter=filter_lin_vel)
+        ws = self._estimate_angular_velocities(ts=t, qs=qs_xyzw,
+                                              filter=filter_ang_vel)
 
-        # Cut-off frequency of linear velocity filter. < fs/2 (Nyquist)
-        fc_v = 45.
+        # Package into PLL format.
+        qs_wxyz = math_utils.xyzw2wxyz(qs_xyzw)
+        return qs_wxyz, ps, ws, vs
+        
+    def do_process(self) -> None:
+        """Generate contactnets-format trajectories for both TagSLAM and
+        BundleSDF outputs.  This requires estimating velocities from differences
+        in pose, converting everything to PLL format, and trimming the
+        trajectories to view the autonomous dynamics during the toss only.  The
+        PLL format is in:
+	        [ quaternion  position  angular_velocity  linear_velocity ]
+        where:
+            - quaternion: 		[qw, qx, qy, qz]
+            - position:  		[x, y, z] in meters
+            - angular_velocity:	[wx, wy, wz] in rad/second in body frame
+            - linear_velocity: 	[vx, vy, vz] in meters/second
 
-        # Cut-off frequency of linear accel filter. < fs/2 (Nyquist)
-        fc_a = 45.
-        filter_avel = True
-        if filter_avel:
-            # filter angular velocity
-            w_w = np.clip((fc_w / (fs / 2)), a_min = 0.000001, a_max = 0.999999) # Normalize the frequency
-            b, a = signal.butter(1, w_w, 'low')
-            print("w_t_body before smoothing:", w_t_body.shape) #3,N
-            for i in range(3):
-                # w_t_body[i,:] = signal.medfilt(w_t_body[i,:],kernel_size=3)
-                w_t_body[i,:] = signal.savgol_filter(w_t_body[i,:], window_length=15, polyorder=4)
-            print("w_t_body after smoothing:", w_t_body.shape) #3,N
-        filter_vel = True
-        if filter_vel:
-            # filter linear velocity
-            w_v = np.clip((fc_v / (fs / 2)), a_min = 0.000001, a_max = 0.999999) # Normalize the frequency
-            b, a = signal.butter(1, w_v, 'low')
-            print("dp_t before smoothing:", dp_t.shape) #3,N
-            for i in range(3):
-                #dp_t[i,:] = signal.filtfilt(b, a, dp_t[i,:],padtype='odd',padlen=100)
-                # dp_t[i,:] = signal.medfilt(dp_t[i,:],kernel_size=3)
-                dp_t[i,:] = signal.savgol_filter(dp_t[i,:], window_length=10, polyorder=4)
-            print("dp_t after smoothing:", dp_t.shape) #3,N
-        quat_shuffle = xyzw2wxyz(self.q_t).T #4,N, wxyz
-        print(f'quat_shuffle: {quat_shuffle.shape}')
-        quat_shuffle = quat_shuffle / np.linalg.norm(quat_shuffle,axis=0)
-        print(f'quat normal: {np.linalg.norm(quat_shuffle)}')
-        data = np.concatenate((quat_shuffle, self.p_t, w_t_body, dp_t), axis=0)
-        p_t = self.p_t.T
-        quat_shuffle = quat_shuffle.T
-        dp_t = dp_t.T
-        w_t_body = w_t_body.T
-        data = data.T
-        print('data: ', data.shape) #N,13
-        print(p_t.shape, quat_shuffle.shape, dp_t.shape, w_t_body.shape)
-        torch.save(torch.tensor(data), CONTACTNETS_INPUT_DIR + "{}.pt".format(self.toss_id))
-        print(f'file {self.toss_id}.pt saved at {CONTACTNETS_INPUT_DIR + "{}.pt".format(self.toss_id)}')
-        fig, ax = plt.subplots(4, 3, figsize=(15, 15))
-        ax[0, 0].plot(p_t[:, 0])
+        This method stores the full state trajectories in attributes:
+            - self.tagslam_full_processed_states
+            - self.bundlesdf_full_processed_states
+
+        Then this method additionally stores the trimmed trajectories:
+            - self.tagslam_toss_processed_states
+            - self.bundlesdf_toss_processed_states
+            - self.tagslam_toss_times
+            - self.bundlesdf_toss_times
+        """
+        # Process TagSLAM and BundleSDF data.
+        q_ts, p_ts, w_ts, v_ts = self._process_poses(
+            self.tagslam_full_poses, self.tagslam_full_times,
+            adjust_position=True)
+        q_bsdf, p_bsdf, w_bsdf, v_bsdf = self._process_poses(
+            self.bundlesdf_full_poses, self.bundlesdf_full_times,
+            adjust_position=False)
+        
+        self.tagslam_full_processed_states = np.concatenate(
+            (q_ts, p_ts, w_ts, v_ts), axis=1)
+        self.bundlesdf_full_processed_states = np.concatenate(
+            (q_bsdf, p_bsdf, w_bsdf, v_bsdf), axis=1)
+        
+        # Store trimmed trajectories for toss only.
+        self._trim_processed_trajectories()
+
+        # Print information about the trimmed trajectories.
+        tagslam_toss_dts = np.mean(
+            self.tagslam_toss_times[1:] - self.tagslam_toss_times[:-1]
+        )
+        print(f'TagSLAM toss trajectory information:' + \
+              f'\n\t{self.tagslam_toss_processed_states.shape=}' + \
+              f'\n\t{self.tagslam_toss_times[0]=}' + \
+              f'\n\tAverage frame rate (toss): {1/tagslam_toss_dts}\n')
+
+        bsdf_toss_dts = np.mean(
+            self.bundlesdf_toss_times[1:] - self.bundlesdf_toss_times[:-1]
+        )
+        print(f'BundleSDF toss trajectory information:' + \
+              f'\n\t{self.bundlesdf_toss_processed_states.shape=}' + \
+              f'\n\t{self.bundlesdf_toss_times[0]=}' + \
+              f'\n\tAverage frame rate (toss): {1/bsdf_toss_dts}\n')
+
+    def _trim_processed_trajectories(self) -> None:
+        """After trajectories are already processed, store trimmed versions of
+        them corresponding to autonomous dynamics throughout a toss."""
+        # Need to do one less than provided start and end frames because loaded
+        # data in 1-indexed directory but provided 0-indexed start_frame and
+        # end_frame.
+        b_start = self.start_frame-1
+        b_end = self.end_frame-1
+        self.bundlesdf_toss_processed_states = \
+            self.bundlesdf_full_processed_states[b_start:b_end]
+        self.bundlesdf_toss_times = self.bundlesdf_full_times[b_start:b_end]
+
+        # Find the start and end frames that are most synchronized in time with
+        # those pre-selected for BundleSDF trajectories.
+        t_start = np.argmin(
+            (self.tagslam_full_times - self.bundlesdf_toss_times[0])**2)
+        t_end = t_start + (b_end - b_start)
+        self.tagslam_toss_processed_states = \
+            self.tagslam_full_processed_states[t_start:t_end]
+        self.tagslam_toss_times = self.tagslam_full_times[t_start:t_end]
+        
+    def plot_trajectory(self, full_trajectory: bool = True) -> None:
+        """Visualize the BundleSDF and TagSLAM trajectories overlayed on a set
+        of plots."""
+        if full_trajectory:
+            q_ts = self.tagslam_full_processed_states[:, 0:4]
+            p_ts = self.tagslam_full_processed_states[:, 4:7]
+            w_ts = self.tagslam_full_processed_states[:, 7:10]
+            v_ts = self.tagslam_full_processed_states[:, 10:13]
+            t_ts = self.tagslam_full_times
+
+            q_bsdf = self.bundlesdf_full_processed_states[:, 0:4]
+            p_bsdf = self.bundlesdf_full_processed_states[:, 4:7]
+            w_bsdf = self.bundlesdf_full_processed_states[:, 7:10]
+            v_bsdf = self.bundlesdf_full_processed_states[:, 10:13]
+            t_bsdf = self.bundlesdf_full_times
+
+            title='Full Trajectory Results'
+
+        else:
+            q_ts = self.tagslam_toss_processed_states[:, 0:4]
+            p_ts = self.tagslam_toss_processed_states[:, 4:7]
+            w_ts = self.tagslam_toss_processed_states[:, 7:10]
+            v_ts = self.tagslam_toss_processed_states[:, 10:13]
+            t_ts = self.tagslam_toss_times
+
+            q_bsdf = self.bundlesdf_toss_processed_states[:, 0:4]
+            p_bsdf = self.bundlesdf_toss_processed_states[:, 4:7]
+            w_bsdf = self.bundlesdf_toss_processed_states[:, 7:10]
+            v_bsdf = self.bundlesdf_toss_processed_states[:, 10:13]
+            t_bsdf = self.bundlesdf_toss_times
+
+            title='Toss Trajectory Results'
+
+        first_t = min(min(t_ts), min(t_bsdf))
+        t_ts -= first_t
+        t_bsdf -= first_t
+
+        fig, ax = plt.subplots(4, 4, figsize=(15, 15), sharex='all',
+                               sharey='row')
+        ax[0, 0].plot(t_ts, p_ts[:, 0], label='TagSLAM')
+        ax[0, 0].plot(t_bsdf, p_bsdf[:, 0], label='BundleSDF')
         ax[0, 0].set_title('X Position')
-        ax[0, 1].plot(p_t[:, 1])
+        ax[0, 1].plot(t_ts, p_ts[:, 1], label='TagSLAM')
+        ax[0, 1].plot(t_bsdf, p_bsdf[:, 1], label='BundleSDF')
         ax[0, 1].set_title('Y Position')
-        ax[0, 2].plot(p_t[:, 2])
+        ax[0, 2].plot(t_ts, p_ts[:, 2], label='TagSLAM')
+        ax[0, 2].plot(t_bsdf, p_bsdf[:, 2], label='BundleSDF')
         ax[0, 2].set_title('Z Position')
 
-        ax[1, 0].plot(quat_shuffle[:, 0])
-        ax[1, 0].set_title('Quaternion w')
-        ax[1, 1].plot(quat_shuffle[:, 1])
-        ax[1, 1].set_title('Quaternion x')
-        ax[1, 2].plot(quat_shuffle[:, 2])
-        ax[1, 2].set_title('Quaternion y')
-        ax[2, 0].plot(quat_shuffle[:, 3])
-        ax[2, 0].set_title('Quaternion z')
+        ax[1, 0].plot(t_ts, q_ts[:, 0], label='TagSLAM')
+        ax[1, 0].plot(t_bsdf, q_bsdf[:, 0], label='BundleSDF')
+        ax[1, 0].set_title('W Quaternion')
+        ax[1, 1].plot(t_ts, q_ts[:, 1], label='TagSLAM')
+        ax[1, 1].plot(t_bsdf, q_bsdf[:, 1], label='BundleSDF')
+        ax[1, 1].set_title('X Quaternion')
+        ax[1, 2].plot(t_ts, q_ts[:, 2], label='TagSLAM')
+        ax[1, 2].plot(t_bsdf, q_bsdf[:, 2], label='BundleSDF')
+        ax[1, 2].set_title('Y Quaternion')
+        ax[1, 3].plot(t_ts, q_ts[:, 3], label='TagSLAM')
+        ax[1, 3].plot(t_bsdf, q_bsdf[:, 3], label='BundleSDF')
+        ax[1, 3].set_title('Z Quaternion')
 
-        ax[2, 1].plot(w_t_body[:, 0])
-        ax[2, 1].set_title('Angular Velocity X')
-        ax[2, 2].plot(w_t_body[:, 1])
-        ax[2, 2].set_title('Angular Velocity Y')
-        ax[3, 0].plot(w_t_body[:, 2])
-        ax[3, 0].set_title('Angular Velocity Z')
+        ax[2, 0].plot(t_ts, v_ts[:, 0], label='TagSLAM')
+        ax[2, 0].plot(t_bsdf, v_bsdf[:, 0], label='BundleSDF')
+        ax[2, 0].set_title('X Velocity')
+        ax[2, 1].plot(t_ts, v_ts[:, 1], label='TagSLAM')
+        ax[2, 1].plot(t_bsdf, v_bsdf[:, 1], label='BundleSDF')
+        ax[2, 1].set_title('Y Velocity')
+        ax[2, 2].plot(t_ts, v_ts[:, 2], label='TagSLAM')
+        ax[2, 2].plot(t_bsdf, v_bsdf[:, 2], label='BundleSDF')
+        ax[2, 2].set_title('Z Velocity')
 
-        ax[3, 1].plot(dp_t[:, 0])
-        ax[3, 1].set_title('Linear Velocity X')
-        ax[3, 2].plot(dp_t[:, 1])
-        ax[3, 2].set_title('Linear Velocity Y')
-        plt.tight_layout()
-        fig.suptitle('Generated from BundleSDF result')
-        plt.savefig(f'bundlesdf_{TOSS_TYPE}_traj_{TOSS_ID}_tagslam.png')
-        print(f'Saved fig bundlesdf_{TOSS_TYPE}_traj_{TOSS_ID}_tagslam.png')
+        ax[3, 0].plot(t_ts, w_ts[:, 0], label='TagSLAM')
+        ax[3, 0].plot(t_bsdf, w_bsdf[:, 0], label='BundleSDF')
+        ax[3, 0].set_title('X Angular Velocity')
+        ax[3, 1].plot(t_ts, w_ts[:, 1], label='TagSLAM')
+        ax[3, 1].plot(t_bsdf, w_bsdf[:, 1], label='BundleSDF')
+        ax[3, 1].set_title('Y Angular Velocity')
+        ax[3, 2].plot(t_ts, w_ts[:, 2], label='TagSLAM')
+        ax[3, 2].plot(t_bsdf, w_bsdf[:, 2], label='BundleSDF')
+        ax[3, 2].set_title('Z Angular Velocity')
+
+        ax[0, 0].set_ylabel('Position [m]')
+        ax[1, 0].set_ylabel('Orientation')
+        ax[2, 0].set_ylabel('Linear Velocity [m/s]')
+        ax[3, 0].set_ylabel('Angular Velocity [rad/s]')
+        ax[3, 0].set_xlabel('Time from first pose [s]')
+        ax[3, 1].set_xlabel('Time from first pose [s]')
+        ax[3, 2].set_xlabel('Time from first pose [s]')
+        ax[3, 3].set_xlabel('Time from first pose [s]')
+
+        handles, labels = ax[3,2].get_legend_handles_labels()
+        fig.legend(handles, labels, loc='lower center')
+
+        fig.suptitle(title)
+        # plt.savefig(f'bundlesdf_{TOSS_TYPE}_traj_{TOSS_ID}_tagslam.png')
+        # print(f'Saved fig bundlesdf_{TOSS_TYPE}_traj_{TOSS_ID}_tagslam.png')
         if self.plot:
             plt.show()
-        
-    def transform(self):
-        self.p_t = self.p_t.T
-        w_t = []
-        dp_t = []
-        ################
-        filter_rot = True
-        rot_t = R.from_quat(self.q_t.T)
-        if filter_rot:
-            rvecs = rotvecfix(rot_t.as_rotvec()).T
-            for i in range(3):
-                rvecs[i,:] = signal.medfilt(rvecs[i,:],kernel_size=3)
-        rot_t = rot_t.from_rotvec(rvecs.T).as_matrix() #N,3,3
-        i = 0
-        ################
-        for frame_id in range(1, self.frame_num-1):
-            print(f'i = {i}, frame_id = {frame_id}')
-            if frame_id < self.start_frame:
-                continue
-            if frame_id >= self.end_frame:
-                break
-            rotation = rot_t[i]
-            rotation_ = rot_t[i+1]
-            translation = self.p_t[i]
-            translation_ = self.p_t[i+1]
-            q = R.from_matrix(rotation).as_quat()
-            q_shuffle = np.concatenate((q[3:4], q[0:3]), axis=0) #wxyz
-            dt = self.t[i+1] - self.t[i]
-            ang_velocity = self.get_angular_velocity(rotation, rotation_, dt)
-            ang_velocity_body = rotation.T @ ang_velocity
-            lin_velocity = self.get_linear_velocity(translation, translation_, dt)
-            w_t.append(ang_velocity_body)
-            dp_t.append(lin_velocity)
-            ################ For Plotting ################
-            self.positions.append(translation)
-            self.quats.append(q_shuffle)
-            ##############################################
-            i += 1 
+        plt.close()
 
-        # mid filter of order 2 to smooth velocity states
-        w_t = np.array(w_t)
-        dp_t = np.array(dp_t)
-        
-        # sampling frequency
-        fs = 148.
+    def save_data(self, save_tagslam: bool = False,
+                  save_bundlesdf: bool = False) -> None:
+        """Stores data as .pt files in the ContactNets input directory."""
+        traj_filename = f'{self.toss_id - 1}.pt'
 
-        # Cut-off frequency of angular velocity filter. < fs/2 (Nyquist)
-        fc_w = 60.
+        print('Saving files summary:')
 
-        # Cut-off frequency of linear velocity filter. < fs/2 (Nyquist)
-        fc_v = 45.
+        if save_tagslam:
+            full_tagslam_dir = file_utils.contactnets_input_dir_tagslam(
+                self.toss_type, full=True)
+            toss_tagslam_dir = file_utils.contactnets_input_dir_tagslam(
+                self.toss_type, full=False)
+            torch.save(
+                torch.tensor(self.tagslam_full_processed_states),
+                op.join(full_tagslam_dir, traj_filename))
+            torch.save(
+                torch.tensor(self.tagslam_toss_processed_states),
+                op.join(toss_tagslam_dir, traj_filename))
+            print(f'\t{op.join(full_tagslam_dir, traj_filename)}.')
+            print(f'\t{op.join(toss_tagslam_dir, traj_filename)}.')
 
-        # Cut-off frequency of linear accel filter. < fs/2 (Nyquist)
-        fc_a = 45.
-        filter_avel = True
-        if filter_avel:
-            # filter angular velocity
-            w_w = np.clip((fc_w / (fs / 2)), a_min = 0.000001, a_max = 0.999999) # Normalize the frequency
-            b, a = signal.butter(1, w_w, 'low')
-            for i in range(3):
-                w_t[:, i] = signal.medfilt(w_t[:, i],kernel_size=3)
-                # w_t[:, i] = signal.filtfilt(b, a, w_t[:, i],padtype='odd')
-        
-        filter_vel = True
-        if filter_vel:
-            # filter linear velocity
-            w_v = np.clip((fc_v / (fs / 2)), a_min = 0.000001, a_max = 0.999999) # Normalize the frequency
-            b, a = signal.butter(1, w_v, 'low')
-            for i in range(3):
-                # dp_t[:, i] = signal.filtfilt(b, a, dp_t[:, i],padtype='odd')
-                dp_t[:, i] = signal.medfilt(dp_t[:, i],kernel_size=3)
-        
-        self.positions = np.array(self.positions)
-        self.quats = np.array(self.quats) #wxyz
-        self.interpolated_ang_vels = np.array(w_t)
-        self.interpolated_lin_vels = np.array(dp_t)
-        print(self.positions.shape, self.quats.shape, self.interpolated_ang_vels.shape, self.interpolated_lin_vels.shape)
-        # data = np.concatenate((self.positions, self.quats, self.interpolated_lin_vels, self.interpolated_ang_vels), axis=1)
-        data = np.concatenate((self.quats, self.positions, self.interpolated_ang_vels, self.interpolated_lin_vels), axis=1)
-        print(f'traj size: {data.shape}')
-        torch.save(torch.tensor(data), CONTACTNETS_INPUT_DIR + "{}.pt".format(self.toss_id))
-        print(f'file {self.toss_id}.pt saved at {CONTACTNETS_INPUT_DIR + "{}.pt".format(self.toss_id)}')
-        ################ For Plotting ################
-        if self.plot:
-            self.plot_data()
-        ##############################################
+        if save_bundlesdf:
+            full_bundlesdf_dir = file_utils.contactnets_input_dir_bundlesdf(
+                self.toss_type, iteration=self.iteration_num, full=True)
+            toss_bundlesdf_dir = file_utils.contactnets_input_dir_bundlesdf(
+                self.toss_type, iteration=self.iteration_num, full=False)
+            torch.save(
+                torch.tensor(self.bundlesdf_full_processed_states),
+                op.join(full_bundlesdf_dir, traj_filename))
+            torch.save(
+                torch.tensor(self.bundlesdf_toss_processed_states),
+                op.join(toss_bundlesdf_dir, traj_filename))
+            print(f'\t{op.join(full_bundlesdf_dir, traj_filename)}.')
+            print(f'\t{op.join(toss_bundlesdf_dir, traj_filename)}.')
 
-    def get_angular_velocity(self, curr_rot, next_rot, dt):
-        R_diff = next_rot @ curr_rot.T
-        trace = np.trace(R_diff)
-        theta = np.arccos(np.clip((trace - 1.0) / 2.0, -1.0, 1.0))
-        if np.abs(theta) < 1e-6:
-            k = np.array([1.0, 0.0, 0.0])
-        else:
-            k = np.array([R_diff[2, 1] - R_diff[1, 2],
-                        R_diff[0, 2] - R_diff[2, 0],
-                        R_diff[1, 0] - R_diff[0, 1]])
-            k /= (2.0 * np.sin(theta))
-
-        angular_velocity = (theta / max(dt, 1e-9)) * k
-        return angular_velocity
-
-    def get_linear_velocity(self, curr_trans, next_trans, dt):
-        return (next_trans - curr_trans) / dt
-    
-    def transform_bundlesdf_to_tagslam_body_frame(self, tagslam_pos_b, tagslam_rot_b):
-        """BundleSDF's body frame is defined by the centroid of initial point cloud, whereas TagSLAM's body frame is defined by tag pose. Need to align their body frames to get exact center of mass for dair_pll.
-        @tagslam_pos_b: TagSLAM's body frame position defined in build_XXX_tagslam.yaml.
-        @tagslam_rot_b: TagSLAM's body frame orientation defined in build_XXX_tagslam.yaml.
-        """
-        tagslam_pos_b = np.array([tagslam_pos_b['x'], tagslam_pos_b['y'], tagslam_pos_b['z']])
-        tagslam_rot_b = R.from_rotvec([tagslam_rot_b['x'], tagslam_rot_b['y'], tagslam_rot_b['z']]).as_quat()
-        tagslam_rotation = R.from_quat(tagslam_rot_b)
-        self.p_t = self.p_t - tagslam_pos_b
-        for i in range(len(self.q_t)):
-            # Convert BundleSDF quaternion to a rotation object
-            bundlesdf_rotation = R.from_quat(self.q_t[i])
-
-            # Apply rotation transformation
-            transformed_rotation = tagslam_rotation.inv() * bundlesdf_rotation
-
-            # Update quaternion
-            self.q_t[i] = transformed_rotation.as_quat()
-
-    def plot_data(self):
-        positions = np.array(self.positions)
-        quats = np.array(self.quats) #wxyz
-        angular_vels = np.array(self.interpolated_ang_vels)
-        linear_vels = np.array(self.interpolated_lin_vels)
-        fig, ax = plt.subplots(4, 3, figsize=(15, 15))
-        ax[0, 0].plot(positions[:, 0])
-        ax[0, 0].set_title('X Position')
-        ax[0, 1].plot(positions[:, 1])
-        ax[0, 1].set_title('Y Position')
-        ax[0, 2].plot(positions[:, 2])
-        ax[0, 2].set_title('Z Position')
-
-        ax[1, 0].plot(quats[:, 0])
-        ax[1, 0].set_title('Quaternion w')
-        ax[1, 1].plot(quats[:, 1])
-        ax[1, 1].set_title('Quaternion x')
-        ax[1, 2].plot(quats[:, 2])
-        ax[1, 2].set_title('Quaternion y')
-        ax[2, 0].plot(quats[:, 3])
-        ax[2, 0].set_title('Quaternion z')
-
-        ax[2, 1].plot(angular_vels[:, 0])
-        ax[2, 1].set_title('Angular Velocity X')
-        ax[2, 2].plot(angular_vels[:, 1])
-        ax[2, 2].set_title('Angular Velocity Y')
-        ax[3, 0].plot(angular_vels[:, 2])
-        ax[3, 0].set_title('Angular Velocity Z')
-
-        ax[3, 1].plot(linear_vels[:, 0])
-        ax[3, 1].set_title('Linear Velocity X')
-        ax[3, 2].plot(linear_vels[:, 1])
-        ax[3, 2].set_title('Linear Velocity Y')
-
-        plt.tight_layout()
-        fig.suptitle('Generated from BundleSDF result')
-        plt.savefig(f'bundlesdf_{TOSS_TYPE}_traj_{TOSS_ID}.png')
-        print(f'Saved fig bundlesdf_{TOSS_TYPE}_traj_{TOSS_ID}.png')
-        plt.show()
- 
-#################### Plotting contactnets sample traj #################
-def visualize_trajectory(trajectory_dir, fig_name):
-    # data = torch.load(file_path)   #p_t, quat_shuffle, dp_t, w_t
-    # print(data.shape) #N,13
-    # positions = data[:, :3].numpy() #N,3
-    # quats = data[:, 3:7].numpy() #N,4
-    # linear_vels = data[:, 7:10].numpy() #N,3
-    # angular_vels = data[:, 10:].numpy() #N,3
-    # print(positions.shape, quats.shape, linear_vels.shape, angular_vels.shape)
-    traj = torch.load(trajectory_dir) #q_t(wxyz), p_t, w_t, dp_t
-    print(f'traj loaded: {traj.size()}') #N,13
-    p_t = traj[:,4:7].numpy() #N,3
-    q_t = traj[:,:4].numpy() #N,4, w,x,y,z
-    q_t_shuffled = np.concatenate((q_t[:, 1:], q_t[:, 0].reshape(-1,1)), axis=1) ##N,4, x,y,z,w
-    dp_t = traj[:,10:].numpy() #N,3
-    w_t_body = traj[:,7:10].numpy() #N,3, in body frame
-    fig, ax = plt.subplots(4, 3, figsize=(15, 15))
-
-    # Plot positions
-    ax[0, 0].plot(p_t[:, 0])
-    ax[0, 0].set_title('X Position')
-    ax[0, 1].plot(p_t[:, 1])
-    ax[0, 1].set_title('Y Position')
-    ax[0, 2].plot(p_t[:, 2])
-    ax[0, 2].set_title('Z Position')
-
-    # Plot Quaternion components
-    ax[1, 0].plot(q_t[:, 0])
-    ax[1, 0].set_title('Quaternion w')
-    ax[1, 1].plot(q_t[:, 1])
-    ax[1, 1].set_title('Quaternion x')
-    ax[1, 2].plot(q_t[:, 2])
-    ax[1, 2].set_title('Quaternion y')
-    ax[2, 0].plot(q_t[:, 3])
-    ax[2, 0].set_title('Quaternion z')
-
-    # Plot angular velocities
-    ax[2, 1].plot(w_t_body[:, 0])
-    ax[2, 1].set_title('Angular Velocity X')
-    ax[2, 2].plot(w_t_body[:, 1])
-    ax[2, 2].set_title('Angular Velocity Y')
-    ax[3, 0].plot(w_t_body[:, 2])
-    ax[3, 0].set_title('Angular Velocity Z')
-
-    # Plot linear velocities
-    ax[3, 1].plot(dp_t[:, 0])
-    ax[3, 1].set_title('Linear Velocity X')
-    ax[3, 2].plot(dp_t[:, 1])
-    ax[3, 2].set_title('Linear Velocity Y')
-
-    plt.tight_layout()
-    fig.suptitle('ContactNets cube trajectory')
-    plt.savefig(fig_name)
-    print(f'Saved to {fig_name}')
-    plt.show()
 
 #######################################################################
 if __name__ == "__main__":
@@ -582,88 +632,79 @@ if __name__ == "__main__":
         required=True,
     )
     parser.add_argument(
-        "--use_gt",
-        type=bool,
-        required=False,
-        help="Whether to use TagSLAM trajectory or BundleSDF-generated trajectory or not"
-    )
-    parser.add_argument(
-        "--use_tagslam_b",
-        type=bool,
-        required=False,
-        help="Whether to use TagSLAM's body frame or BundleSDF's body frame"
-    )
-    parser.add_argument(
         "--zshift",
         type=float,
         default=0.05148739950625105,
         help="Offset from the table to the origin of the data"
     )
+    parser.add_argument(
+        "--iteration",
+        type=int,
+        default=1,
+        help="BundleSDF/ContactNets cycle iteration"
+    )
     args = parser.parse_args()
-    TOSS_ID = args.toss_id
-    TOSS_TYPE = args.type
-    USE_GT = args.use_gt
-    FINAL_Z = args.zshift
-    USE_TAGSLAM_B = args.use_tagslam_b
-    DATASET = f'{TOSS_TYPE}_{TOSS_ID}'
-    YAML_PATH = './assets/config.yaml'
-    ROSBAG = load_dataset_from_yaml(YAML_PATH, TOSS_TYPE, TOSS_ID)
-    DEPTH_BAG_FILE = f"./rosbags/raw_{ROSBAG}.bag"
-    ODOM_BAG_FILE = f"./rosbags/odom_{ROSBAG}.bag"
-    # ODOM_BAG_FILE = f"./rosbags/adjusted_odom_{ROSBAG}.bag"
-    DEPTH_ROS_TOPIC = "/camera/aligned_depth_to_color/image_raw"
-    ODOM_ROS_TOPIC = f"/tagslam/odom/body_{TOSS_TYPE}"
-    CAMERA_EXTRINSICS_FILE = f'./assets/realsense_pose_{TOSS_TYPE}.yaml'
-    if TOSS_TYPE == 'milk' or TOSS_TYPE == 'prism':
-        CAMERA_EXTRINSICS_FILE = f'./assets/realsense_pose_milk_prism.yaml'
-    print(f'Processing toss {TOSS_TYPE}_{TOSS_ID} in raw_{ROSBAG}.bag')
+
+    toss_id = args.toss_id
+    toss_type = args.type
+    z_shift = args.zshift
+    iteration_num = args.iteration
+
+    dataset = f'{toss_type}_{toss_id}'
+    rosbag_number = file_utils.load_dataset_from_yaml(toss_type,
+                                                      toss_id)
+    depth_bag_file = f"./rosbags/raw_{rosbag_number}.bag"
+    odom_bag_file = f"./rosbags/odom_{rosbag_number}.bag"
+    odom_ros_topic = f"/tagslam/odom/body_{toss_type}"
+    tagslam_dir = file_utils.tagslam_pose_dir(dataset)
+    annotated_poses_dir = file_utils.bundlesdf_annotated_poses_dir(dataset)
+
+    print(f'Processing toss {toss_type}_{toss_id} in raw_{rosbag_number}.bag')
+
+    # Get the camera extrinsics.
+    cam_trans, cam_rot_axis_angle = file_utils.load_camera_extrinsics(toss_type)
     
-    DEPTH_TOPIC = '/camera/aligned_depth_to_color/image_raw'
-    BUNDLESDF_POSE_DIR = f"/home/cnets-vision/mengti_ws/BundleSDF/results/{DATASET}/ob_in_cam/"
-    # CONTACTNETS_INPUT_DIR = f"/home/cnets-vision/mengti_ws/BundleSDF/dair_pll/assets/bundlesdf_{TOSS_TYPE}/"
-    CONTACTNETS_INPUT_DIR = f"/home/cnets-vision/mengti_ws/dair_pll_latest/assets/bundlesdf_{TOSS_TYPE}/"
-    ODOM_FILE_PATH = f"/home/cnets-vision/mengti_ws/BundleSDF/data/{DATASET}/annotated_poses/"
-    GT_POSE_DIR = f"/home/cnets-vision/mengti_ws/robot_filter/dataset/{DATASET}/tagslam_poses/"
-    # PLANK_HEIGHT = -0.05458#0.03428 #0.0145
-    data = np.loadtxt(GT_POSE_DIR+'tagslam.txt')
-    frame_num = len([name for name in os.listdir(BUNDLESDF_POSE_DIR)]) #data.shape[0]
-    print(f'Total frame num: {frame_num}')
-    cam = 'cam0' # realsense camera name
-    with open(CAMERA_EXTRINSICS_FILE, 'r') as stream:
-        data_loaded = yaml.safe_load(stream)
-    cam_pos_dict = data_loaded[cam]['pose']['position']
-    cam_trans = np.array([cam_pos_dict['x'], cam_pos_dict['y'], cam_pos_dict['z']]).reshape(-1, 1)
-    cam_rot_dict = data_loaded[cam]['pose']['rotation']
-    cam_axis_vec = np.array([cam_rot_dict['x'], cam_rot_dict['y'], cam_rot_dict['z']])
+    # Start/end times are for the start and end of a BundleSDF trajectory, which
+    # starts with the object unmoving on the table, includes the toss wind-up
+    # and execution, and ends with the object unmoving on the table again.
+    start_time = file_utils.load_toss_time_from_yaml(toss_type, 
+                                                     toss_id, 'start_time')
+    end_time = file_utils.load_toss_time_from_yaml(toss_type,
+                                                   toss_id, 'end_time')
     
-    start_time = load_toss_time_from_yaml(YAML_PATH, TOSS_TYPE, TOSS_ID, 'start_time')
-    end_time = load_toss_time_from_yaml(YAML_PATH, TOSS_TYPE, TOSS_ID, 'end_time')
-    start_frame = load_field_from_yaml(YAML_PATH, TOSS_TYPE, TOSS_ID, 'start_frame')
-    end_frame = load_field_from_yaml(YAML_PATH, TOSS_TYPE, TOSS_ID, 'end_frame')
-    # sync = Synchronizer(GT_POSE_DIR, frame_num, start_time, end_time, save=False)
-    # bundletrack_time, gt_time = sync.bundletrack_time, sync.gt_time
-    # print(len(bundletrack_time), len(gt_time))
-    # bundletrack_time = extract_timestamps(rosbag, ros_topic, start_time, end_time)
-    if USE_TAGSLAM_B:
-        tagslam_body_frame_pos = load_body_frame_pos_from_yaml(YAML_PATH, TOSS_TYPE)
-        tagslam_body_frame_rot = load_body_frame_rot_from_yaml(YAML_PATH, TOSS_TYPE)
-    else:
-        tagslam_body_frame_pos = None
-        tagslam_body_frame_rot = None
-    data = np.loadtxt(GT_POSE_DIR+'tagslam.txt')
-    print('data loaded', data.shape)
-    gt_time = data[:, 0] #N,
-    bundletrack_time = extract_time_versus_poses(
-        start_time,
-        end_time,
-        DEPTH_BAG_FILE,
-        ODOM_BAG_FILE,
-        DEPTH_ROS_TOPIC,
-        ODOM_ROS_TOPIC,
-        GT_POSE_DIR,
-        save=True,
-        # time_offset=125.19
-    ).reshape(-1,)
-    print(gt_time.shape, bundletrack_time.shape)
-    dataset = DatasetManagement(frame_num, start_frame, end_frame, bundletrack_time, TOSS_ID, cam_trans, cam_axis_vec, frame_rate=30, plot=False, use_gt=USE_GT, tagslam_pos_b=tagslam_body_frame_pos, tagslam_rot_b=tagslam_body_frame_rot)
+    # Start/end frames are the indices of the longer BundleSDF trajectories that
+    # correspond to the ContactNets trajectories, which include only the
+    # autonomous dynamics of the object dropping under gravity and colliding
+    # with the table.
+    start_frame = file_utils.load_field_from_yaml(toss_type, toss_id,
+                                                  'start_frame')
+    end_frame = file_utils.load_field_from_yaml(toss_type, toss_id,
+                                                'end_frame')
+
+    # Rosbag processor extracts times associated with eventual BundleSDF poses
+    # based on the times for every depth image from the depth bag.  The below
+    # call additionally writes a tagslam.txt file that grabs TagSLAM poses from
+    # the odom bag and their associated timestamps.
+    bundletrack_time = rosbag_processor.extract_time_versus_poses(
+        start_time, end_time, depth_bag_file, odom_bag_file, odom_ros_topic,
+        tagslam_dir, save=True).reshape(-1,)
+
+    # Write annotated_poses/0000.txt file, which stores the first pose of the
+    # TagSLAM origin in camera frame (obtained by converting TagSLAM output).
+    rosbag_processor.save_initial_tagslam_pose_in_camera_frame(
+        tagslam_world_poses_dir=tagslam_dir,
+        annotated_poses_dir=annotated_poses_dir, cam_trans=cam_trans,
+        cam_rot_axis_angle=cam_rot_axis_angle
+    )
+
+    dataset = DatasetManagement(
+        start_frame, end_frame, bundletrack_time, toss_id, toss_type,
+        iteration_num, cam_trans, cam_rot_axis_angle, frame_rate=30,
+        z_shift=z_shift, plot=True
+    )
+
     dataset.do_process()
+    dataset.plot_trajectory(full_trajectory=True)
+    dataset.plot_trajectory(full_trajectory=False)
+
+    dataset.save_data(save_tagslam=True, save_bundlesdf=True)

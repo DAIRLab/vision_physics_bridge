@@ -2,29 +2,15 @@ import argparse
 import shutil
 import numpy as np
 from tqdm import tqdm
-from depth_filter import DepthFilter
-from file_utils import (
-    check_empty_img,
-    create_annotated_poses,
-    denoise,
-    generate_depth_img_without_robot,
-    import_data,
-    load_dataset_from_yaml,
-    load_toss_time_from_yaml,
-    write_real_depth_as_txt,
-)
-from math_utils import pos_quat_to_trans_mat, world_to_camera
 from pydrake.all import StartMeshcat
-from rosbag_processor import (
-    bag_to_depth_images,
-    bag_to_depth_rgb_images,
-    bag_to_rgb_images,
-    extract_cube_pose,
-    extract_poses_with_timestamps,
-)
-import rospy
-from sync_data import Synchronizer
-from urdf_filter import dilate, run_urdf_filter
+
+import depth_filter
+import file_utils
+import math_utils
+import rosbag_processor
+import sync_data
+import urdf_filter
+
 import os, os.path
 import yaml
 
@@ -42,7 +28,7 @@ toss_id = args.toss_id
 print(f'Processing cube toss {toss_id}')
 TOSS_TYPE = 'cube'
 yaml_path = './assets/config.yaml'
-bag_num = load_dataset_from_yaml(yaml_path, TOSS_TYPE, toss_id)
+bag_num = file_utils.load_dataset_from_yaml(TOSS_TYPE, toss_id)
 print(f'bag num: {bag_num}')
 ROSBAG_NAME = f"./rosbags/raw_{bag_num}.bag"
 ODOM_ROSBAG_NAME = f"./rosbags/odom_{bag_num}.bag"
@@ -115,10 +101,10 @@ cam_rot_dict = data_loaded[cam]['pose']['rotation']
 cam_axis_vec = np.array([cam_rot_dict['x'], cam_rot_dict['y'], cam_rot_dict['z']])
 yaml_path = './assets/config.yaml'
 toss_type = 'cube'
-start_time = load_toss_time_from_yaml(yaml_path, toss_type, toss_id, 'start_time')
-end_time = load_toss_time_from_yaml(yaml_path, toss_type, toss_id, 'end_time')
+start_time = file_utils.load_toss_time_from_yaml(toss_type, toss_id, 'start_time')
+end_time = file_utils.load_toss_time_from_yaml(toss_type, toss_id, 'end_time')
 print(f'start_time:{start_time.secs}.{start_time.nsecs}, end_time:{end_time.secs}.{end_time.nsecs}')
-# bag_to_depth_images(
+# rosbag_processor.bag_to_depth_images(
 #     ROSBAG_NAME,
 #     DEPTH_ROS_TOPIC,
 #     DEPTH_DATA_DIR,
@@ -128,8 +114,8 @@ print(f'start_time:{start_time.secs}.{start_time.nsecs}, end_time:{end_time.secs
 #     bundletrack_depth_dir=BUNDLETRACK_DEPTH,
 # )
 # print("Depth images generated")
-# bag_to_rgb_images(ROSBAG_NAME, RGB_ROS_TOPIC, BUNDLETRACK_RGB, start_time, end_time)
-bag_to_depth_rgb_images(
+# rosbag_processor.bag_to_rgb_images(ROSBAG_NAME, RGB_ROS_TOPIC, BUNDLETRACK_RGB, start_time, end_time)
+rosbag_processor.bag_to_depth_rgb_images(
     ROSBAG_NAME,
     DEPTH_ROS_TOPIC,
     RGB_ROS_TOPIC,
@@ -140,7 +126,7 @@ bag_to_depth_rgb_images(
 frame_num = len([name for name in os.listdir(BUNDLETRACK_RGB)])
 print(f'frame_num is {frame_num}')
 for frame_id in range(1, frame_num+1):
-    create_annotated_poses(output_dir=ANNOTATED_POSES_DIR, frame_id=frame_id)
+    file_utils.create_annotated_poses(output_dir=ANNOTATED_POSES_DIR, frame_id=frame_id)
 # clean up
 try:
     shutil.rmtree(DEPTH_DATA_DIR)
@@ -149,7 +135,7 @@ try:
     print(f"Done clean up!")
 except Exception as e:
     print(f"Error occurred: {e}")
-# extract_poses_with_timestamps(
+# rosbag_processor.extract_poses_with_timestamps(
 #     ROSBAG_NAME,
 #     DEPTH_ROS_TOPIC,
 #     RGB_ROS_TOPIC,
@@ -162,8 +148,8 @@ except Exception as e:
 # )
 # frame_num = len([name for name in os.listdir(BUNDLETRACK_RGB)])
 # print("There are %i frames in total!" % frame_num)
-# positions = import_data(POSITION_FILE_PATH)
-# write_real_depth_as_txt(
+# positions = file_utils.import_data(POSITION_FILE_PATH)
+# file_utils.write_real_depth_as_txt(
 #     start_frame=1,
 #     end_frame=frame_num,
 #     img_dir=IMAGE_TXT_PATH,
@@ -172,7 +158,7 @@ except Exception as e:
 # print("Finished writing %i real depth text files." % frame_num)
 # meshcat = StartMeshcat()
 # for frame_id in tqdm(range(1, frame_num + 1)):
-#     run_urdf_filter(
+#     urdf_filter.run_urdf_filter(
 #         meshcat,
 #         frame_id,
 #         positions,
@@ -182,15 +168,15 @@ except Exception as e:
 #         cam_trans,
 #         cam_axis_vec,
 #     )
-#     dilate(
+#     urdf_filter.dilate(
 #         frame_id, mask_image_dir=MASK_IAMGE_FILE, dilated_mask_dir=DILATED_MASK_FILE
 #     )
-    # generate_depth_img_without_robot(
+    # file_utils.generate_depth_img_without_robot(
     #     REAL_DEPTH_FILE % frame_id,
     #     MASK_IAMGE_FILE % frame_id,
     #     FILTERED_DEPTH_FILE % frame_id,
     # )
-    # depth_filter = DepthFilter(
+    # depth_filter = depth_filter.DepthFilter(
     #     frame_id,
     #     RGB_DATA_DIR + "%04i.png",
     #     FILTERED_DEPTH_FILE,
@@ -200,21 +186,21 @@ except Exception as e:
     #     cam_axis_vec,
     # )
     # depth_filter.visualize_depth_image()
-    # denoise(
+    # file_utils.denoise(
     #     frame_id,
     #     img_dir=CUBE_DEPTH_DIR,
     #     denoise_mask_dir=DENOISE_MASK_DIR,
     #     region=(8, 8),
     # )
-    # create_annotated_poses(output_dir=ANNOTATED_POSES_DIR, frame_id=frame_id)
-# check_empty_img(DENOISE_MASK_DIR)
+    # file_utils.create_annotated_poses(output_dir=ANNOTATED_POSES_DIR, frame_id=frame_id)
+# file_utils.check_empty_img(DENOISE_MASK_DIR)
 
 # do this only once
-# sync = Synchronizer(TAGSLAM_POSES_DIR, frame_num, start_time, end_time, save=True)
+# sync = sync_data.Synchronizer(TAGSLAM_POSES_DIR, frame_num, start_time, end_time, save=True)
 # data = np.loadtxt(TAGSLAM_POSES_DIR+'tagslam.txt')
 # init_pose = data[0, 2:]
-# init_pose_mat = pos_quat_to_trans_mat(init_pose.T)
-# init_pose_mat_cam = world_to_camera(init_pose_mat, cam_trans, cam_axis_vec)
+# init_pose_mat = math_utils.pos_quat_to_trans_mat(init_pose.T)
+# init_pose_mat_cam = math_utils.world_to_camera(init_pose_mat, cam_trans, cam_axis_vec)
 # np.savetxt(
 #     os.path.join(ANNOTATED_POSES_DIR, "%04i.txt" % 0), init_pose_mat_cam
 # )  # save init cube pose in camera frame

@@ -1428,6 +1428,8 @@ tosses:
       start_frame: 62
       end_frame: 87
     
+# These body_frames are the TagSLAM body frame's pose relative to the first
+# specified tag ID.
 body_frame:
   cube:
     pose:

@@ -103,8 +103,8 @@ cam_rot_dict = data_loaded[cam]['pose']['rotation']
 cam_axis_vec = np.array([cam_rot_dict['x'], cam_rot_dict['y'], cam_rot_dict['z']])
 
 yaml_path = './assets/config.yaml'
-start_time = load_toss_time_from_yaml(yaml_path, TOSS_TYPE, TOSS_ID, 'start_time')
-end_time = load_toss_time_from_yaml(yaml_path, TOSS_TYPE, TOSS_ID, 'end_time')
+start_time = load_toss_time_from_yaml(TOSS_TYPE, TOSS_ID, 'start_time')
+end_time = load_toss_time_from_yaml(TOSS_TYPE, TOSS_ID, 'end_time')
 print(start_time.secs, start_time.nsecs, end_time.secs, end_time.nsecs)
 
 def save_init_pose():

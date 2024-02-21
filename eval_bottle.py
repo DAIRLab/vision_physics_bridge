@@ -362,8 +362,8 @@ if __name__ == "__main__":
     cam_rot_dict = data_loaded[cam]['pose']['rotation']
     cam_axis_vec = np.array([cam_rot_dict['x'], cam_rot_dict['y'], cam_rot_dict['z']])
 
-    start_time = load_toss_time_from_yaml(yaml_path, TOSS_TYPE, TOSS_ID, 'start_time')
-    end_time = load_toss_time_from_yaml(yaml_path, TOSS_TYPE, TOSS_ID, 'end_time')
+    start_time = load_toss_time_from_yaml(TOSS_TYPE, TOSS_ID, 'start_time')
+    end_time = load_toss_time_from_yaml(TOSS_TYPE, TOSS_ID, 'end_time')
 
     frame_num = len([name for name in os.listdir(OUTPUT_POSE_DIR)])
     print(f"there are {frame_num} frames")

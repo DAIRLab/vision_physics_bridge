@@ -1,6 +1,6 @@
-import numpy as np
 import math
-# import tf.transformations as tr
+import numpy as np
+import os.path as op
 from scipy.spatial.transform import Rotation as R
 
 
@@ -44,11 +44,6 @@ def rotation_matrix_to_euler(R):
 
     return np.array([x, y, z])
 
-# def rotation_matrix_to_quaternion(R):
-#     """
-#     :param R: 4*4 transformation matrix.
-#     """
-#     return tr.quaternion_from_matrix(R)
 
 def world_to_image(point, K, R, T):
     """
@@ -89,16 +84,7 @@ def world_to_camera(m, translation, axis_vec):
     :param axis_vec: camera axis vector in world frame
     """
     extrinsic = setup_extrinsic(translation, axis_vec)
-    Rw2c = extrinsic[:3, :3]
-    R_w = m[:3, :3]
-    R_c = Rw2c @ R_w
-
-    pos_world_vector = m[:, 3]
-    pos_camera_vector = extrinsic @ pos_world_vector
-    T_c = pos_camera_vector[:3]
-    T_c = T_c.reshape(-1, 1)
-
-    return np.vstack((np.hstack((R_c, T_c)), np.array([0, 0, 0, 1])))
+    return extrinsic @ m
 
 
 def camera_to_world(m, translation, axis_vec):
@@ -109,15 +95,6 @@ def camera_to_world(m, translation, axis_vec):
     :param axis_vec: camera axis vector in world frame
     """
     extrinsic = setup_extrinsic(translation, axis_vec)
-    # Rw2c = extrinsic[:3, :3]
-    # R_c = m[:3, :3]
-    # R_w = Rw2c.T @ R_c
-
-    # pos_camera_vector = m[:, 3]
-    # pos_world_vector = np.linalg.inv(extrinsic) @ pos_camera_vector
-    # T_w = pos_world_vector[:3]
-    # T_w = T_w.reshape(-1, 1)
-    # return np.vstack((np.hstack((R_w, T_w)), np.array([0, 0, 0, 1])))
     return np.linalg.inv(extrinsic) @ m
 
 
@@ -156,10 +133,10 @@ def transform_bundletrack_output(
     Or:    pred_new =    pred     *  inv(init_pose)  * init_pose_new
     """
     # This is camera_T_B1, the BundleSDF origin wrt camera at 1st timestamp.
-    init_pose = np.loadtxt(output_pose_dir + "%04i.txt" % 1)
+    init_pose = np.loadtxt(op.join(output_pose_dir, "0001.txt"))
 
     # This is camera_T_T0, the TagSLAM origin wrt camera at 0th timestamp.
-    init_pose_new = np.loadtxt(odom_file_dir + "%04i.txt" % 0)
+    init_pose_new = np.loadtxt(op.join(odom_file_dir, "0000.txt"))
 
     # This converts camera_T_Bn to camera_T_Tn, switching from reporting pose of
     # BundleSDF origin to TagSLAM origin.
@@ -191,16 +168,6 @@ def setup_extrinsic(translation, axis_vec):
     extrinsic[:3, :3] = rotation_inverse
     extrinsic[:3, 3] = translation_inverse
     
-    # angle = np.linalg.norm(axis_vec)
-    # axis = axis_vec / angle
-    # rotation = axis_angle_to_rotation_matrix(
-    #     axis, angle
-    # )  # directions of the world-axes in camera coordinates
-    # rotation_prime = rotation.T  # USE THIS
-    # translation_prime = -rotation_prime @ translation  # USE THIS
-    # extrinsic = np.vstack(
-    #     (np.hstack((rotation_prime, translation_prime)), np.array([0, 0, 0, 1]))
-    # )
     return extrinsic
 
 

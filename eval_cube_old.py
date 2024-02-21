@@ -275,6 +275,7 @@ def draw_coords_to_image():
         cv2.imwrite(OUTPUT_SEGMENT_DIR+filename, image_with_axes)
         print(f'Wrote image {OUTPUT_SEGMENT_DIR+filename}')
 
+# TODO: This should get replaced in rosbag_processor.py or data_preparation.py
 def save_init_pose():
     poses = np.loadtxt(os.path.join(GT_POSE_DIR, "tagslam.txt"))
     init_pose = poses[0, 1:]
@@ -295,7 +296,7 @@ if __name__ == "__main__":
     print(f'Processing toss {toss_id}')
     TOSS_TYPE = 'cube'
     yaml_path = './assets/config.yaml'
-    bag_num = load_dataset_from_yaml(yaml_path, TOSS_TYPE, toss_id)
+    bag_num = load_dataset_from_yaml(TOSS_TYPE, toss_id)
     print(f'bag num: {bag_num}')
     depth_bag_file = f"./rosbags/raw_{bag_num}.bag"
     odom_bag_file = f"./rosbags/odom_{bag_num}.bag"
@@ -339,8 +340,8 @@ if __name__ == "__main__":
     toss_type = 'cube'
     frame_num = len([name for name in os.listdir(OUTPUT_POSE_DIR)])
     print(f"there are {frame_num} frames")
-    start_time = load_toss_time_from_yaml(yaml_path, toss_type, toss_id, 'start_time')
-    end_time = load_toss_time_from_yaml(yaml_path, toss_type, toss_id, 'end_time')
+    start_time = load_toss_time_from_yaml(toss_type, toss_id, 'start_time')
+    end_time = load_toss_time_from_yaml(toss_type, toss_id, 'end_time')
     bundletrack_time = extract_time_versus_poses(
         start_time,
         end_time,
