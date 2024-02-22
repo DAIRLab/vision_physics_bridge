@@ -783,7 +783,6 @@ def extract_time_versus_poses(
                 break
         btime = msg.header.stamp.secs + msg.header.stamp.nsecs * 1e-9
         bundletrack_time.append(btime)
-        frame+=1
     print("The length of the bundletrack_time (depth_topic) is {}".format(len(bundletrack_time)))
 
     # Get the times and poses associated with TagSLAM, based on the information

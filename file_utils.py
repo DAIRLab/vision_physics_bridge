@@ -69,7 +69,7 @@ def tagslam_pose_dir(dataset: str) -> str:
 def contactnets_input_dir(toss_type: str) -> str:
     """ContactNets' input directory for a particular experiment."""
     return assure_created(
-        op.join(BUNDLESDF_REPO_DIR, f'dair_pll/assets/bundlesdf_{toss_type}')
+        op.join(BUNDLESDF_REPO_DIR, f'dair_pll/assets/vision_{toss_type}')
     )
 
 def contactnets_input_dir_tagslam(toss_type: str, full: bool = True) -> str:
