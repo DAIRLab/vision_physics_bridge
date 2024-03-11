@@ -28,7 +28,7 @@ toss_id = args.toss_id
 print(f'Processing cube toss {toss_id}')
 TOSS_TYPE = 'cube'
 yaml_path = './assets/config.yaml'
-bag_num = file_utils.load_dataset_from_yaml(TOSS_TYPE, toss_id)
+bag_num = file_utils.load_rosbag_number_from_yaml(TOSS_TYPE, toss_id)
 print(f'bag num: {bag_num}')
 ROSBAG_NAME = f"./rosbags/raw_{bag_num}.bag"
 ODOM_ROSBAG_NAME = f"./rosbags/odom_{bag_num}.bag"

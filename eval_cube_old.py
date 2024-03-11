@@ -1,6 +1,6 @@
 import argparse
 import os
-from file_utils import load_dataset_from_yaml, load_toss_time_from_yaml
+from file_utils import load_rosbag_number_from_yaml, load_toss_time_from_yaml
 from rosbag_processor import extract_time_versus_poses
 import rospy
 import numpy as np
@@ -308,7 +308,7 @@ if __name__ == "__main__":
     print(f'Processing toss {toss_id}, trial {trial_id}')
     TOSS_TYPE = 'cube'
     yaml_path = './assets/config.yaml'
-    bag_num = load_dataset_from_yaml(TOSS_TYPE, toss_id)
+    bag_num = load_rosbag_number_from_yaml(TOSS_TYPE, toss_id)
     print(f'bag num: {bag_num}')
     depth_bag_file = f"/home/cnets-vision/mengti_ws/robot_filter/rosbags/raw_{bag_num}.bag"
     odom_bag_file = f"/home/cnets-vision/mengti_ws/robot_filter/rosbags/odom_{bag_num}.bag"

@@ -1,6 +1,6 @@
 import argparse
 import os
-from file_utils import load_dataset_from_yaml, load_toss_time_from_yaml
+from file_utils import load_rosbag_number_from_yaml, load_toss_time_from_yaml
 from rosbag_processor import extract_time_versus_poses, extract_timestamps
 import rospy
 import numpy as np
@@ -248,7 +248,7 @@ if __name__ == "__main__":
     print(f'Processing toss {toss_id}')
     yaml_path = "./assets/config.yaml"
     DATASET="napkin"
-    bag_num = load_dataset_from_yaml(DATASET, toss_id)
+    bag_num = load_rosbag_number_from_yaml(DATASET, toss_id)
     depth_bag_file = f"./rosbags/raw_{bag_num}.bag"
     odom_bag_file = f"./rosbags/odom_{bag_num}.bag"
     DEPTH_ROS_TOPIC = "/camera/aligned_depth_to_color/image_raw"

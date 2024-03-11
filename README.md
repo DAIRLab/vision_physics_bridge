@@ -16,4 +16,4 @@ python3 experiment.py --type=cube --toss_id=1
 ```
 
 ### Data Conversion
-To convert poses in `ob_in_cam` from BundleSDF results to `dair_pll` format, you need to run `data_preparation.py` with correct `toss_id`, `type` arguments. `use_gt` means whether generate trajectory data with `TagSLAM` output or not. To visualize the trajectory, run `test/test_drake_simulator.py` in `dair_pll`.
+To convert poses in `ob_in_cam` from BundleSDF results to `dair_pll` format, you need to run the git submodule `cnets-data-generation`'s script `data_preparation.py` with correct `toss_id`, `type` arguments.  This script also takes an `iteration` argument, which keeps track of which cyclic iterations of the BundleSDF/PLL pipeline are the current BundleSDF results.  To visualize the trajectory, run `test/test_drake_simulator.py` in `dair_pll`.

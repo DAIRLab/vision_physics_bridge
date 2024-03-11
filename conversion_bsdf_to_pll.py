@@ -1,4 +1,12 @@
-import argparse
+"""This file performs output conversions from BundleSDF trajectories to input
+formats required by PLL.
+
+TODO:  This functionality has only been checked for single toss datasets, e.g.
+cube_2.  Still to be tested on multi-toss experiments.
+"""
+
+# import argparse
+import click
 import os.path as op
 import numpy as np
 import torch
@@ -8,7 +16,7 @@ from pyquaternion import Quaternion
 import matplotlib.pyplot as plt
 import pdb
 import math
-from typing import Tuple
+from typing import Tuple, List
 
 import file_utils
 import math_utils
@@ -79,7 +87,7 @@ def smooth_quaternions_pyquat(quats, alpha=0.5):
     return smoothed_quats #xyzw
 
 
-class DatasetManagement:
+class ConverterBundleSDFToPLL:
     """Class for processing pose data from BundleSDF.  Can load corresponding
     poses from TagSLAM, convert between BundleSDF and TagSLAM origins and
     between camera and world frames.
@@ -98,18 +106,26 @@ class DatasetManagement:
     only the object immediately after it has been released at the beginning of
     the toss.
     """
-    def __init__(self, start_frame: int, end_frame: int,
-                 timestamps: np.ndarray, toss_id: int, toss_type: str,
-                 iteration_num: int, cam_trans: np.ndarray,
-                 cam_rot_axis_angle: np.ndarray, frame_rate: int,
-                 z_shift: float, plot: bool = False) -> None:
-        """Prepare for processing data from TagSLAM and BundleSDF.
+    def __init__(self, bundlesdf_id: str, pll_id: str, start_frames: np.ndarray,
+                 bundlesdf_start_index: int,
+                 end_frames: np.ndarray, timestamps: np.ndarray,
+                 start_toss: int, end_toss: int,
+                 object: str, cycle_iteration: int,
+                 cam_trans: np.ndarray, cam_rot_axis_angle: np.ndarray,
+                 frame_rate: int, z_shift: float, plot: bool = False) -> None:
+        """Prepare for processing pose data from TagSLAM and BundleSDF.
 
         Args:
-            start_frame:  BundleSDF frame index at which a PLL toss begins.
-            end_frame:  BundleSDF frame index at which a PLL toss ends.
+            start_frames:  BundleSDF frame indices at which a PLL toss begins,
+                represented as the index after the start time of each toss.
+            end_frames:  BundleSDF frame indices at which a PLL toss ends,
+                represented as the index after the start time of each toss.
             timestamps (N,):  BundleSDF timestamps.
-            toss_id:  Toss index.
+            bundlesdf_start_index:  The index of the first frame in the
+                BundleSDF trajectory that is used (can be 0 or 1, and only 1 if
+                the first frame is excluded to line up with TagSLAM times).
+            start_toss:  First toss index.
+            end_toss:  Last toss index.
             toss_type:  The tossed object name.
             iteration_num:  The cycle iteration number of the BundleSDF/
                 ContactNets cycle.
@@ -123,11 +139,15 @@ class DatasetManagement:
             plot:  Whether to show the overlay plot of BundleSDF and TagSLAM
                 trajectories.
         """
-        self.start_frame = start_frame
-        self.end_frame = end_frame
-        self.toss_id = toss_id
-        self.toss_type = toss_type
-        self.iteration_num = iteration_num
+        self.start_frames = start_frames
+        self.end_frames = end_frames
+        self.start_toss = start_toss
+        self.end_toss = end_toss
+        self.object = object
+        self.iteration_num = cycle_iteration
+
+        self.bundlesdf_id = bundlesdf_id
+        self.pll_id = pll_id
 
         self.plot = plot
         self.cam_trans = cam_trans
@@ -135,27 +155,33 @@ class DatasetManagement:
         self.frame_rate = frame_rate
         self.z_shift = z_shift
 
+        self.dataset = f'{self.object}_{self.start_toss}'
+        self.dataset += f'-{self.end_toss}' if \
+            self.start_toss != self.end_toss else ''
+
         self._set_up_directories()
 
-        # Load the poses from TagSLAM and BundleSDF.
-        self._load_poses(bsdf_times=timestamps)
+        # Load the full pose trajectories from TagSLAM and BundleSDF.
+        self._load_poses(bsdf_times=timestamps,
+                         bsdf_start_index=bundlesdf_start_index)
 
     def _set_up_directories(self) -> None:
-        """Given the stored toss_type and toss_id, loads the following
-        attributes:
+        """Given the stored object and start/end toss numbers, loads the
+        following attributes:
             - self.tagslam_dir
             - self.bundlesdf_dir
             - self.annotated_dir
-            - self.contactnets_dir
         """
-        dataset = f'{self.toss_type}_{self.toss_id}'
-
-        self.tagslam_dir = file_utils.tagslam_pose_dir(dataset)
-        self.bundlesdf_dir = file_utils.bundlesdf_pose_dir(dataset)
-        self.annotated_dir = file_utils.bundlesdf_annotated_poses_dir(dataset)
-        self.contactnets_dir = file_utils.contactnets_input_dir(self.toss_type)
+        self.tagslam_dir = file_utils.tagslam_pose_dir(
+            self.dataset, check_exists=True)
+        self.bundlesdf_dir = file_utils.bundlesdf_pose_dir(
+            self.dataset, cycle_iteration=self.iteration_num,
+            bundlesdf_id=self.bundlesdf_id)
+        self.annotated_dir = file_utils.bundlesdf_annotated_poses_dir(
+            self.dataset)
         
-    def _load_poses(self, bsdf_times: np.ndarray) -> None:
+    def _load_poses(self, bsdf_times: np.ndarray, bsdf_start_index: int
+                    ) -> None:
         """Load the timestamped poses reported from TagSLAM and BundleSDF,
         saving the results in attributes:
             - self.tagslam_full_times
@@ -175,7 +201,7 @@ class DatasetManagement:
             bsdf_times (N,)
         """
         self._load_tagslam_poses()
-        self._load_bundlesdf_poses(bsdf_times)
+        self._load_bundlesdf_poses(bsdf_times, bsdf_start_index)
 
         print(f'\nTarget frame rate: {self.frame_rate}\n')
 
@@ -205,7 +231,8 @@ class DatasetManagement:
         self.tagslam_full_times = tagslam_data[:, 0]
         self.tagslam_full_poses = tagslam_data[:, 1:]
 
-    def _load_bundlesdf_poses(self, timestamps: np.ndarray) -> None:
+    def _load_bundlesdf_poses(self, timestamps: np.ndarray, start_index: int
+                              ) -> None:
         """Load all the poses reported by BundleSDF.  These are in world
         coordinates of the **TagSLAM body origin (converted from BundleSDF
         origin in cameracoordinates via math_utils.transform_bundletrack_output)
@@ -214,7 +241,8 @@ class DatasetManagement:
         """
         bundlesdf_poses, bundlesdf_times = [], []
 
-        for i in range(1, len(timestamps)):
+        # Add 1 for range bounds because BundleSDF poses are 1-indexed.
+        for i in range(1+start_index, len(timestamps)+1+start_index):
             trans_mat = np.loadtxt(op.join(self.bundlesdf_dir, "%04i.txt" % i))
             trans_mat = math_utils.transform_bundletrack_output(
                 trans_mat, self.bundlesdf_dir, self.annotated_dir,
@@ -222,7 +250,7 @@ class DatasetManagement:
             )
             pos_quat = math_utils.trans_mat_to_pos_quat(trans_mat).reshape(7)
             bundlesdf_poses.append(pos_quat)
-            bundlesdf_times.append(timestamps[i])
+            bundlesdf_times.append(timestamps[i-1])
 
         self.bundlesdf_full_poses = np.array(bundlesdf_poses)
         self.bundlesdf_full_times = np.array(bundlesdf_times)
@@ -422,10 +450,10 @@ class DatasetManagement:
             - self.bundlesdf_full_processed_states
 
         Then this method additionally stores the trimmed trajectories:
-            - self.tagslam_toss_processed_states
-            - self.bundlesdf_toss_processed_states
-            - self.tagslam_toss_times
-            - self.bundlesdf_toss_times
+            - self.tagslam_toss_processed_states: List[np.ndarray(N, 13)]
+            - self.bundlesdf_toss_processed_states: List[np.ndarray(N, 13)]
+            - self.tagslam_toss_times: List[np.ndarray(N,)]
+            - self.bundlesdf_toss_times: List[np.ndarray(N,)]
         """
         # Process TagSLAM and BundleSDF data.
         q_ts, p_ts, w_ts, v_ts = self._process_poses(
@@ -444,46 +472,139 @@ class DatasetManagement:
         self._trim_processed_trajectories()
 
         # Print information about the trimmed trajectories.
-        tagslam_toss_dts = np.mean(
-            self.tagslam_toss_times[1:] - self.tagslam_toss_times[:-1]
-        )
-        print(f'TagSLAM toss trajectory information:' + \
-              f'\n\t{self.tagslam_toss_processed_states.shape=}' + \
-              f'\n\t{self.tagslam_toss_times[0]=}' + \
-              f'\n\tAverage frame rate (toss): {1/tagslam_toss_dts}\n')
+        for i in range(len(self.start_frames)):
+            print(f'\n=================== TOSS {i} ===================')
+            tagslam_toss_dts = np.mean(self.tagslam_toss_times[i][1:] - \
+                                       self.tagslam_toss_times[i][:-1])
+            print(f'TagSLAM toss {i} trajectory information:' + \
+                f'\n\t{self.tagslam_toss_processed_states[i].shape=}' + \
+                f'\n\t{self.tagslam_toss_times[i][0]=}' + \
+                f'\n\tAverage frame rate (toss): {1/tagslam_toss_dts}\n')
 
-        bsdf_toss_dts = np.mean(
-            self.bundlesdf_toss_times[1:] - self.bundlesdf_toss_times[:-1]
-        )
-        print(f'BundleSDF toss trajectory information:' + \
-              f'\n\t{self.bundlesdf_toss_processed_states.shape=}' + \
-              f'\n\t{self.bundlesdf_toss_times[0]=}' + \
-              f'\n\tAverage frame rate (toss): {1/bsdf_toss_dts}\n')
+            bsdf_toss_dts = np.mean(self.bundlesdf_toss_times[i][1:] - \
+                                    self.bundlesdf_toss_times[i][:-1])
+            print(f'BundleSDF toss {i} trajectory information:' + \
+                f'\n\t{self.bundlesdf_toss_processed_states[i].shape=}' + \
+                f'\n\t{self.bundlesdf_toss_times[i][0]=}' + \
+                f'\n\tAverage frame rate (toss): {1/bsdf_toss_dts}\n')
 
     def _trim_processed_trajectories(self) -> None:
         """After trajectories are already processed, store trimmed versions of
-        them corresponding to autonomous dynamics throughout a toss."""
-        # Need to do one less than provided start and end frames because loaded
-        # data in 1-indexed directory but provided 0-indexed start_frame and
-        # end_frame.
-        b_start = self.start_frame-1
-        b_end = self.end_frame-1
-        self.bundlesdf_toss_processed_states = \
-            self.bundlesdf_full_processed_states[b_start:b_end]
-        self.bundlesdf_toss_times = self.bundlesdf_full_times[b_start:b_end]
+        them corresponding to autonomous dynamics throughout a toss.  This
+        stores the following attributes:
+            - self.tagslam_toss_processed_states: List[np.ndarray(N, 13)]
+            - self.bundlesdf_toss_processed_states: List[np.ndarray(N, 13)]
+            - self.tagslam_toss_times: List[np.ndarray(N,)]
+            - self.bundlesdf_toss_times: List[np.ndarray(N,)]
+        """
+        self.bundlesdf_toss_processed_states = []
+        self.bundlesdf_toss_times = []
+        self.tagslam_toss_processed_states = []
+        self.tagslam_toss_times = []
 
-        # Find the start and end frames that are most synchronized in time with
-        # those pre-selected for BundleSDF trajectories.
-        t_start = np.argmin(
-            (self.tagslam_full_times - self.bundlesdf_toss_times[0])**2)
-        t_end = t_start + (b_end - b_start)
-        self.tagslam_toss_processed_states = \
-            self.tagslam_full_processed_states[t_start:t_end]
-        self.tagslam_toss_times = self.tagslam_full_times[t_start:t_end]
+        for i in range(len(self.start_frames)):
+            # Need to do one less than provided start and end frames because
+            # loaded data in 1-indexed directory but provided 0-indexed
+            # start_frame and end_frame.
+            b_start = self.start_frames[i] - 1
+            b_end = self.end_frames[i] - 1
+            self.bundlesdf_toss_processed_states.append(
+                self.bundlesdf_full_processed_states[b_start:b_end])
+            self.bundlesdf_toss_times.append(
+                self.bundlesdf_full_times[b_start:b_end])
+
+            # Find the start and end frames that are most synchronized in time
+            # with those pre-selected for BundleSDF trajectories.
+            t_start = np.argmin(
+                (self.tagslam_full_times - self.bundlesdf_toss_times[i][0])**2)
+            t_end = t_start + (b_end - b_start)
+            self.tagslam_toss_processed_states.append(
+                self.tagslam_full_processed_states[t_start:t_end])
+            self.tagslam_toss_times.append(
+                self.tagslam_full_times[t_start:t_end])
         
     def plot_trajectory(self, full_trajectory: bool = True) -> None:
         """Visualize the BundleSDF and TagSLAM trajectories overlayed on a set
         of plots."""
+        def do_plot(q_ts, p_ts, w_ts, v_ts, t_ts,
+                    q_bsdf, p_bsdf, w_bsdf, v_bsdf, t_bsdf, toss_num, full):
+            first_t = min(min(t_ts), min(t_bsdf))
+            t_ts -= first_t
+            t_bsdf -= first_t
+
+            fig, ax = plt.subplots(4, 4, figsize=(15, 15), sharex='all',
+                                sharey='row')
+            ax[0, 0].plot(t_ts, p_ts[:, 0], label='TagSLAM')
+            ax[0, 0].plot(t_bsdf, p_bsdf[:, 0], label='BundleSDF')
+            ax[0, 0].set_title('X Position')
+            ax[0, 1].plot(t_ts, p_ts[:, 1], label='TagSLAM')
+            ax[0, 1].plot(t_bsdf, p_bsdf[:, 1], label='BundleSDF')
+            ax[0, 1].set_title('Y Position')
+            ax[0, 2].plot(t_ts, p_ts[:, 2], label='TagSLAM')
+            ax[0, 2].plot(t_bsdf, p_bsdf[:, 2], label='BundleSDF')
+            ax[0, 2].set_title('Z Position')
+
+            ax[1, 0].plot(t_ts, q_ts[:, 0], label='TagSLAM')
+            ax[1, 0].plot(t_bsdf, q_bsdf[:, 0], label='BundleSDF')
+            ax[1, 0].set_title('W Quaternion')
+            ax[1, 1].plot(t_ts, q_ts[:, 1], label='TagSLAM')
+            ax[1, 1].plot(t_bsdf, q_bsdf[:, 1], label='BundleSDF')
+            ax[1, 1].set_title('X Quaternion')
+            ax[1, 2].plot(t_ts, q_ts[:, 2], label='TagSLAM')
+            ax[1, 2].plot(t_bsdf, q_bsdf[:, 2], label='BundleSDF')
+            ax[1, 2].set_title('Y Quaternion')
+            ax[1, 3].plot(t_ts, q_ts[:, 3], label='TagSLAM')
+            ax[1, 3].plot(t_bsdf, q_bsdf[:, 3], label='BundleSDF')
+            ax[1, 3].set_title('Z Quaternion')
+
+            ax[2, 0].plot(t_ts, v_ts[:, 0], label='TagSLAM')
+            ax[2, 0].plot(t_bsdf, v_bsdf[:, 0], label='BundleSDF')
+            ax[2, 0].set_title('X Velocity')
+            ax[2, 1].plot(t_ts, v_ts[:, 1], label='TagSLAM')
+            ax[2, 1].plot(t_bsdf, v_bsdf[:, 1], label='BundleSDF')
+            ax[2, 1].set_title('Y Velocity')
+            ax[2, 2].plot(t_ts, v_ts[:, 2], label='TagSLAM')
+            ax[2, 2].plot(t_bsdf, v_bsdf[:, 2], label='BundleSDF')
+            ax[2, 2].set_title('Z Velocity')
+
+            ax[3, 0].plot(t_ts, w_ts[:, 0], label='TagSLAM')
+            ax[3, 0].plot(t_bsdf, w_bsdf[:, 0], label='BundleSDF')
+            ax[3, 0].set_title('X Angular Velocity')
+            ax[3, 1].plot(t_ts, w_ts[:, 1], label='TagSLAM')
+            ax[3, 1].plot(t_bsdf, w_bsdf[:, 1], label='BundleSDF')
+            ax[3, 1].set_title('Y Angular Velocity')
+            ax[3, 2].plot(t_ts, w_ts[:, 2], label='TagSLAM')
+            ax[3, 2].plot(t_bsdf, w_bsdf[:, 2], label='BundleSDF')
+            ax[3, 2].set_title('Z Angular Velocity')
+
+            ax[0, 0].set_ylabel('Position [m]')
+            ax[1, 0].set_ylabel('Orientation')
+            ax[2, 0].set_ylabel('Linear Velocity [m/s]')
+            ax[3, 0].set_ylabel('Angular Velocity [rad/s]')
+            ax[3, 0].set_xlabel('Time from first pose [s]')
+            ax[3, 1].set_xlabel('Time from first pose [s]')
+            ax[3, 2].set_xlabel('Time from first pose [s]')
+            ax[3, 3].set_xlabel('Time from first pose [s]')
+
+            handles, labels = ax[3,2].get_legend_handles_labels()
+            fig.legend(handles, labels, loc='lower center')
+
+            fig.suptitle(title)
+
+            # Save the figure in the PLL assets directory where the trajectory
+            # data goes.
+            pll_bsdf_asset_dir = file_utils.contactnets_input_dir_bundlesdf(
+                dataset=self.dataset, iteration=self.iteration_num,
+                bundlesdf_id=self.bundlesdf_id, full=full_trajectory)
+            plot_name = '' if full else f'toss_{toss_num}_'
+            plot_name += f'{self.bundlesdf_id}.png'
+            plt.savefig(op.join(pll_bsdf_asset_dir, plot_name))
+            print(f'Saved plot to {op.join(pll_bsdf_asset_dir, plot_name)}.\n')
+
+            if self.plot:
+                plt.show()
+            plt.close()
+
         if full_trajectory:
             q_ts = self.tagslam_full_processed_states[:, 0:4]
             p_ts = self.tagslam_full_processed_states[:, 4:7]
@@ -498,196 +619,162 @@ class DatasetManagement:
             t_bsdf = self.bundlesdf_full_times
 
             title='Full Trajectory Results'
+            do_plot(q_ts, p_ts, w_ts, v_ts, t_ts,
+                    q_bsdf, p_bsdf, w_bsdf, v_bsdf, t_bsdf,
+                    toss_num=None, full=full_trajectory)
 
         else:
-            q_ts = self.tagslam_toss_processed_states[:, 0:4]
-            p_ts = self.tagslam_toss_processed_states[:, 4:7]
-            w_ts = self.tagslam_toss_processed_states[:, 7:10]
-            v_ts = self.tagslam_toss_processed_states[:, 10:13]
-            t_ts = self.tagslam_toss_times
+            for i in range(len(self.tagslam_toss_times)):
+                q_ts = self.tagslam_toss_processed_states[i][:, 0:4]
+                p_ts = self.tagslam_toss_processed_states[i][:, 4:7]
+                w_ts = self.tagslam_toss_processed_states[i][:, 7:10]
+                v_ts = self.tagslam_toss_processed_states[i][:, 10:13]
+                t_ts = self.tagslam_toss_times[i]
 
-            q_bsdf = self.bundlesdf_toss_processed_states[:, 0:4]
-            p_bsdf = self.bundlesdf_toss_processed_states[:, 4:7]
-            w_bsdf = self.bundlesdf_toss_processed_states[:, 7:10]
-            v_bsdf = self.bundlesdf_toss_processed_states[:, 10:13]
-            t_bsdf = self.bundlesdf_toss_times
+                q_bsdf = self.bundlesdf_toss_processed_states[i][:, 0:4]
+                p_bsdf = self.bundlesdf_toss_processed_states[i][:, 4:7]
+                w_bsdf = self.bundlesdf_toss_processed_states[i][:, 7:10]
+                v_bsdf = self.bundlesdf_toss_processed_states[i][:, 10:13]
+                t_bsdf = self.bundlesdf_toss_times[i]
 
-            title='Toss Trajectory Results'
-
-        first_t = min(min(t_ts), min(t_bsdf))
-        t_ts -= first_t
-        t_bsdf -= first_t
-
-        fig, ax = plt.subplots(4, 4, figsize=(15, 15), sharex='all',
-                               sharey='row')
-        ax[0, 0].plot(t_ts, p_ts[:, 0], label='TagSLAM')
-        ax[0, 0].plot(t_bsdf, p_bsdf[:, 0], label='BundleSDF')
-        ax[0, 0].set_title('X Position')
-        ax[0, 1].plot(t_ts, p_ts[:, 1], label='TagSLAM')
-        ax[0, 1].plot(t_bsdf, p_bsdf[:, 1], label='BundleSDF')
-        ax[0, 1].set_title('Y Position')
-        ax[0, 2].plot(t_ts, p_ts[:, 2], label='TagSLAM')
-        ax[0, 2].plot(t_bsdf, p_bsdf[:, 2], label='BundleSDF')
-        ax[0, 2].set_title('Z Position')
-
-        ax[1, 0].plot(t_ts, q_ts[:, 0], label='TagSLAM')
-        ax[1, 0].plot(t_bsdf, q_bsdf[:, 0], label='BundleSDF')
-        ax[1, 0].set_title('W Quaternion')
-        ax[1, 1].plot(t_ts, q_ts[:, 1], label='TagSLAM')
-        ax[1, 1].plot(t_bsdf, q_bsdf[:, 1], label='BundleSDF')
-        ax[1, 1].set_title('X Quaternion')
-        ax[1, 2].plot(t_ts, q_ts[:, 2], label='TagSLAM')
-        ax[1, 2].plot(t_bsdf, q_bsdf[:, 2], label='BundleSDF')
-        ax[1, 2].set_title('Y Quaternion')
-        ax[1, 3].plot(t_ts, q_ts[:, 3], label='TagSLAM')
-        ax[1, 3].plot(t_bsdf, q_bsdf[:, 3], label='BundleSDF')
-        ax[1, 3].set_title('Z Quaternion')
-
-        ax[2, 0].plot(t_ts, v_ts[:, 0], label='TagSLAM')
-        ax[2, 0].plot(t_bsdf, v_bsdf[:, 0], label='BundleSDF')
-        ax[2, 0].set_title('X Velocity')
-        ax[2, 1].plot(t_ts, v_ts[:, 1], label='TagSLAM')
-        ax[2, 1].plot(t_bsdf, v_bsdf[:, 1], label='BundleSDF')
-        ax[2, 1].set_title('Y Velocity')
-        ax[2, 2].plot(t_ts, v_ts[:, 2], label='TagSLAM')
-        ax[2, 2].plot(t_bsdf, v_bsdf[:, 2], label='BundleSDF')
-        ax[2, 2].set_title('Z Velocity')
-
-        ax[3, 0].plot(t_ts, w_ts[:, 0], label='TagSLAM')
-        ax[3, 0].plot(t_bsdf, w_bsdf[:, 0], label='BundleSDF')
-        ax[3, 0].set_title('X Angular Velocity')
-        ax[3, 1].plot(t_ts, w_ts[:, 1], label='TagSLAM')
-        ax[3, 1].plot(t_bsdf, w_bsdf[:, 1], label='BundleSDF')
-        ax[3, 1].set_title('Y Angular Velocity')
-        ax[3, 2].plot(t_ts, w_ts[:, 2], label='TagSLAM')
-        ax[3, 2].plot(t_bsdf, w_bsdf[:, 2], label='BundleSDF')
-        ax[3, 2].set_title('Z Angular Velocity')
-
-        ax[0, 0].set_ylabel('Position [m]')
-        ax[1, 0].set_ylabel('Orientation')
-        ax[2, 0].set_ylabel('Linear Velocity [m/s]')
-        ax[3, 0].set_ylabel('Angular Velocity [rad/s]')
-        ax[3, 0].set_xlabel('Time from first pose [s]')
-        ax[3, 1].set_xlabel('Time from first pose [s]')
-        ax[3, 2].set_xlabel('Time from first pose [s]')
-        ax[3, 3].set_xlabel('Time from first pose [s]')
-
-        handles, labels = ax[3,2].get_legend_handles_labels()
-        fig.legend(handles, labels, loc='lower center')
-
-        fig.suptitle(title)
-        # plt.savefig(f'bundlesdf_{TOSS_TYPE}_traj_{TOSS_ID}_tagslam.png')
-        # print(f'Saved fig bundlesdf_{TOSS_TYPE}_traj_{TOSS_ID}_tagslam.png')
-        if self.plot:
-            plt.show()
-        plt.close()
+                title=f'Toss {i + self.start_toss} Trajectory Results'
+                do_plot(q_ts, p_ts, w_ts, v_ts, t_ts,
+                        q_bsdf, p_bsdf, w_bsdf, v_bsdf, t_bsdf,
+                        toss_num=i+self.start_toss, full=full_trajectory)
 
     def save_data(self, save_tagslam: bool = False,
                   save_bundlesdf: bool = False) -> None:
         """Stores data as .pt files in the ContactNets input directory."""
-        traj_filename = f'{self.toss_id - 1}.pt'
+        toss_filenames = [f'{toss_i}.pt' for toss_i in range(
+            self.start_toss, self.end_toss+1)]
 
         print('Saving files summary:')
 
         if save_tagslam:
+            # Save full trajectory.
             full_tagslam_dir = file_utils.contactnets_input_dir_tagslam(
-                self.toss_type, full=True)
-            toss_tagslam_dir = file_utils.contactnets_input_dir_tagslam(
-                self.toss_type, full=False)
+                dataset=self.dataset, full=True)
             torch.save(
                 torch.tensor(self.tagslam_full_processed_states),
-                op.join(full_tagslam_dir, traj_filename))
-            torch.save(
-                torch.tensor(self.tagslam_toss_processed_states),
-                op.join(toss_tagslam_dir, traj_filename))
-            print(f'\t{op.join(full_tagslam_dir, traj_filename)}.')
-            print(f'\t{op.join(toss_tagslam_dir, traj_filename)}.')
+                op.join(full_tagslam_dir, 'tagslam.pt'))
+            print(f"\t{op.join(full_tagslam_dir, 'tagslam.pt')}")
+
+            # Do toss trajectories.
+            toss_tagslam_dir = file_utils.contactnets_input_dir_tagslam(
+                dataset=self.dataset, full=False)
+            for i in range(len(toss_filenames)):
+                torch.save(
+                    torch.tensor(self.tagslam_toss_processed_states[i]),
+                    op.join(toss_tagslam_dir, toss_filenames[i]))
+                print(f'\t{op.join(toss_tagslam_dir, toss_filenames[i])}')
 
         if save_bundlesdf:
+            # Save full trajectory.
             full_bundlesdf_dir = file_utils.contactnets_input_dir_bundlesdf(
-                self.toss_type, iteration=self.iteration_num, full=True)
-            toss_bundlesdf_dir = file_utils.contactnets_input_dir_bundlesdf(
-                self.toss_type, iteration=self.iteration_num, full=False)
+                dataset=self.dataset, iteration=self.iteration_num,
+                bundlesdf_id=self.bundlesdf_id, full=True)
+            traj_filename = f'{self.bundlesdf_id}.pt'
             torch.save(
                 torch.tensor(self.bundlesdf_full_processed_states),
                 op.join(full_bundlesdf_dir, traj_filename))
-            torch.save(
-                torch.tensor(self.bundlesdf_toss_processed_states),
-                op.join(toss_bundlesdf_dir, traj_filename))
-            print(f'\t{op.join(full_bundlesdf_dir, traj_filename)}.')
-            print(f'\t{op.join(toss_bundlesdf_dir, traj_filename)}.')
+            print(f'\t{op.join(full_bundlesdf_dir, traj_filename)}')
+
+            # Do toss trajectories.
+            toss_bundlesdf_dir = file_utils.contactnets_input_dir_bundlesdf(
+                dataset=self.dataset, iteration=self.iteration_num,
+                bundlesdf_id=self.bundlesdf_id, full=False)
+            for i in range(len(toss_filenames)):
+                torch.save(
+                    torch.tensor(self.bundlesdf_toss_processed_states[i]),
+                    op.join(toss_bundlesdf_dir, toss_filenames[i]))
+                print(f'\t{op.join(toss_bundlesdf_dir, toss_filenames[i])}')
 
 
 #######################################################################
-if __name__ == "__main__":
-    parser = argparse.ArgumentParser()
-    parser.add_argument(
-        "--toss_id",
-        type=int,
-        required=True,
-    )
-    parser.add_argument(
-        "--type",
-        type=str,
-        required=True,
-    )
-    parser.add_argument(
-        "--zshift",
-        type=float,
-        default=0.05148739950625105,
-        help="Offset from the table to the origin of the data"
-    )
-    parser.add_argument(
-        "--iteration",
-        type=int,
-        default=1,
-        help="BundleSDF/ContactNets cycle iteration"
-    )
-    args = parser.parse_args()
+@click.command()
+@click.option('--vision-asset',
+              type=str,
+              default=None,
+              help="directory of the asset folder e.g. cube_2; encodes " + \
+                "system and tosses.")
+@click.option('--bundlesdf-id',
+              type=str,
+              default=None,
+              help="what BundleSDF run ID associated with pose outputs to use.")
+@click.option('--cycle-iteration',
+              type=int,
+              default=1,
+              help="BundleSDF iteration number (0 means use TagSLAM poses).")
+@click.option('--z-shift',
+              type=float,
+              default=0.05148739950625105,
+              help="Offset from the table to the origin of the data.")
 
-    toss_id = args.toss_id
-    toss_type = args.type
-    z_shift = args.zshift
-    iteration_num = args.iteration
+def main_command(vision_asset: str, bundlesdf_id: str, cycle_iteration: int,
+                 z_shift: float):
+    # First decode the system and start/end tosses from the provided asset
+    # directory.
+    assert '_' in vision_asset, f'Invalid asset directory: {vision_asset}.'
+    object = vision_asset.split('_')[0]
 
-    dataset = f'{toss_type}_{toss_id}'
-    rosbag_number = file_utils.load_dataset_from_yaml(toss_type,
-                                                      toss_id)
-    depth_bag_file = f"./rosbags/raw_{rosbag_number}.bag"
-    odom_bag_file = f"./rosbags/odom_{rosbag_number}.bag"
-    odom_ros_topic = f"/tagslam/odom/body_{toss_type}"
-    tagslam_dir = file_utils.tagslam_pose_dir(dataset)
-    annotated_poses_dir = file_utils.bundlesdf_annotated_poses_dir(dataset)
+    start_toss = int(vision_asset.split('_')[1].split('-')[0])
+    end_toss = start_toss if '-' not in vision_asset else \
+        int(vision_asset.split('-')[1])
+    assert start_toss <= end_toss, f'Invalid toss range: {start_toss} ' + \
+        f'-{end_toss} inferred from {vision_asset=}.'
+    
+    # Locate all the related files and directories for the given vision asset.
+    rosbag_number = file_utils.load_rosbag_number_from_yaml(
+        object, start_toss, second_toss_number=end_toss)
+    depth_bag_file = file_utils.get_depth_bag_filename(rosbag_number)
+    odom_bag_file = file_utils.get_odom_bag_filename(rosbag_number)
+    odom_ros_topic = f"/tagslam/odom/body_{object}"
+    tagslam_dir = file_utils.tagslam_pose_dir(vision_asset)
+    annotated_poses_dir = file_utils.bundlesdf_annotated_poses_dir(vision_asset)
 
-    print(f'Processing toss {toss_type}_{toss_id} in raw_{rosbag_number}.bag')
+    # Decode the BundleSDF run ID and find if there's an associated PLL run ID.
+    if bundlesdf_id[:13] != 'bundlesdf_id_':
+        bundlesdf_id = f'bundlesdf_id_{bundlesdf_id}'
+    pll_id = file_utils.bundlesdf_run_associated_pll_run_id(
+        dataset=vision_asset, bundlesdf_id=bundlesdf_id,
+        cycle_iteration=cycle_iteration)
+
+    print(f'Processing toss {vision_asset} in raw_{rosbag_number}.bag from ' + \
+          f'BundleSDF run ID {bundlesdf_id} with associated PLL ID {pll_id}.\n')
 
     # Get the camera extrinsics.
-    cam_trans, cam_rot_axis_angle = file_utils.load_camera_extrinsics(toss_type)
+    cam_trans, cam_rot_axis_angle = file_utils.load_camera_extrinsics(object)
     
     # Start/end times are for the start and end of a BundleSDF trajectory, which
     # starts with the object unmoving on the table, includes the toss wind-up
     # and execution, and ends with the object unmoving on the table again.
-    start_time = file_utils.load_toss_time_from_yaml(toss_type, 
-                                                     toss_id, 'start_time')
-    end_time = file_utils.load_toss_time_from_yaml(toss_type,
-                                                   toss_id, 'end_time')
+    start_ros_times = np.array([file_utils.load_toss_time_from_yaml(
+        object, toss_i, 'start_time', as_ros_time=True) for toss_i in range(
+            start_toss, end_toss+1)])
+    end_ros_times = np.array([file_utils.load_toss_time_from_yaml(
+        object, toss_i, 'end_time', as_ros_time=True) for toss_i in range(
+            start_toss, end_toss+1)])
     
     # Start/end frames are the indices of the longer BundleSDF trajectories that
     # correspond to the ContactNets trajectories, which include only the
     # autonomous dynamics of the object dropping under gravity and colliding
     # with the table.
-    start_frame = file_utils.load_field_from_yaml(toss_type, toss_id,
-                                                  'start_frame')
-    end_frame = file_utils.load_field_from_yaml(toss_type, toss_id,
-                                                'end_frame')
+    relative_start_frames = np.array([file_utils.load_field_from_yaml(
+        object, toss_i, 'start_frame') for toss_i in range(
+            start_toss, end_toss+1)])
+    relative_end_frames = np.array([file_utils.load_field_from_yaml(
+        object, toss_i, 'end_frame') for toss_i in range(
+            start_toss, end_toss+1)])
 
     # Rosbag processor extracts times associated with eventual BundleSDF poses
     # based on the times for every depth image from the depth bag.  The below
     # call additionally writes a tagslam.txt file that grabs TagSLAM poses from
     # the odom bag and their associated timestamps.
-    bundletrack_time = rosbag_processor.extract_time_versus_poses(
-        start_time, end_time, depth_bag_file, odom_bag_file, odom_ros_topic,
-        tagslam_dir, save=True).reshape(-1,)
+    bundletrack_time, bundletrack_start_index = \
+    rosbag_processor.extract_time_versus_poses(
+        start_ros_times[0], end_ros_times[-1], depth_bag_file, odom_bag_file,
+        odom_ros_topic, tagslam_dir, save=True
+    )
 
     # Write annotated_poses/0000.txt file, which stores the first pose of the
     # TagSLAM origin in camera frame (obtained by converting TagSLAM output).
@@ -697,14 +784,31 @@ if __name__ == "__main__":
         cam_rot_axis_angle=cam_rot_axis_angle
     )
 
-    dataset = DatasetManagement(
-        start_frame, end_frame, bundletrack_time, toss_id, toss_type,
-        iteration_num, cam_trans, cam_rot_axis_angle, frame_rate=30,
-        z_shift=z_shift, plot=True
+    # Convert the start/end frames to be represented all as the indices after
+    # the start of the first included toss.  Before this conversion, each of
+    # the toss's start/end indices are relative to the individual toss's first
+    # frame.
+    start_frames = math_utils.convert_relative_frames_to_absolute(
+        relative_start_frames, bundletrack_time, start_ros_times)
+    end_frames = math_utils.convert_relative_frames_to_absolute(
+        relative_end_frames, bundletrack_time, start_ros_times)
+
+    converter = ConverterBundleSDFToPLL(
+        bundlesdf_id=bundlesdf_id, pll_id=pll_id,
+        start_frames=start_frames, end_frames=end_frames,
+        timestamps=bundletrack_time,
+        bundlesdf_start_index=bundletrack_start_index,
+        start_toss=start_toss, end_toss=end_toss,
+        object=object, cycle_iteration=cycle_iteration,
+        cam_trans=cam_trans, cam_rot_axis_angle=cam_rot_axis_angle,
+        frame_rate=30, z_shift=z_shift, plot=True
     )
 
-    dataset.do_process()
-    dataset.plot_trajectory(full_trajectory=True)
-    dataset.plot_trajectory(full_trajectory=False)
+    converter.do_process()
+    converter.plot_trajectory(full_trajectory=True)
+    converter.plot_trajectory(full_trajectory=False)
+    converter.save_data(save_tagslam=True, save_bundlesdf=True)
 
-    dataset.save_data(save_tagslam=True, save_bundlesdf=True)
+
+if __name__ == '__main__':
+    main_command()  # pylint: disable=no-value-for-parameter

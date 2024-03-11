@@ -4,6 +4,48 @@ import os.path as op
 from scipy.spatial.transform import Rotation as R
 
 
+def convert_relative_frames_to_absolute(
+        relative_frames: np.ndarray, full_times: np.ndarray,
+        ros_times: np.ndarray) -> np.ndarray:
+    """Converts frames relative to the start of a subsection of a longer
+    trajectory to frames as absolute indices of the full trajectory.
+    
+    Args:
+        relative_frames: 1D numpy array of relative frame indices.
+        full_times: 1D numpy array of timestamps for the full trajectory.
+        ros_times: 1D numpy array of ROS timestamps for the start of each
+            subsection.
+
+    Returns:
+        absolute_frames: 1D numpy array of absolute frame indices.
+    """
+    start_times = ros_time_to_float(ros_times)
+    absolute_frames = np.zeros_like(relative_frames)
+
+    for i in range(len(relative_frames)):
+        subsection_start_frame = np.argmin(np.abs(full_times - start_times[i]))
+        absolute_frames[i] = subsection_start_frame + relative_frames[i]
+    
+    return absolute_frames
+
+
+def ros_time_to_float(ros_times: np.ndarray) -> np.ndarray:
+    """Converts ROS timestamps to floating point numbers.
+    
+    Args:
+        ros_time: 1D numpy array of ROS timestamps.
+
+    Returns:
+        float_time: 1D numpy array of floating point timestamps.
+    """
+    float_time = np.zeros_like(ros_times)
+
+    for i in range(len(ros_times)):
+        float_time[i] = ros_times[i].secs + ros_times[i].nsecs * 1e-9
+    
+    return float_time
+
+
 def axis_angle_to_rotation_matrix(axis, theta):
     """
     Return the rotation matrix associated with counterclockwise rotation about

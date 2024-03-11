@@ -15,36 +15,67 @@ import os.path as op
 import re
 import yaml
 import rospy
+import sys
+
+
+DATA_GEN_DIR = op.dirname(op.realpath(__file__))
+REPO_DIR = op.dirname(DATA_GEN_DIR)
+PLL_DIR = op.join(REPO_DIR, 'dair_pll')
+# BUNDLESDF_DIR = op.join(REPO_DIR, 'bundlenets')
+
+sys.path.append(PLL_DIR)    # For importing dair_pll.
+sys.path.append(REPO_DIR)   # For importing bundlenets.
+
+from dair_pll import file_utils as pll_file_utils
+from bundlenets import file_utils as bsdf_file_utils
+
+
+"""Perform some checks on the file structure."""
+assert pll_file_utils.MAIN_DIR == PLL_DIR, f"Unexpected file structure; " \
+    f"{PLL_DIR} and {pll_file_utils.MAIN_DIR} don't match."
+assert bsdf_file_utils.BUNDLENETS_REPO_DIR == REPO_DIR, f"Unexpected file " \
+    f"structure; {REPO_DIR} and {bsdf_file_utils.BUNDLENETS_REPO_DIR} don't " \
+    f"match."
 
 
 REALSENSE_CAMERA_NAME = 'cam0'
-
-BUNDLESDF_REPO_DIR =  op.dirname(op.dirname(__file__))
-PROCESSING_YAML_FILE = op.join(BUNDLESDF_REPO_DIR,
-                               'cnets-data-generation/assets/config.yaml')
-
-
-def assure_created(directory: str) -> str:
-    """Wrapper to put around directory paths which ensure their existence.
-
-    Args:
-        directory: Path of directory that may not exist.
-
-    Returns:
-        ``directory``, Which is ensured to exist by recursive mkdir.
-    """
-    directory = op.abspath(directory)
-    if not op.exists(directory):
-        assure_created(op.dirname(directory))
-        os.mkdir(directory)
-    return directory
+PROCESSING_YAML_FILE = op.join(DATA_GEN_DIR, 'assets', 'config.yaml')
 
 
 """Directory utilities."""
-def bundlesdf_pose_dir(dataset: str) -> str:
+def assure_created(directory: str) -> str:
+    """Wrapper to put around directory paths which ensure their existence.
+    Reuses this implementation in PLL repo."""
+    return pll_file_utils.assure_created(directory)
+
+def get_pll_geometry_output_dir(system: str, cycle_iteration: int,
+                                run_name: str):
+    """Directory with PLL run's geometry outputs for BundleSDF training."""
+    # Reconstruct the PLL storage name.
+    data_asset = f'vision_{system}'
+    pose_source = pose_source = 'tagslam_toss' if cycle_iteration == 0 else \
+        f'bundlesdf_toss_iteration_{cycle_iteration}'
+    storage_name = op.join(pll_file_utils.RESULTS_DIR, data_asset, pose_source)
+
+    # Get the geometry output directory from the PLL storage.
+    pll_geom_output_dir = pll_file_utils.geom_for_bsdf_dir(
+        storage_name, run_name)
+    assert os.listdir(pll_geom_output_dir), \
+        f'No output found at {pll_geom_output_dir}'
+    
+    return pll_geom_output_dir
+
+
+"""Directory utilities."""
+def bundlesdf_pose_dir(dataset: str, cycle_iteration: int, bundlesdf_id: str
+                       ) -> str:
     """BundleSDF's output pose directory for a particular dataset.  Contains
     XXXX.txt files for every pose."""
-    path = op.join(BUNDLESDF_REPO_DIR, f'results/{dataset}/ob_in_cam/')
+    bundlesdf_result_dir = bsdf_file_utils.results_dir(
+        dataset=dataset, cycle_iteration=cycle_iteration,
+        bundlesdf_id=bundlesdf_id
+    )
+    path = op.join(bundlesdf_result_dir, 'ob_in_cam')
     assert op.exists(path), f'Requires {path} to exist but not found.'
     return path
 
@@ -52,48 +83,68 @@ def bundlesdf_annotated_poses_dir(dataset: str) -> str:
     """BundleSDF's input annotated pose directory for a particular dataset.
     Contains 0000.txt file with the first TagSLAM origin's pose represented in
     camera frame."""
-    path = op.join(BUNDLESDF_REPO_DIR, f'data/{dataset}/annotated_poses/')
+    bundlesdf_video_dir = bsdf_file_utils.top_video_dir()
+    path = op.join(bundlesdf_video_dir, dataset, 'annotated_poses')
     assert op.exists(path), f'Requires {path} to exist but not found.'
     return path
 
-def tagslam_pose_dir(dataset: str) -> str:
+def bundlesdf_run_associated_pll_run_id(dataset: str, cycle_iteration: int,
+                                        bundlesdf_id: str) -> str:
+    """Get the PLL run ID associated with a particular BundleSDF run."""
+    return bsdf_file_utils.pll_run_id_from_bundlesdf_id(
+        dataset=dataset, cycle_iteration=cycle_iteration,
+        bundlesdf_id=bundlesdf_id)
+
+def tagslam_pose_dir(dataset: str, check_exists: bool = False) -> str:
     """TagSLAM's pose directory for a particular dataset.  Contains tagslam.txt
     file."""
-    path = op.join(
-        BUNDLESDF_REPO_DIR,
-        f'cnets-data-generation/dataset/{dataset}/tagslam_poses/'
-    )
-    assert op.exists(path), f'Requires {path} to exist but not found.'
-    return path
+    path = op.join(DATA_GEN_DIR, 'dataset', dataset, 'tagslam_poses')
+    if check_exists:
+        assert op.exists(path), f'Requires {path} to exist but not found.'
+        return path
+    return assure_created(path)
 
-def contactnets_input_dir(toss_type: str) -> str:
+def contactnets_input_dir(object: str) -> str:
     """ContactNets' input directory for a particular experiment."""
     return assure_created(
-        op.join(BUNDLESDF_REPO_DIR, f'dair_pll/assets/vision_{toss_type}')
+        op.join(pll_file_utils.ASSETS_DIR, f'vision_{object}')
     )
 
-def contactnets_input_dir_tagslam(toss_type: str, full: bool = True) -> str:
+def contactnets_input_dir_tagslam(dataset: str, full: bool = True) -> str:
     """ContactNets' input directory for a particular experiment from TagSLAM."""
-    subdir = 'tagslam_full' if full else 'tagslam_toss'
-    return assure_created(op.join(contactnets_input_dir(toss_type), subdir))
+    subdir_1 = 'full' if full else 'toss'
+    subdir_2 = '' if full else 'tagslam'
+    object = dataset.split('_')[0]
+    return assure_created(
+        op.join(contactnets_input_dir(object), dataset, subdir_1, subdir_2)
+    )
 
-def contactnets_input_dir_bundlesdf(toss_type: str, iteration: int,
-                                    full: bool = True) -> str:
+def contactnets_input_dir_bundlesdf(
+        dataset: str, iteration: int, bundlesdf_id: str, full: bool = True
+) -> str:
     """ContactNets' input directory for a particular experiment from a
     particular iteration of BundleSDF."""
-    subdir = f'bundlesdf_full_iteration_{iteration}' if full else \
-        f'bundlesdf_toss_iteration_{iteration}'
-    return assure_created(op.join(contactnets_input_dir(toss_type), subdir))
+    subdir_1 = 'full' if full else 'toss'
+    subdir_2 = f'bundlesdf_iteration_{iteration}'
+    subdir_3 = '' if full else bundlesdf_id
+    object = dataset.split('_')[0]
+    return assure_created(
+        op.join(contactnets_input_dir(object), dataset, subdir_1, subdir_2,
+                subdir_3)
+    )
+
 
 """Yaml file parsing utilities."""
-def load_camera_extrinsics(toss_type: str) -> Tuple[np.ndarray, np.ndarray]:
+def load_camera_extrinsics(object: str) -> Tuple[np.ndarray, np.ndarray]:
     """Given the toss type, return the camera extrinsics in terms of a camera
     translation and rotation."""
 
     # Camera extrinsics file depends on the toss type.
-    camera_extrinsics_file = f'./assets/realsense_pose_{toss_type}.yaml'
-    if toss_type == 'milk' or toss_type == 'prism':
-        camera_extrinsics_file = f'./assets/realsense_pose_milk_prism.yaml'
+    camera_extrinsics_filename = f'realsense_pose_{object}.yaml'
+    if object in ['milk', 'prism']:
+        camera_extrinsics_filename = f'realsense_pose_milk_prism.yaml'
+    camera_extrinsics_file = op.join(DATA_GEN_DIR, 'assets',
+                                     camera_extrinsics_filename)
 
     # Load the data from the extrinsics file.
     with open(camera_extrinsics_file, 'r') as stream:
@@ -112,35 +163,51 @@ def load_camera_extrinsics(toss_type: str) -> Tuple[np.ndarray, np.ndarray]:
     
     return cam_trans, cam_rot_axis_angle
 
-def load_toss_time_from_yaml(toss_type, toss_number, key):
-    with open(PROCESSING_YAML_FILE, 'r') as f:
-        data = yaml.safe_load(f)
-    toss_data = data['tosses'][toss_type][toss_number]
-    start_time_data = toss_data[key]
-    time = rospy.rostime.Time(secs=start_time_data['secs'], nsecs=start_time_data['nsecs'])
+def load_toss_time_from_yaml(object, toss_number, key, as_ros_time=True):
+    start_time_data = load_field_from_yaml(object, toss_number, key)
+    if as_ros_time:
+        time = rospy.rostime.Time(secs=start_time_data['secs'],
+                                  nsecs=start_time_data['nsecs'])
+    else:
+        time = start_time_data['secs'] + start_time_data['nsecs'] * 1e-9
     return time
 
-def load_field_from_yaml(toss_type, toss_number, key):
+def load_field_from_yaml(object, toss_number, key):
     with open(PROCESSING_YAML_FILE, 'r') as f:
         data = yaml.safe_load(f)
-    toss_data = data['tosses'][toss_type][toss_number]
-    data = toss_data[key]
-    return data
+    toss_data = data['tosses'][object][toss_number]
+    return toss_data[key]
 
-def load_dataset_from_yaml(toss_type, toss_id):
+def load_rosbag_number_from_yaml(object, toss_number, second_toss_number=None):
     with open(PROCESSING_YAML_FILE, 'r') as f:
         data = yaml.safe_load(f)
-    return data['dataset'][toss_type][toss_id]
+    toss_data = data['dataset'][object][toss_number]
+    if second_toss_number is not None:
+        assert toss_data == data['dataset'][object][second_toss_number], \
+            f"Inconsistent data entries for tosses {toss_number} and " + \
+            f"{second_toss_number}:  got {toss_data} and " + \
+            f"{data['dataset'][object][second_toss_number]}."
+    return toss_data
 
-def load_body_frame_pos_from_yaml(toss_type):
+def load_body_frame_pos_from_yaml(object):
     with open(PROCESSING_YAML_FILE, 'r') as f:
         data = yaml.safe_load(f)
-    return data['body_frame'][toss_type]['pose']['position']
+    return data['body_frame'][object]['pose']['position']
 
-def load_body_frame_rot_from_yaml(toss_type):
+def load_body_frame_rot_from_yaml(object):
     with open(PROCESSING_YAML_FILE, 'r') as f:
         data = yaml.safe_load(f)
-    return data['body_frame'][toss_type]['pose']['rotation']
+    return data['body_frame'][object]['pose']['rotation']
+
+
+"""ROS Bag utilities."""
+def get_depth_bag_filename(rosbag_number: int) -> str:
+    """Get the filename of the ROS bag with the raw depth data."""
+    return op.join(DATA_GEN_DIR, 'rosbags', f'raw_{rosbag_number}.bag')
+
+def get_odom_bag_filename(rosbag_number: int) -> str:
+    """Get the filename of the ROS bag with the TagSLAM pose data."""
+    return op.join(DATA_GEN_DIR, 'rosbags', f'odom_{rosbag_number}.bag')
 
 
 """Filtering/visualization."""
@@ -325,11 +392,8 @@ def render_video():
         writer.append_data(imageio.imread(im))
     writer.close()
 
-"""
-Data preparation for running BundleTrack on our own RGBD data. 
-"""
 
-
+"""Data preparation for running BundleTrack on our own RGBD data."""
 def copy():
     """
     For copying images from robot_filter folder to BundleTrack folder.

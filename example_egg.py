@@ -8,7 +8,7 @@ from file_utils import (
     generate_depth_img_without_robot,
     generate_rgb_image_without_robot,
     import_data,
-    load_dataset_from_yaml,
+    load_rosbag_number_from_yaml,
     load_toss_time_from_yaml,
     write_real_depth_as_txt,
 )
@@ -107,7 +107,7 @@ yaml_path = './assets/config.yaml'
 start_time = load_toss_time_from_yaml(TOSS_TYPE, TOSS_ID, 'start_time')
 end_time = load_toss_time_from_yaml(TOSS_TYPE, TOSS_ID, 'end_time')
 print(f'start_time:{start_time.secs}.{start_time.nsecs}, end_time:{end_time.secs}.{end_time.nsecs}')
-bag_num = load_dataset_from_yaml(TOSS_TYPE)
+bag_num = load_rosbag_number_from_yaml(TOSS_TYPE)
 ROSBAG_NAME = f"./rosbags/raw_{bag_num}.bag"
 ODOM_ROSBAG_NAME = f"./rosbags/odom_{bag_num}.bag"
 

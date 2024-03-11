@@ -758,41 +758,37 @@ def save_initial_tagslam_pose_in_camera_frame(
     print(f'Initial pose saved to {annotated_poses_dir}/0000.txt.')
 
 
+# This extracts the times and poses associated with an odom_topic in an
+# odom_bag_file, extracting only messages delivered within a start_time and
+# end_time. The poses are saved to a file in the output_dir.
 def extract_time_versus_poses(
-    start_time,
-    end_time,
-    depth_bag_file,
-    odom_bag_file,
-    odom_topic,
-    output_dir,
-    save=False,
-    time_offset=0.0,
+    start_time, end_time, depth_bag_file, odom_bag_file, odom_topic, output_dir,
+    save=False, time_offset=0.0,
 ):
-    # Get the times associated with BundleSDF's eventual output poses, based on
-    # the timestamps associated with the depth images.
     depth_bag = rosbag.Bag(depth_bag_file, "r")
     odom_bag = rosbag.Bag(odom_bag_file, "r")
+
+    # Get the times associated with BundleSDF's eventual output poses, based on
+    # the timestamps associated with the depth images.
     bundletrack_time = []
-    odom_time = []
-    tagslam_poses = []
     for (_topic, msg, _ts) in depth_bag.read_messages(topics=str(DEPTH_ROS_TOPIC)):
-        if start_time and end_time:
-            if msg.header.stamp < start_time:
-                continue
-            if msg.header.stamp >= end_time:
-                break
+        if msg.header.stamp < start_time:
+            continue
+        if msg.header.stamp >= end_time:
+            break
         btime = msg.header.stamp.secs + msg.header.stamp.nsecs * 1e-9
         bundletrack_time.append(btime)
-    print("The length of the bundletrack_time (depth_topic) is {}".format(len(bundletrack_time)))
+    print(f"The length of the bundletrack_time (depth_topic) is {len(bundletrack_time)}")
 
     # Get the times and poses associated with TagSLAM, based on the information
     # in the odometry bag file.
+    odom_time = []
+    tagslam_poses = []
     for (_topic, msg, _ts) in odom_bag.read_messages(topics=str(odom_topic)):
-        if start_time and end_time:
-            if msg.header.stamp+rospy.Duration(time_offset) < start_time:
-                continue
-            if msg.header.stamp+rospy.Duration(time_offset) >= end_time:
-                break
+        if msg.header.stamp+rospy.Duration(time_offset) < start_time:
+            continue
+        if msg.header.stamp+rospy.Duration(time_offset) >= end_time:
+            break
         shifted_timestamp = msg.header.stamp+rospy.Duration(time_offset)
         gtime = shifted_timestamp.secs + shifted_timestamp.nsecs * 1e-9
         odom_time.append(gtime)
@@ -808,25 +804,45 @@ def extract_time_versus_poses(
         Q[6] = msg.pose.pose.orientation.w
         tagslam_poses.append(Q)
     tagslam_poses = np.array(tagslam_poses).T
-    print("The length of the odom_time (odom_topic) is {}".format(len(odom_time)))
+    print(f"The length of the odom_time (odom_topic) is {len(odom_time)}")
+
+    # Do not plan to handle more than +/- 1 frame difference.
+    assert -1 <= len(odom_time)-len(bundletrack_time) <= 1, "Received more " + \
+        f"than one frame difference between odometry and vision messages " + \
+        f"({len(odom_time)=} versus {len(bundletrack_time)=})."
+
+    # Adjust the lengths of the arrays to be most time synchronized.
+    initial_dt = abs(odom_time[0]-bundletrack_time[0])
+    end_dt = abs(odom_time[-1]-bundletrack_time[-1])
+    bundletrack_start_index = 0
     if len(odom_time) < len(bundletrack_time):
-        bundletrack_time = bundletrack_time[:len(odom_time)]
+        if initial_dt < end_dt:
+            bundletrack_time = bundletrack_time[:len(odom_time)]
+        else:
+            bundletrack_time = bundletrack_time[1:]
+            bundletrack_start_index = 1
         print("bundletrack_time CLIPPED to the same length as odom_time!")
     elif len(odom_time) > len(bundletrack_time):
-        odom_time = odom_time[:len(bundletrack_time)]
-        tagslam_poses = tagslam_poses[:, :len(bundletrack_time)]
+        if initial_dt < end_dt:
+            odom_time = odom_time[:len(bundletrack_time)]
+            tagslam_poses = tagslam_poses[:, :len(bundletrack_time)]
+        else:
+            odom_time = odom_time[1:]
+            tagslam_poses = tagslam_poses[:, 1:]
         print("odom_time CLIPPED to the same length as bundletrack_time!")
+
+    # Prepare to save and/or output the results.
     bundletrack_time = np.expand_dims(bundletrack_time,axis=0)
     odom_time = np.expand_dims(odom_time,axis=0)
     print(f"{odom_time.shape=}", f"{bundletrack_time.shape=}")
     data = np.concatenate((odom_time, tagslam_poses), axis=0)
-    data = data.T #N, 9
+    data = data.T #N, 8
     if save:
         np.savetxt(output_dir + 'tagslam.txt', data)
         print(output_dir + 'tagslam.txt saved!')
     depth_bag.close()
     odom_bag.close()
-    return bundletrack_time.reshape(-1,)
+    return bundletrack_time.reshape(-1,), bundletrack_start_index
 
 
 def extract_toss_duration(bagfile, topic, threshold):

@@ -1,6 +1,6 @@
 import argparse
 import os
-from file_utils import load_dataset_from_yaml, load_toss_time_from_yaml
+from file_utils import load_rosbag_number_from_yaml, load_toss_time_from_yaml
 from rosbag_processor import extract_time_versus_poses, extract_timestamps
 import rospy
 import numpy as np
@@ -272,7 +272,7 @@ if __name__ == "__main__":
     print(f"there are {frame_num} frames")
     start_time = load_toss_time_from_yaml(toss_type, toss_id, 'start_time')
     end_time = load_toss_time_from_yaml(toss_type, toss_id, 'end_time')
-    bag_num = load_dataset_from_yaml(DATASET)
+    bag_num = load_rosbag_number_from_yaml(DATASET)
     depth_bag_file = f"./rosbags/raw_{bag_num}.bag"
     odom_bag_file = f"./rosbags/odom_{bag_num}.bag"
     bundletrack_time = extract_time_versus_poses(
