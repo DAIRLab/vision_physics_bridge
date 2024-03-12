@@ -140,8 +140,9 @@ def camera_to_world(m, translation, axis_vec):
     return np.linalg.inv(extrinsic) @ m
 
 
-def transform_bundletrack_output(
-    pred_pose, output_pose_dir, odom_file_dir, translation, axis_vec, to_world=False
+def transform_bundletrack_origin_to_tagslam_origin(
+    pred_pose, bsdf_output_pose_dir, annotated_poses_dir, translation, axis_vec,
+    to_world=False
 ):
     """This function uses the equation from the below BundleTrack issue:
 
@@ -175,10 +176,10 @@ def transform_bundletrack_output(
     Or:    pred_new =    pred     *  inv(init_pose)  * init_pose_new
     """
     # This is camera_T_B1, the BundleSDF origin wrt camera at 1st timestamp.
-    init_pose = np.loadtxt(op.join(output_pose_dir, "0001.txt"))
+    init_pose = np.loadtxt(op.join(bsdf_output_pose_dir, "0001.txt"))
 
     # This is camera_T_T0, the TagSLAM origin wrt camera at 0th timestamp.
-    init_pose_new = np.loadtxt(op.join(odom_file_dir, "0000.txt"))
+    init_pose_new = np.loadtxt(op.join(annotated_poses_dir, "0000.txt"))
 
     # This converts camera_T_Bn to camera_T_Tn, switching from reporting pose of
     # BundleSDF origin to TagSLAM origin.
@@ -190,6 +191,52 @@ def transform_bundletrack_output(
         return pred_new_world
     
     return pred_new
+
+
+def transform_points_wrt_tagslam_origin_to_bundletrack_origin(
+        points_wrt_T, bsdf_output_pose_dir, annotated_poses_dir
+):
+    """This function aims to obtain B_T_p from T_T_p where B is the BundleSDF
+    origin of the body, T is the TagSLAM origin of the body, and p is a point on
+    the surface of the body.  The point p is represented as a 4x4 transformation
+    matrix, where the orientation does not matter since it's a point.
+
+        B_T_p = B_T_T * T_T_p
+              = (B_T_camera * camera_T_T) * T_T_p
+              = (inv(camera_T_B0 * camera_T_T0)) * T_T_p
+
+    Or:  points_wrt_B = inv(init_pose) * init_pose_new * points_wrt_T
+
+    Args:
+        points_wrt_T (*, 4, 4):  possibly batched 4x4 transformation matrices
+            representing points expressed in TagSLAM's body frame.
+        bsdf_output_pose_dir:  the output directory of the BundleSDF run that
+            the PLL run used.  0001.txt in this directory is the first BundleSDF
+            origin pose wrt the camera.
+        annotated_poses_dir:  the annotated poses directory associated with the
+            BundleSDF run.  0000.txt in this directory is the first TagSLAM
+            origin pose wrt the camera.
+
+    Output:
+        points_wrt_B (*, 4, 4):  possibly batched 4x4 transformation matrices
+            representing points expressed in BundleSDF's body frame.  Is
+            returned as the same shape as the input.
+    """
+    original_shape = points_wrt_T.shape
+
+    if points_wrt_T.ndim == 2:
+        points_wrt_T = points_wrt_T.reshape(1, 4, 4)
+    assert points_wrt_T.shape[1:] == (4, 4), f'Expecting (N, 4, 4) shape ' + \
+        f'but found {points_wrt_T.shape=}.'
+
+    # This is camera_T_B1, the BundleSDF origin wrt camera at 1st timestamp.
+    init_pose = np.loadtxt(op.join(bsdf_output_pose_dir, "0001.txt"))
+
+    # This is camera_T_T0, the TagSLAM origin wrt camera at 0th timestamp.
+    init_pose_new = np.loadtxt(op.join(annotated_poses_dir, "0000.txt"))
+
+    points_wrt_B = (np.linalg.inv(init_pose) @ init_pose_new) @ points_wrt_T
+    return points_wrt_B.reshape(original_shape)
 
 
 def setup_extrinsic(translation, axis_vec):
@@ -214,6 +261,8 @@ def setup_extrinsic(translation, axis_vec):
 
 
 def pos_quat_to_trans_mat(pos_quat):
+    """Converts position-quaternion to transformation matrix.  Assumes
+    quaternion is in xyzw ordering."""
     quat = pos_quat[3:]
     rot = R.from_quat(quat).as_matrix()
     trans = pos_quat[:3].reshape(-1, 1)
@@ -221,6 +270,8 @@ def pos_quat_to_trans_mat(pos_quat):
 
 
 def trans_mat_to_pos_quat(trans):
+    """Converts transformation matrix to position-quaternion.  Returns
+    quaternion in xyzw ordering."""
     q = R.from_matrix(trans[:3, :3]).as_quat().reshape(-1, 1)
     magnitude = np.linalg.norm(q)
     q /= magnitude

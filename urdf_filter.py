@@ -30,7 +30,7 @@ from pydrake.common.eigen_geometry import AngleAxis
 from manipulation.scenarios import AddRgbdSensor
 from manipulation.utils import FindResource
 import numpy as np
-from math_utils import transform_bundletrack_output, world_to_camera
+from math_utils import transform_bundletrack_origin_to_tagslam_origin, world_to_camera
 import rospy
 from sensor_msgs.msg import JointState
 from file_utils import import_data, filter
@@ -295,7 +295,7 @@ if __name__ == "__main__":
     print(f"Total frame is {frame_num}")
     for frame_id in range(1, 2):
         bundletrack_pose = np.loadtxt(OUTPUT_POSE_DIR + "%04i.txt" % 438)
-        pose = transform_bundletrack_output(
+        pose = transform_bundletrack_origin_to_tagslam_origin(
             bundletrack_pose,
             CAMERA_CONFIG["new"]["translation"],
             CAMERA_CONFIG["new"]["axis_vec"],

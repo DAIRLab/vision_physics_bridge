@@ -244,10 +244,15 @@ class ConverterBundleSDFToPLL:
         # Add 1 for range bounds because BundleSDF poses are 1-indexed.
         for i in range(1+start_index, len(timestamps)+1+start_index):
             trans_mat = np.loadtxt(op.join(self.bundlesdf_dir, "%04i.txt" % i))
-            trans_mat = math_utils.transform_bundletrack_output(
-                trans_mat, self.bundlesdf_dir, self.annotated_dir,
-                self.cam_trans, self.cam_rot_axis_angle, to_world=True
-            )
+            trans_mat = \
+                math_utils.transform_bundletrack_origin_to_tagslam_origin(
+                    pred_pose=trans_mat,
+                    bsdf_output_pose_dir=self.bundlesdf_dir,
+                    annotated_poses_dir=self.annotated_dir,
+                    translation=self.cam_trans,
+                    axis_vec=self.cam_rot_axis_angle,
+                    to_world=True
+                )
             pos_quat = math_utils.trans_mat_to_pos_quat(trans_mat).reshape(7)
             bundlesdf_poses.append(pos_quat)
             bundlesdf_times.append(timestamps[i-1])

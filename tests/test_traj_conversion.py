@@ -1,7 +1,7 @@
 import numpy as np
 from scipy.spatial.transform import Rotation
 import matplotlib.pyplot as plt
-from math_utils import transform_bundletrack_output
+from math_utils import transform_bundletrack_origin_to_tagslam_origin
 import torch
 import yaml
 
@@ -105,7 +105,7 @@ cam_axis_vec = np.array([cam_rot_dict['x'], cam_rot_dict['y'], cam_rot_dict['z']
 matrices = []
 for frame_id in range(366, 385):
     pose = np.loadtxt(BUNDLESDF_POSE_DIR + "%04i.txt" % frame_id)
-    pose = transform_bundletrack_output(pose, BUNDLESDF_POSE_DIR, ODOM_FILE_PATH, cam_trans, cam_axis_vec, to_world=True)
+    pose = transform_bundletrack_origin_to_tagslam_origin(pose, BUNDLESDF_POSE_DIR, ODOM_FILE_PATH, cam_trans, cam_axis_vec, to_world=True)
     matrices.append(pose)
 
 dt = 0.1

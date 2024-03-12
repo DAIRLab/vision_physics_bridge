@@ -3,7 +3,7 @@ import cv2
 import pywavefront
 import os
 import yaml
-from math_utils import pos_quat_to_trans_mat, setup_extrinsic, transform_bundletrack_output, world_to_camera
+from math_utils import pos_quat_to_trans_mat, setup_extrinsic, transform_bundletrack_origin_to_tagslam_origin, world_to_camera
 import open3d as o3d
 
 # PARAMETERS
@@ -81,7 +81,7 @@ def get_overlay_video():
         rgb_file_name = os.path.join(BUNDLESDF_DATASET_DIR, "rgb", f"{i:04}.png")
 
         object_pose = np.loadtxt(pose_file_name)
-        object_pose = transform_bundletrack_output(
+        object_pose = transform_bundletrack_origin_to_tagslam_origin(
             object_pose,
             os.path.join(BUNDLESDF_RESULT_DIR, "ob_in_cam/"),
             ANNOTATED_POSE_DIR,
@@ -115,7 +115,7 @@ def get_overlay_video_2():
         pose_file_name = os.path.join(BUNDLESDF_RESULT_DIR, "ob_in_cam", f"{i:04}.txt")
         rgb_file_name = os.path.join(BUNDLESDF_DATASET_DIR, "rgb", f"{i:04}.png")
         object_pose = np.loadtxt(pose_file_name)
-        object_pose = transform_bundletrack_output(
+        object_pose = transform_bundletrack_origin_to_tagslam_origin(
             object_pose,
             os.path.join(BUNDLESDF_RESULT_DIR, "ob_in_cam/"),
             ANNOTATED_POSE_DIR,

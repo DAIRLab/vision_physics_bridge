@@ -18,7 +18,7 @@ from tempfile import TemporaryDirectory
 from PIL import Image
 import io
 import rospy 
-from math_utils import transform_bundletrack_output
+from math_utils import transform_bundletrack_origin_to_tagslam_origin
 # video resolution
 video_resolution=[640, 480]
 
@@ -167,7 +167,7 @@ def get_bundletrack_results():
     poses = np.zeros((7, frame_num))
     for frame_id in range(1, frame_num+1):
         pose = np.loadtxt(DATA_DIR + "%04i.txt" % frame_id)#in camera frame
-        pose = transform_bundletrack_output(
+        pose = transform_bundletrack_origin_to_tagslam_origin(
             pose,
             DATA_DIR,
             ODOM_FILE_PATH,

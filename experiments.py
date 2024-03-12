@@ -5,7 +5,7 @@ import os
 import trimesh
 from scipy.spatial import cKDTree
 import open3d as o3d
-from math_utils import pos_quat_to_trans_mat, transform_bundletrack_output
+from math_utils import pos_quat_to_trans_mat, transform_bundletrack_origin_to_tagslam_origin
 
 def to_homo(pts):
     '''
@@ -124,7 +124,7 @@ def benchmark_one_video():
     pred_poses, gt_poses = [], []
     for frame_id in range(1, gt_data.shape[0]):
         output_pose = np.loadtxt(OUTPUT_POSE_DIR + "%04i.txt" % frame_id)
-        output_pose = transform_bundletrack_output(
+        output_pose = transform_bundletrack_origin_to_tagslam_origin(
             output_pose,
             OUTPUT_POSE_DIR,
             ODOM_FILE_PATH,

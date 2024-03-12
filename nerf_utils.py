@@ -30,7 +30,7 @@ from pydrake.common.eigen_geometry import AngleAxis
 from manipulation.scenarios import AddRgbdSensor
 from manipulation.utils import FindResource
 import numpy as np
-from math_utils import pos_quat_to_trans_mat, transform_bundletrack_output
+from math_utils import pos_quat_to_trans_mat, transform_bundletrack_origin_to_tagslam_origin
 import rospy
 from sensor_msgs.msg import JointState
 from file_utils import import_data, filter
@@ -495,7 +495,7 @@ if __name__ == "__main__":
     for frame_id in range(1, frame_num+1): #for bundlesdf
         print(f"Processing frame {frame_id+1}")
         bundletrack_pose = np.loadtxt(OUTPUT_POSE_DIR + "%04i.txt" % frame_id)
-        pose = transform_bundletrack_output(
+        pose = transform_bundletrack_origin_to_tagslam_origin(
             bundletrack_pose,
             OUTPUT_POSE_DIR,
             ODOM_FILE_PATH,

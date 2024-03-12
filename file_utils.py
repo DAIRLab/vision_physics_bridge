@@ -9,6 +9,7 @@ from PIL import Image
 import glob
 import cv2
 import glob
+import json
 import shutil
 import os
 import os.path as op
@@ -21,7 +22,6 @@ import sys
 DATA_GEN_DIR = op.dirname(op.realpath(__file__))
 REPO_DIR = op.dirname(DATA_GEN_DIR)
 PLL_DIR = op.join(REPO_DIR, 'dair_pll')
-# BUNDLESDF_DIR = op.join(REPO_DIR, 'bundlenets')
 
 sys.path.append(PLL_DIR)    # For importing dair_pll.
 sys.path.append(REPO_DIR)   # For importing bundlenets.
@@ -95,6 +95,15 @@ def bundlesdf_run_associated_pll_run_id(dataset: str, cycle_iteration: int,
         dataset=dataset, cycle_iteration=cycle_iteration,
         bundlesdf_id=bundlesdf_id)
 
+def bundlesdf_geometry_dir(dataset: str, cycle_iteration: int, pll_run_id: str,
+                           create: bool = True) -> str:
+    """BundleSDF's geometry directory for a particular experiment."""
+    geom_dir = bsdf_file_utils.geometry_dir(dataset, cycle_iteration,
+                                            pll_run_id, check_exists=False)
+    if create:
+        return assure_created(geom_dir)
+    return geom_dir
+
 def tagslam_pose_dir(dataset: str, check_exists: bool = False) -> str:
     """TagSLAM's pose directory for a particular dataset.  Contains tagslam.txt
     file."""
@@ -132,6 +141,34 @@ def contactnets_input_dir_bundlesdf(
         op.join(contactnets_input_dir(object), dataset, subdir_1, subdir_2,
                 subdir_3)
     )
+
+def contactnets_output_dir(dataset: str, cycle_iteration: int, pll_id: str
+                           ) -> str:
+    """PLL's geometry output directory for a particular experiment."""
+    object = dataset.split('_')[0]
+    results_dir = op.join(
+        pll_file_utils.RESULTS_DIR, f'vision_{object}', dataset)
+    subdir = 'tagslam' if cycle_iteration==0 else \
+        f'bundlesdf_iteration_{cycle_iteration}'
+    output_dir = op.join(results_dir, subdir, pll_id)
+    assert op.exists(output_dir), f'PLL run results folder {output_dir} ' + \
+        f'not exist.'
+    return output_dir
+
+def contactnets_output_geometry_dir(dataset: str, cycle_iteration: int,
+                                    pll_id: str) -> str:
+    """PLL's geometry output directory for a particular experiment."""
+    run_results_dir = contactnets_output_dir(dataset, cycle_iteration, pll_id)
+    output_geom_dir = op.join(run_results_dir,
+                              pll_file_utils.BSDF_SUBFOLDER_NAME)
+
+    # Known at this point that the parent results folder for this particular
+    # run exists, since that is checked in the contactnets_output_dir function.
+    assert op.exists(output_geom_dir), f'Looking for PLL geometry outputs ' + \
+        f'in {output_geom_dir} but does not exist (however the parent ' + \
+        f'directory {op.dirname(output_geom_dir)} does).'
+
+    return output_geom_dir
 
 
 """Yaml file parsing utilities."""
@@ -198,6 +235,20 @@ def load_body_frame_rot_from_yaml(object):
     with open(PROCESSING_YAML_FILE, 'r') as f:
         data = yaml.safe_load(f)
     return data['body_frame'][object]['pose']['rotation']
+
+def load_bundlesdf_id_from_pll_json(pll_output_dir: str) -> str:
+    """Load the BundleSDF ID associated with a PLL run from its configuration
+    file stored in its output directory."""
+    json_file = op.join(pll_output_dir, 'config.json')
+    assert op.exists(json_file), f'Did not find {json_file}.'
+
+    with open(json_file, 'r') as f:
+        json_object = json.loads(f.read())
+
+    bundlesdf_id = json_object['data_config']['bundlesdf_id']
+    if bundlesdf_id[:13] != 'bundlesdf_id_':
+        return f'bundlesdf_id_{bundlesdf_id}'
+    return bundlesdf_id
 
 
 """ROS Bag utilities."""

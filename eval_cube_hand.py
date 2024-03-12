@@ -13,7 +13,7 @@ from math_utils import (
     trans_mat_to_pos_quat,
     world_to_camera,
     rotation_matrix_to_euler,
-    transform_bundletrack_output,
+    transform_bundletrack_origin_to_tagslam_origin,
 )
 
 from sync_data import Synchronizer
@@ -71,7 +71,7 @@ def plot_with_time(bundletrack_time, gt_time, bundletrack_pose_dir, gt_poses):
     estimated_poses, ground_truth_poses = [], []
     for frame_id in range(1, frame_num+1):
         output_pose = np.loadtxt(bundletrack_pose_dir + "%04i.txt" % frame_id)
-        output_pose = transform_bundletrack_output(
+        output_pose = transform_bundletrack_origin_to_tagslam_origin(
             output_pose,
             bundletrack_pose_dir,
             ODOM_FILE_PATH,
