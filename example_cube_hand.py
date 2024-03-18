@@ -1,7 +1,7 @@
 import argparse
+import shutil
 import numpy as np
 from tqdm import tqdm
-from depth_filter import DepthFilter
 from file_utils import (
     create_annotated_poses,
     denoise,
@@ -11,27 +11,34 @@ from file_utils import (
     load_toss_time_from_yaml,
     write_real_depth_as_txt,
 )
-from math_utils import world_to_camera
-from pydrake.all import StartMeshcat
 from rosbag_processor import (
     bag_to_depth_images,
     bag_to_rgb_images,
     extract_cube_pose,
-    extract_gt_poses_from_tagslam,
-    extract_gt_poses_from_tagslam_with_quat,
-    extract_poses_with_timestamps,
-    extract_gt_poses_from_tagslam_with_missing_frames,
 )
 import rospy
 from urdf_filter import dilate, run_urdf_filter
 import os, os.path
 import yaml
-from scipy.spatial.transform import Rotation as R
+import file_utils
+
 """Process the cube hand-tossing data.
 """
-
-ROSBAG_NAME = "./rosbags/raw_50.bag"
-ODOM_ROSBAG_NAME = "./rosbags/odom_50.bag"
+parser = argparse.ArgumentParser()
+parser.add_argument(
+    "--toss_id",
+    type=int,
+    required=True,
+)
+args = parser.parse_args()
+toss_id = args.toss_id
+print(f'Processing cube toss {toss_id}')
+TOSS_TYPE = 'cube_hand'
+yaml_path = './assets/config.yaml'
+bag_num = file_utils.load_rosbag_number_from_yaml(TOSS_TYPE, toss_id)
+print(f'bag num: {bag_num}')
+ROSBAG_NAME = f"./rosbags/raw_{bag_num}.bag"
+ODOM_ROSBAG_NAME = f"./rosbags/odom_{bag_num}.bag"
 DEPTH_ROS_TOPIC = "/camera/aligned_depth_to_color/image_raw"
 JOINT_STATE_ROS_TOPIC = "/joint_states"
 RGB_ROS_TOPIC = "/camera/color/image_raw"
@@ -82,6 +89,7 @@ DILATED_MASK_FILE = ROOT_DIR + "dilated_mask_data/%04i.png"
 FILTERED_DEPTH_FILE = ROOT_DIR + "filtered_data/depth_without_robot_frame%04i.png"
 FILTERED_RGB_FILE = ROOT_DIR + "filtered_data/rgb_without_robot_frame%04i.png"
 TAGSLAM_POSES_DIR = ROOT_DIR + "tagslam_poses/"
+TEXT_PATH = ROOT_DIR + "texts/"
 
 # BundleTrack data paths
 DENOISE_MASK_DIR = BUNDLETRACK_DIR + BUNDLETRACK_DATA_DIR + "masks"
@@ -182,3 +190,11 @@ if __name__ == "__main__":
     frame_num = len([name for name in os.listdir(BUNDLETRACK_RGB)])
     for frame_id in range(1, frame_num+1):
         create_annotated_poses(output_dir=ANNOTATED_POSES_DIR, frame_id=frame_id)
+    # clean up
+    try:
+        shutil.rmtree(DEPTH_DATA_DIR)
+        shutil.rmtree(RGB_DATA_DIR)
+        shutil.rmtree(TEXT_PATH)
+        print(f"Done clean up!")
+    except Exception as e:
+        print(f"Error occurred: {e}")
