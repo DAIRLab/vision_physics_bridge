@@ -140,7 +140,7 @@ def transform_mesh_to_normalized_space(gt_mesh, ob_init_cam, T, translation, sc_
 
 def generate_contact_loss_data(path, output_path, output_w_path, ob_init_cam, translation, sc_factor, save=False, num_samples=1000):
     '''
-    Visaulize two points clouds in C_prime frame where C_prime is BundleSDF's object body frame.
+    Visualize two points clouds in C_prime frame where C_prime is BundleSDF's object body frame.
       pC_prime = TC_C_prime @ TW_C @ TB_W @ p_B.
 
     @path:  body frame contact points, aka p_B
