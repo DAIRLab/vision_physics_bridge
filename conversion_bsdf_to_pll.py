@@ -21,7 +21,6 @@ from typing import Tuple, List
 import file_utils
 import math_utils
 import rosbag_processor
-import sync_data
 
 
 FILTER_ORIENTATIONS = True
@@ -33,8 +32,6 @@ FILTER_TYPE = 'median'              # Can be median or savgol.
 SAVGOL_FILTER_WINDOW_LENGTH = 15
 SAVGOL_FILTER_POLYORDER = 3
 MEDIAN_FILTER_KERNEL_SIZE = 3
-
-ADJUST_POSITION = True
 
 YAML_PATH = file_utils.PROCESSING_YAML_FILE
 
@@ -112,7 +109,7 @@ class ConverterBundleSDFToPLL:
                  start_toss: int, end_toss: int,
                  object: str, cycle_iteration: int,
                  cam_trans: np.ndarray, cam_rot_axis_angle: np.ndarray,
-                 frame_rate: int, z_shift: float, plot: bool = False) -> None:
+                 frame_rate: int, z_table: float, plot: bool = False) -> None:
         """Prepare for processing pose data from TagSLAM and BundleSDF.
 
         Args:
@@ -135,7 +132,8 @@ class ConverterBundleSDFToPLL:
             frame_rate:  The expected frame rate of the data.  This isn't used
                 for processing but can be used to manually inspect that the
                 data's timestamps result in a similar frame rate as expected.
-            z_shift:  Amount to shift the z positions throughout the trajectory.
+            z_table:  The height of the table in world frame.  PLL expects the
+                table plane to be at z=0, so this will get subtracted out.
             plot:  Whether to show the overlay plot of BundleSDF and TagSLAM
                 trajectories.
         """
@@ -153,7 +151,7 @@ class ConverterBundleSDFToPLL:
         self.cam_trans = cam_trans
         self.cam_rot_axis_angle = cam_rot_axis_angle
         self.frame_rate = frame_rate
-        self.z_shift = z_shift
+        self.z_table = z_table
 
         self.dataset = f'{self.object}_{self.start_toss}'
         self.dataset += f'-{self.end_toss}' if \
@@ -374,7 +372,6 @@ class ConverterBundleSDFToPLL:
             filter_pos=FILTER_POSITIONS,
             filter_lin_vel=FILTER_LINEAR_VELOCITIES,
             filter_ang_vel=FILTER_ANGULAR_VELOCITIES,
-            adjust_position=ADJUST_POSITION
     ) -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
         """Generate contactnets-format trajectory components.  This requires
         estimating velocities from differences in pose and converting everything
@@ -423,13 +420,12 @@ class ConverterBundleSDFToPLL:
             else:
                 raise NotImplementedError
 
-        # Adjust position height if desired.
-        if adjust_position:
-            self.z_shift -= ps[-1, 2]
-        ps[:, 2] += self.z_shift
+        # Subtract out table height so z=0 corresponds to being on the table.
+        ps[:, 2] -= self.z_table
 
         # Calculate derivatives.
-        vs = self._estimate_linear_velocities(ts=t, ps=ps, filter=filter_lin_vel)
+        vs = self._estimate_linear_velocities(ts=t, ps=ps,
+                                              filter=filter_lin_vel)
         ws = self._estimate_angular_velocities(ts=t, qs=qs_xyzw,
                                               filter=filter_ang_vel)
 
@@ -710,13 +706,8 @@ class ConverterBundleSDFToPLL:
               type=int,
               default=1,
               help="BundleSDF iteration number (0 means use TagSLAM poses).")
-@click.option('--z-shift',
-              type=float,
-              default=0.05148739950625105,
-              help="Offset from the table to the origin of the data.")
 
-def main_command(vision_asset: str, bundlesdf_id: str, cycle_iteration: int,
-                 z_shift: float):
+def main_command(vision_asset: str, bundlesdf_id: str, cycle_iteration: int):
     # First decode the system and start/end tosses from the provided asset
     # directory.
     assert '_' in vision_asset, f'Invalid asset directory: {vision_asset}.'
@@ -749,6 +740,13 @@ def main_command(vision_asset: str, bundlesdf_id: str, cycle_iteration: int,
 
     # Get the camera extrinsics.
     cam_trans, cam_rot_axis_angle = file_utils.load_camera_extrinsics(object)
+
+    # Get the table height.  Use the average if using multiple tosses.
+    table_heights = np.array([
+        file_utils.load_table_z_height(object, toss) for toss in
+        range(start_toss, end_toss+1)
+    ])
+    z_table = np.mean(table_heights)
     
     # Start/end times are for the start and end of a BundleSDF trajectory, which
     # starts with the object unmoving on the table, includes the toss wind-up
@@ -806,7 +804,7 @@ def main_command(vision_asset: str, bundlesdf_id: str, cycle_iteration: int,
         start_toss=start_toss, end_toss=end_toss,
         object=object, cycle_iteration=cycle_iteration,
         cam_trans=cam_trans, cam_rot_axis_angle=cam_rot_axis_angle,
-        frame_rate=30, z_shift=z_shift, plot=True
+        frame_rate=30, z_table=z_table, plot=True
     )
 
     converter.do_process()

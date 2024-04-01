@@ -283,6 +283,12 @@ def load_bundlesdf_id_from_pll_json(pll_output_dir: str) -> str:
         return f'bundlesdf_id_{bundlesdf_id}'
     return bundlesdf_id
 
+def load_table_z_height(object, toss_number) -> float:
+    """Load the table height associated with an object and toss."""
+    with open(table_calibration_yaml_filepath(), 'r') as f:
+        data = yaml.safe_load(f)
+    return data[object][toss_number]
+
 
 """ROS Bag utilities."""
 def get_depth_bag_filename(rosbag_number: int) -> str:
