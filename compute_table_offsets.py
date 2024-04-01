@@ -2,8 +2,10 @@
 import click
 import matplotlib.pyplot as plt
 import numpy as np
+import os.path as op
 import pdb
 import sys
+import yaml
 
 from scipy.optimize import minimize_scalar
 from typing import Tuple
@@ -33,13 +35,62 @@ PATIENCE = 200
 DESIRED_RETENTION = 0.5
 
 
+def get_table_height_from_log(log_file: str) -> float:
+    """From a recorded log file, extract the optimized table height."""
+    # Handle case where the log doesn't exist.
+    if not op.exists(log_file):
+        print(f'Did not find {log_file} -- Skipping.')
+        return None
+
+    with open(log_file, 'r') as f:
+        lines = f.readlines()
+    last_lines = lines[-4:]
+
+    # Handle the case where the log exists but it didn't compute table height.
+    # --> there won't be lines with "Saved plot to ...".
+    if 'Saved plot to' not in last_lines[-1]:
+        print(f'Found {log_file} but did not report table height -- Skipping.')
+        return None
+
+    # Handle the case where the optimization hit iteration limit.
+    # --> there will be a "No progress with ..." line; use line above.
+    if 'No progress with' in last_lines[-3]:
+        line_i = -4
+
+        # This line may not have the selected table height.  Check based on if
+        # this line's retention percentage is above the desired retention rate.
+        retention_percent = float(lines[line_i].split('(')[1].split('%)')[0])
+        while retention_percent < DESIRED_RETENTION*100:
+            # TODO pick a different line
+            line_i -= 1
+            assert len(lines) + line_i >= 0, f'Could not find retention ' + \
+                f'rate in {log_file} above threshold {DESIRED_RETENTION} (' + \
+                f'{line_i=}, {len(lines)=}).'
+            retention_percent = float(
+                lines[line_i].split('(')[1].split('%)')[0])
+
+        line = lines[line_i]
+
+    # Handle the case where the optimization satisfied tolerance.
+    # --> there will be two "Saved plot to ..." lines; use line above.
+    else:
+        line = last_lines[-3]
+
+    assert 'Found optimal z height' in line, f'Thought line that would ' + \
+        f'report optimal z height would be {line} but did not find it.'
+
+    height_str = line.split('z height: ')[1].split(' m with ')[0]
+    return float(height_str)
+
+
 class ROSBagDepthPlaneViewer:
     """Compute the table height for a single toss."""
     def __init__(self, vision_asset: str) -> None:
         self.vision_asset = vision_asset
-        object = vision_asset.split('_')[0]
+        object = vision_asset.split('_')[:-1]
+        object = object[0] if len(object) == 1 else f'{object[0]}_{object[1]}'
 
-        start_toss = int(vision_asset.split('_')[1].split('-')[0])
+        start_toss = int(vision_asset.split('_')[-1].split('-')[0])
         end_toss = start_toss if '-' not in vision_asset else \
             int(vision_asset.split('-')[1])
         assert start_toss <= end_toss, f'Invalid toss range: {start_toss} ' + \
@@ -47,11 +98,16 @@ class ROSBagDepthPlaneViewer:
         
         # Locate all the related files and directories for the given vision
         # asset.
-        rosbag_number = file_utils.load_rosbag_number_from_yaml(
+        rosbag_num = file_utils.load_rosbag_number_from_yaml(
             object, start_toss, second_toss_number=end_toss)
-        self.depth_bag_file = file_utils.get_depth_bag_filename(rosbag_number)
+        try:
+            self.depth_bag_file = file_utils.get_depth_bag_filename(rosbag_num)
+        except AssertionError as e:
+            print(e)
+            self.success = False
+            return
 
-        print(f'Processing toss {vision_asset} in raw_{rosbag_number}.bag.\n')
+        print(f'Processing toss {vision_asset} in raw_{rosbag_num}.bag.\n')
 
         # Get the camera extrinsics, which are stored for every object.
         self.cam_p, self.cam_R_axis_angle = \
@@ -72,6 +128,8 @@ class ROSBagDepthPlaneViewer:
         
         self.times, self.raw_images = rosbag_processor.extract_depth_images(
             self.start_ros_times[0], self.end_ros_times[0], self.depth_bag_file)
+
+        self.success = True
 
     def convert_depth_image_to_point_cloud(self) -> None:
         """Given the depth images stored at self.raw_images, convert them to
@@ -161,10 +219,19 @@ class ROSBagDepthPlaneViewer:
         z_right, n_right = self._find_optimal_z_height_for_epsilon(
             cropped_point_cloud, eps_right, verbose=False)
 
-        assert n_left/n_total < DESIRED_RETENTION, f'Found > ' + \
-            f'{DESIRED_RETENTION} of the points at {eps_left=}.'
+        # Don't need to check the left side because the bounded optimization
+        # problem will just choose eps_left (the smallest epsilon) if the
+        # fraction of included points is already greater than the desired
+        # retention there.
+        # assert n_left/n_total < DESIRED_RETENTION, f'Found > ' + \
+        #     f'{DESIRED_RETENTION} of the points at {eps_left=} (' + \
+        #     f'{n_left/n_total}).'
+
+        # Do check the right side, because we do want at least the retention
+        # rate within the bounds.
         assert n_right/n_total > DESIRED_RETENTION, f'Found < ' + \
-            f'{DESIRED_RETENTION} of the points at {eps_right=}.'
+            f'{DESIRED_RETENTION} of the points at {eps_right=} (' + \
+            f'{n_right/n_total}).'
         
         epsilons = [eps_left, eps_right]
         fractions = [n_left/n_total, n_right/n_total]
@@ -265,6 +332,7 @@ class ROSBagDepthPlaneViewer:
             print(f'Saved plot to {file}.')
         if show:
             plt.show()
+        plt.close()
 
     def plot_point_cloud(self, show: bool = True, save: bool = False) -> None:
         """Plot the provided depth image and the processing."""
@@ -336,6 +404,7 @@ class ROSBagDepthPlaneViewer:
             print(f'Saved plot to {file}.')
         if show:
             plt.show()
+        plt.close()
         
     def _find_optimal_z_height_for_epsilon(
             self, cropped_point_cloud: np.ndarray, epsilon: float,
@@ -394,10 +463,11 @@ def process_single_command(vision_asset: str, visualize: bool):
     assert '_' in vision_asset, f'Invalid asset directory: {vision_asset}.'
     
     depth_plane_viewer = ROSBagDepthPlaneViewer(vision_asset)
-    depth_plane_viewer.convert_depth_image_to_point_cloud()
-    depth_plane_viewer.compute_epsilon_and_table_offset(
-        save=True, show=visualize)
-    depth_plane_viewer.plot_point_cloud(save=True, show=visualize)
+    if depth_plane_viewer.success:
+        depth_plane_viewer.convert_depth_image_to_point_cloud()
+        depth_plane_viewer.compute_epsilon_and_table_offset(
+            save=True, show=visualize)
+        depth_plane_viewer.plot_point_cloud(save=True, show=visualize)
 
 
 # Use 'all' command to process all tosses found in config.yaml.
@@ -406,30 +476,76 @@ def process_single_command(vision_asset: str, visualize: bool):
               type=bool,
               default=True,
               help="whether to visualize the point cloud processing.")
-def process_all_command(visualize: bool):
+@click.option('--overwrite/--keep-data',
+              type=bool,
+              default=False,
+              help="whether to overwrite or keep previously generated results")
+def process_all_command(visualize: bool, overwrite: bool):
     # Get all the vision assets from the config.yaml file.
-    pdb.set_trace()
     vision_assets = []
     objects = file_utils.load_toss_objects_from_yaml()
     for obj in objects:
         tosses = file_utils.load_toss_numbers_from_object_in_yaml(obj)
         for toss in tosses:
             vision_assets.append(f'{obj}_{toss}')
-    pdb.set_trace()
 
     # Process each vision asset, logging the results to log files.
     for vision_asset in vision_assets:
         log_file = file_utils.point_cloud_processing_log_filepath(vision_asset)
+        if op.exists(log_file) and not overwrite:
+            plot_file = file_utils.point_cloud_processing_plot_filepath(
+                vision_asset)
+            if op.exists(plot_file):
+                print(f'Skipping {vision_asset} since found prior results.')
+                continue
+            else:
+                print(f'Looking for bag for: ', end='')
+
         print(f'Processing {vision_asset} --> {log_file}')
-        pdb.set_trace()
         with open(log_file, 'w') as f:
             sys.stdout = f
             depth_plane_viewer = ROSBagDepthPlaneViewer(vision_asset)
-            depth_plane_viewer.convert_depth_image_to_point_cloud()
-            depth_plane_viewer.compute_epsilon_and_table_offset(
-                save=True, show=visualize)
-            depth_plane_viewer.plot_point_cloud(save=True, show=visualize)
+            if depth_plane_viewer.success:
+                depth_plane_viewer.convert_depth_image_to_point_cloud()
+                depth_plane_viewer.compute_epsilon_and_table_offset(
+                    save=True, show=visualize)
+                depth_plane_viewer.plot_point_cloud(save=True, show=visualize)
         sys.stdout = sys.__stdout__
+
+
+# Use 'combine' command to read all the previously-generated results and write
+# them to a yaml file.
+@cli.command('combine')
+@click.option('--overwrite/--keep-data')
+def combine_command(overwrite: bool):
+    # Check if the yaml file has already been written before.
+    calibration_yaml_file = file_utils.table_calibration_yaml_filepath()
+    if op.exists(calibration_yaml_file) and not overwrite:
+        print(f'Already found {calibration_yaml_file} -- use --overwrite ' + \
+              f'next time if you want to overwrite.')
+        return
+
+    # Build the dictionary.
+    object_toss_height_dict = {}
+    objects = file_utils.load_toss_objects_from_yaml()
+    for obj in objects:
+        object_toss_height_dict[obj] = {}
+        tosses = file_utils.load_toss_numbers_from_object_in_yaml(obj)
+        for toss in tosses:
+            vision_asset = f'{obj}_{toss}'
+            log_file = file_utils.point_cloud_processing_log_filepath(
+                vision_asset)
+            object_toss_height_dict[obj][toss] = get_table_height_from_log(
+                log_file)
+
+            print(f'{vision_asset}: {object_toss_height_dict[obj][toss]}')
+
+    with open(calibration_yaml_file, 'w') as f:
+        yaml.dump(object_toss_height_dict, f)
+
+    print(f'Conglomerated results into yaml {calibration_yaml_file}.')
+
+
 
 if __name__ == '__main__':
     cli()
