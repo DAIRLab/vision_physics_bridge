@@ -156,11 +156,11 @@ tosses:
   cube_hand:
     - toss: 0 # toss 1-10
       start_time: 
-        secs: 
-        nsecs: 
+        secs: 1695415477
+        nsecs: 543619
       end_time:
-        secs: 
-        nsecs: 
+        secs: 1695415567
+        nsecs: 220366
 
     - toss: 1
       start_time: 
