@@ -185,7 +185,9 @@ def load_camera_extrinsics(object: str) -> Tuple[np.ndarray, np.ndarray]:
     # Camera extrinsics file depends on the toss type.
     camera_extrinsics_filename = f'realsense_pose_{object}.yaml'
     if object in ['milk', 'prism']:
-        camera_extrinsics_filename = f'realsense_pose_milk_prism.yaml'
+        camera_extrinsics_filename = 'realsense_pose_milk_prism.yaml'
+    if object == 'cube_hand':
+        camera_extrinsics_filename = 'realsense_pose_cube_hand_60_3.yaml'
     camera_extrinsics_file = op.join(DATA_GEN_DIR, 'assets',
                                      camera_extrinsics_filename)
 
@@ -285,11 +287,15 @@ def load_bundlesdf_id_from_pll_json(pll_output_dir: str) -> str:
 """ROS Bag utilities."""
 def get_depth_bag_filename(rosbag_number: int) -> str:
     """Get the filename of the ROS bag with the raw depth data."""
-    return op.join(DATA_GEN_DIR, 'rosbags', f'raw_{rosbag_number}.bag')
+    bag_filename = op.join(DATA_GEN_DIR, 'rosbags', f'raw_{rosbag_number}.bag')
+    assert op.exists(bag_filename), f'Did not find expected {bag_filename}'
+    return bag_filename
 
 def get_odom_bag_filename(rosbag_number: int) -> str:
     """Get the filename of the ROS bag with the TagSLAM pose data."""
-    return op.join(DATA_GEN_DIR, 'rosbags', f'odom_{rosbag_number}.bag')
+    bag_filename = op.join(DATA_GEN_DIR, 'rosbags', f'odom_{rosbag_number}.bag')
+    assert op.exists(bag_filename), f'Did not find expected {bag_filename}'
+    return bag_filename
 
 
 """Filtering/visualization."""
@@ -302,6 +308,11 @@ def point_cloud_processing_plot_filepath(dataset: str, eps: bool = False
 def point_cloud_processing_log_filepath(dataset: str) -> str:
     """Get the filepath for the point cloud processing log."""
     return op.join(table_height_calibration_dir(), f'{dataset}.txt')
+
+def table_calibration_yaml_filepath() -> str:
+    """Get the filepath for the table calibration yaml file that stores all of
+    the table heights for each toss."""
+    return op.join(table_height_calibration_dir(), 'table_heights.yaml')
 
 def filter(real_img, sim_img):
     """
