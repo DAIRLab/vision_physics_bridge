@@ -758,6 +758,28 @@ def save_initial_tagslam_pose_in_camera_frame(
     print(f'Initial pose saved to {annotated_poses_dir}/0000.txt.')
 
 
+def extract_depth_images(start_time, end_time, depth_bag_file):
+    depth_bag = rosbag.Bag(depth_bag_file, "r")
+
+    bridge = CvBridge()
+
+    depth_times, depth_msgs = [], []
+    for (_topic, msg, _ts) in depth_bag.read_messages(
+        topics=str(DEPTH_ROS_TOPIC)
+    ):
+        if msg.header.stamp < start_time:
+            continue
+        if msg.header.stamp >= end_time:
+            break
+
+        depth_times.append(msg.header.stamp.secs + msg.header.stamp.nsecs*1e-9)
+
+        image = bridge.imgmsg_to_cv2(msg, desired_encoding="passthrough")
+        depth_msgs.append(image)
+
+    return depth_times, depth_msgs
+
+
 # This extracts the times and poses associated with an odom_topic in an
 # odom_bag_file, extracting only messages delivered within a start_time and
 # end_time. The poses are saved to a file in the output_dir.

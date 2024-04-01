@@ -18,6 +18,8 @@ import yaml
 import rospy
 import sys
 
+import math_utils
+
 
 DATA_GEN_DIR = op.dirname(op.realpath(__file__))
 REPO_DIR = op.dirname(DATA_GEN_DIR)
@@ -170,6 +172,10 @@ def contactnets_output_geometry_dir(dataset: str, cycle_iteration: int,
 
     return output_geom_dir
 
+def table_height_calibration_dir() -> str:
+    """Directory for the point cloud processing output plots."""
+    return assure_created(op.join(DATA_GEN_DIR, 'table_calibration'))
+
 
 """Yaml file parsing utilities."""
 def load_camera_extrinsics(object: str) -> Tuple[np.ndarray, np.ndarray]:
@@ -199,6 +205,19 @@ def load_camera_extrinsics(object: str) -> Tuple[np.ndarray, np.ndarray]:
     ).reshape(-1, 1)
     
     return cam_trans, cam_rot_axis_angle
+
+def load_camera_intrinsics() -> Tuple[float, float, float, float]:
+    """The camera intrinsics appear to be the same for every experiment.  They
+    are stored in cnets-data-generation/cam_K.txt."""
+    cam_K_file = op.join(DATA_GEN_DIR, 'cam_K.txt')
+    with open(cam_K_file, 'r') as f:
+        lines = f.readlines()
+
+    lines = math_utils.extract_floats_from_camk(lines)
+    fx, fy = float(lines[0][0]), float(lines[1][1])
+    cx, cy = float(lines[0][2]), float(lines[1][2])
+
+    return fx, fy, cx, cy
 
 def load_toss_time_from_yaml(object, toss_number, key, as_ros_time=True):
     start_time_data = load_field_from_yaml(object, toss_number, key)
@@ -262,6 +281,12 @@ def get_odom_bag_filename(rosbag_number: int) -> str:
 
 
 """Filtering/visualization."""
+def point_cloud_processing_plot_filepath(dataset: str, eps: bool = False
+                                         ) -> str:
+    """Get the filepath for the point cloud processing plot."""
+    filename = f'{dataset}.png' if not eps else f'{dataset}_eps.png'
+    return op.join(table_height_calibration_dir(), filename)
+
 def filter(real_img, sim_img):
     """
     Filter the simulated image from the real depth image.

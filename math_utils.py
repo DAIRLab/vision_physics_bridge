@@ -4,6 +4,26 @@ import os.path as op
 from scipy.spatial.transform import Rotation as R
 
 
+def log_mean(a, b):
+    """Compute the geometric mean of two numbers."""
+    return np.exp((np.log(a) + np.log(b)) / 2)
+
+
+def extract_floats_from_camk(lines):
+    # Initialize an empty list to store the extracted floats
+    extracted_floats = []
+
+    # Iterate through each line
+    for line in lines:
+        # Split the line into individual elements using spaces
+        elements = line.split()
+
+        # Convert each element to a float and append to the list
+        floats = [float(element) for element in elements]
+        extracted_floats.append(floats)
+    return extracted_floats
+
+
 def convert_relative_frames_to_absolute(
         relative_frames: np.ndarray, full_times: np.ndarray,
         ros_times: np.ndarray) -> np.ndarray:
