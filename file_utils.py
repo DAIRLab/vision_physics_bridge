@@ -1,5 +1,5 @@
 from copy import deepcopy
-from typing import Tuple
+from typing import Tuple, List
 import numpy as np
 from PIL import Image
 import matplotlib.pyplot as plt
@@ -219,6 +219,18 @@ def load_camera_intrinsics() -> Tuple[float, float, float, float]:
 
     return fx, fy, cx, cy
 
+def load_toss_objects_from_yaml() -> List[str]:
+    """Load the objects that have been tossed in the dataset."""
+    with open(PROCESSING_YAML_FILE, 'r') as f:
+        data = yaml.safe_load(f)
+    return data['dataset'].keys()
+
+def load_toss_numbers_from_object_in_yaml(object: str) -> dict:
+    """Load the toss numbers for a particular object from the dataset."""
+    with open(PROCESSING_YAML_FILE, 'r') as f:
+        data = yaml.safe_load(f)
+    return data['dataset'][object].keys()
+
 def load_toss_time_from_yaml(object, toss_number, key, as_ros_time=True):
     start_time_data = load_field_from_yaml(object, toss_number, key)
     if as_ros_time:
@@ -286,6 +298,10 @@ def point_cloud_processing_plot_filepath(dataset: str, eps: bool = False
     """Get the filepath for the point cloud processing plot."""
     filename = f'{dataset}.png' if not eps else f'{dataset}_eps.png'
     return op.join(table_height_calibration_dir(), filename)
+
+def point_cloud_processing_log_filepath(dataset: str) -> str:
+    """Get the filepath for the point cloud processing log."""
+    return op.join(table_height_calibration_dir(), f'{dataset}.txt')
 
 def filter(real_img, sim_img):
     """

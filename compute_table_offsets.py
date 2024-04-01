@@ -3,8 +3,9 @@ import click
 import matplotlib.pyplot as plt
 import numpy as np
 import pdb
+import sys
 
-from scipy.optimize import minimize_scalar, minimize
+from scipy.optimize import minimize_scalar
 from typing import Tuple
 
 import file_utils, math_utils, rosbag_processor
@@ -33,7 +34,7 @@ DESIRED_RETENTION = 0.5
 
 
 class ROSBagDepthPlaneViewer:
-    """"""
+    """Compute the table height for a single toss."""
     def __init__(self, vision_asset: str) -> None:
         self.vision_asset = vision_asset
         object = vision_asset.split('_')[0]
@@ -373,7 +374,13 @@ class ROSBagDepthPlaneViewer:
 
 
 #######################################################################
-@click.command()
+@click.group()
+def cli():
+    pass
+
+
+# Use 'single' command to process a single vision asset.
+@cli.command('single')
 @click.option('--vision-asset',
               type=str,
               default=None,
@@ -383,10 +390,7 @@ class ROSBagDepthPlaneViewer:
               type=bool,
               default=True,
               help="whether to visualize the point cloud processing.")
-
-def main_command(vision_asset: str, visualize: bool):
-    # First decode the system and start/end tosses from the provided asset
-    # directory.
+def process_single_command(vision_asset: str, visualize: bool):
     assert '_' in vision_asset, f'Invalid asset directory: {vision_asset}.'
     
     depth_plane_viewer = ROSBagDepthPlaneViewer(vision_asset)
@@ -396,11 +400,36 @@ def main_command(vision_asset: str, visualize: bool):
     depth_plane_viewer.plot_point_cloud(save=True, show=visualize)
 
 
-    # converter.do_process()
-    # converter.plot_trajectory(full_trajectory=True)
-    # converter.plot_trajectory(full_trajectory=False)
-    # converter.save_data(save_tagslam=True, save_bundlesdf=True)
+# Use 'all' command to process all tosses found in config.yaml.
+@cli.command('all')
+@click.option('--visualize/--no-visualize',
+              type=bool,
+              default=True,
+              help="whether to visualize the point cloud processing.")
+def process_all_command(visualize: bool):
+    # Get all the vision assets from the config.yaml file.
+    pdb.set_trace()
+    vision_assets = []
+    objects = file_utils.load_toss_objects_from_yaml()
+    for obj in objects:
+        tosses = file_utils.load_toss_numbers_from_object_in_yaml(obj)
+        for toss in tosses:
+            vision_assets.append(f'{obj}_{toss}')
+    pdb.set_trace()
 
+    # Process each vision asset, logging the results to log files.
+    for vision_asset in vision_assets:
+        log_file = file_utils.point_cloud_processing_log_filepath(vision_asset)
+        print(f'Processing {vision_asset} --> {log_file}')
+        pdb.set_trace()
+        with open(log_file, 'w') as f:
+            sys.stdout = f
+            depth_plane_viewer = ROSBagDepthPlaneViewer(vision_asset)
+            depth_plane_viewer.convert_depth_image_to_point_cloud()
+            depth_plane_viewer.compute_epsilon_and_table_offset(
+                save=True, show=visualize)
+            depth_plane_viewer.plot_point_cloud(save=True, show=visualize)
+        sys.stdout = sys.__stdout__
 
 if __name__ == '__main__':
-    main_command()  # pylint: disable=no-value-for-parameter
+    cli()
