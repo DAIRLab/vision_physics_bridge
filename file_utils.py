@@ -68,7 +68,7 @@ def get_pll_geometry_output_dir(system: str, cycle_iteration: int,
     return pll_geom_output_dir
 
 
-"""Directory utilities."""
+"""Directories."""
 def bundlesdf_pose_dir(dataset: str, cycle_iteration: int, bundlesdf_id: str
                        ) -> str:
     """BundleSDF's output pose directory for a particular dataset.  Contains
@@ -81,12 +81,14 @@ def bundlesdf_pose_dir(dataset: str, cycle_iteration: int, bundlesdf_id: str
     assert op.exists(path), f'Requires {path} to exist but not found.'
     return path
 
-def bundlesdf_annotated_poses_dir(dataset: str) -> str:
+def bundlesdf_annotated_poses_dir(dataset: str, create: bool = False) -> str:
     """BundleSDF's input annotated pose directory for a particular dataset.
     Contains 0000.txt file with the first TagSLAM origin's pose represented in
     camera frame."""
     bundlesdf_video_dir = bsdf_file_utils.top_video_dir()
     path = op.join(bundlesdf_video_dir, dataset, 'annotated_poses')
+    if create:
+        return assure_created(path)
     assert op.exists(path), f'Requires {path} to exist but not found.'
     return path
 
@@ -106,14 +108,17 @@ def bundlesdf_geometry_dir(dataset: str, cycle_iteration: int, pll_run_id: str,
         return assure_created(geom_dir)
     return geom_dir
 
+def bundlesdf_video_dir(dataset: str, check_exists: bool = False) -> str:
+    """BundleSDF's video directory for a particular experiment."""
+    return bsdf_file_utils.video_dir(dataset, check_exists=check_exists)
+
 def tagslam_pose_dir(dataset: str, check_exists: bool = False) -> str:
     """TagSLAM's pose directory for a particular dataset.  Contains tagslam.txt
     file."""
     path = op.join(DATA_GEN_DIR, 'dataset', dataset, 'tagslam_poses')
     if check_exists:
         assert op.exists(path), f'Requires {path} to exist but not found.'
-        return path
-    return assure_created(path)
+    return path
 
 def contactnets_input_dir(object: str) -> str:
     """ContactNets' input directory for a particular experiment."""
@@ -176,6 +181,19 @@ def table_height_calibration_dir() -> str:
     """Directory for the point cloud processing output plots."""
     return assure_created(op.join(DATA_GEN_DIR, 'table_calibration'))
 
+def bundlesdf_video_rgb_dir(dataset: str) -> str:
+    """The BundleSDF input directory for RGB images for a particular dataset."""
+    return bsdf_file_utils.video_rgb_dir(dataset)
+
+def bundlesdf_video_depth_dir(dataset: str) -> str:
+    """The BundleSDF input directory for RGB images for a particular dataset."""
+    return bsdf_file_utils.video_depth_dir(dataset)
+
+def bundlesdf_video_mask_dir(dataset: str) -> str:
+    """The BundleSDF input directory for RGB images for a particular dataset."""
+    return bsdf_file_utils.video_mask_dir(dataset)
+
+
 
 """Yaml file parsing utilities."""
 def load_camera_extrinsics(object: str) -> Tuple[np.ndarray, np.ndarray]:
@@ -208,10 +226,14 @@ def load_camera_extrinsics(object: str) -> Tuple[np.ndarray, np.ndarray]:
     
     return cam_trans, cam_rot_axis_angle
 
+def get_camera_intrinsics_filepath() -> str:
+    """Get the filepath for the camera intrinsics file."""
+    return op.join(DATA_GEN_DIR, 'assets', 'cam_K.txt')
+
 def load_camera_intrinsics() -> Tuple[float, float, float, float]:
     """The camera intrinsics appear to be the same for every experiment.  They
     are stored in cnets-data-generation/cam_K.txt."""
-    cam_K_file = op.join(DATA_GEN_DIR, 'cam_K.txt')
+    cam_K_file = get_camera_intrinsics_filepath()
     with open(cam_K_file, 'r') as f:
         lines = f.readlines()
 
@@ -516,9 +538,8 @@ def copy():
 
 
 def create_annotated_poses(output_dir, frame_id):
-    """
-    Create annotated_poses folder. First txt is the transformation matrix from camera to object.
-    Others are identity matrices solely for evaluation.
+    """Create annotated_poses folder. First txt is the transformation matrix
+    from camera to object.  Others are identity matrices solely for evaluation.
     """
     filename = os.path.join(output_dir, "%04i.txt" % frame_id)
     pose = np.array([[1, 0, 0, 0], [0, 1, 0, 0], [0, 0, 1, 0], [0, 0, 0, 1]])

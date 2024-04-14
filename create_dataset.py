@@ -1,207 +1,140 @@
-import argparse
-import shutil
-import numpy as np
-from tqdm import tqdm
-from pydrake.all import StartMeshcat
+"""Create the BundleSDF dataset in bundlenets/data for toss examples.  This
+creates one subfolder inside bundlenets/data/ for a given vision asset, which
+can be e.g. cube_2 (cube experiment, toss 2) or cube_2-3 (cube experiment,
+tosses 2-3).  The subfolder contains the following data:
+    - annotated_poses/
+        - XXXX.txt, 0 through N.
+        - The 0000.txt is the initial pose of the object's TagSLAM origin,
+          reported in camera frame, represented as a 4x4 transformation matrix.
+        - All other XXXX.txt files are the identity.  TODO not sure why these
+          are necessary.
+    - Annotations/
+        - a sparse set of XXXX.png files showing masks -- unsure if this needs
+          to be created or if it's created by the BundleSDF.
+        - TODO:  Not sure where these come from.
+    - depth/
+        - XXXX.png, 1 through N
+    - masks/
+        - XXXX.png, 1 through N
+        - TODO:  Figure out where these come from.
+    - rgb/
+        - XXXX.png, 1 through N
+    - cam_K.txt
+        - The camera intrinsics.  These should be the same for all experiments,
+          so they can be copied over from cnets-data-generation/cam_K.txt,
+          accessed by file_utils.get_camera_intrinsics_filepath().
 
-import depth_filter
-import file_utils
-import math_utils
-import rosbag_processor
-import sync_data
-import urdf_filter
-
-import os, os.path
-import yaml
-
-"""Process the cube data.
+In addition to the bundlenets/data directory, this script also creates a folder
+at bundlenets/cnets-data-generation/dataset/{vision_asset} that contains the
+following subfolders:
+    - tagslam_poses/
+        - XXXX.txt, 1 through N
+        - tagslam.txt
+        - All of the poses are recorded as 7 elements, in order [x, y, z, qx,
+          qy, qz, qw].
+        - The tagslam.txt file contains all the other XXXX.txt file contents
+          plus timestamps at the front:  [t, x, y, z, qx, qy, qz, qw].
+    - TODO: Figure out if the other subfolders are required.
 """
 
-parser = argparse.ArgumentParser()
-parser.add_argument(
-    "--toss_id",
-    type=int,
-    required=True,
-)
-args = parser.parse_args()
-toss_id = args.toss_id
-print(f'Processing cube toss {toss_id}')
-TOSS_TYPE = 'cube'
-yaml_path = './assets/config.yaml'
-bag_num = file_utils.load_rosbag_number_from_yaml(TOSS_TYPE, toss_id)
-print(f'bag num: {bag_num}')
-ROSBAG_NAME = f"./rosbags/raw_{bag_num}.bag"
-ODOM_ROSBAG_NAME = f"./rosbags/odom_{bag_num}.bag"
-DEPTH_ROS_TOPIC = "/camera/aligned_depth_to_color/image_raw"
-JOINT_STATE_ROS_TOPIC = "/joint_states"
-RGB_ROS_TOPIC = "/camera/color/image_raw"
-ODOM_ROS_TOPIC = "/tagslam/odom/body_cube"
+import click
+import os
+import os.path as op
+import pdb
 
-ROOT_DIR = f"./dataset/cube_{toss_id}/"
-BUNDLETRACK_DATA_DIR = f"cube_{toss_id}/"
-BUNDLETRACK_DIR = "/home/cnets-vision/mengti_ws/BundleSDF/data/"
+import file_utils
+import rosbag_processor
 
-# Create folders
-if not os.path.exists(ROOT_DIR + "texts"):
-    os.makedirs(ROOT_DIR + "texts")
-if not os.path.exists(ROOT_DIR + "depth_data"):
-    os.makedirs(ROOT_DIR + "depth_data")
-if not os.path.exists(ROOT_DIR + "rgb_data"):
-    os.makedirs(ROOT_DIR + "rgb_data")
-if not os.path.exists(ROOT_DIR + "cube_data"):
-    os.makedirs(ROOT_DIR + "cube_data")
-if not os.path.exists(ROOT_DIR + "mask_data"):
-    os.makedirs(ROOT_DIR + "mask_data")
-if not os.path.exists(ROOT_DIR + "dilated_mask_data"):
-    os.makedirs(ROOT_DIR + "dilated_mask_data")
-if not os.path.exists(ROOT_DIR + "filtered_data"):
-    os.makedirs(ROOT_DIR + "filtered_data")
-if not os.path.exists(ROOT_DIR + "tagslam_poses"):
-    os.makedirs(ROOT_DIR + "tagslam_poses")
-if not os.path.exists(BUNDLETRACK_DIR + BUNDLETRACK_DATA_DIR + "annotated_poses"):
-    os.makedirs(BUNDLETRACK_DIR + BUNDLETRACK_DATA_DIR + "annotated_poses")
-if not os.path.exists(BUNDLETRACK_DIR + BUNDLETRACK_DATA_DIR + "depth"):
-    os.makedirs(BUNDLETRACK_DIR + BUNDLETRACK_DATA_DIR + "depth")
-if not os.path.exists(BUNDLETRACK_DIR + BUNDLETRACK_DATA_DIR + "masks"):
-    os.makedirs(BUNDLETRACK_DIR + BUNDLETRACK_DATA_DIR + "masks")
-if not os.path.exists(BUNDLETRACK_DIR + BUNDLETRACK_DATA_DIR + "rgb"):
-    os.makedirs(BUNDLETRACK_DIR + BUNDLETRACK_DATA_DIR + "rgb")
 
-POSITION_FILE_PATH = ROOT_DIR + "texts/joint_position.txt"
-REAL_DEPTH_FILE = ROOT_DIR + "texts/real_depth_frame%04i.txt"
-SIMULATED_DEPTH_FILE = ROOT_DIR + "texts/simulated_depth_frame%04i.txt"
-IMAGE_TXT_PATH = ROOT_DIR + "texts/images.txt"  # depth image in the form of txt
-TEXT_PATH = ROOT_DIR + "texts/"
 
-DEPTH_DATA_DIR = ROOT_DIR + "depth_data/"
-RGB_DATA_DIR = ROOT_DIR + "rgb_data/"
-CUBE_SCREEN_DIR = ROOT_DIR + "cube_data/screen_image_frame%04i.png"
-CUBE_DEPTH_DIR = ROOT_DIR + "cube_data/depth_image_frame%04i.png"
-MASK_IAMGE_FILE = ROOT_DIR + "mask_data/%04i.png"
-DILATED_MASK_FILE = ROOT_DIR + "dilated_mask_data/%04i.png"
-FILTERED_DEPTH_FILE = ROOT_DIR + "filtered_data/depth_without_robot_frame%04i.png"
-FILTERED_RGB_FILE = ROOT_DIR + "filtered_data/rgb_without_robot_frame%04i.png"
-TAGSLAM_POSES_DIR = ROOT_DIR + "tagslam_poses/"
+@click.command()
+@click.option('--vision-asset',
+              type=str,
+              default=None,
+              help="directory of the asset folder e.g. cube_2-3; encodes " + \
+                   "system and tosses.")
+@click.option('--clear-data/--keep-data',
+              default=False,
+              help="whether to clear data folder before regenerating.")
 
-# BundleTrack data paths
-DENOISE_MASK_DIR = BUNDLETRACK_DIR + BUNDLETRACK_DATA_DIR + "masks"
-ANNOTATED_POSES_DIR = BUNDLETRACK_DIR + BUNDLETRACK_DATA_DIR + "annotated_poses"
-BUNDLETRACK_DEPTH = BUNDLETRACK_DIR + BUNDLETRACK_DATA_DIR + "depth"
-BUNDLETRACK_RGB = BUNDLETRACK_DIR + BUNDLETRACK_DATA_DIR + "rgb"
-CAMERA_EXTRINSICS_FILE = "./assets/realsense_pose_cube.yaml"
+def main_command(vision_asset: str, clear_data: bool):
+    # First parse the system and start/end tosses from the provided asset name.
+    assert '_' in vision_asset, f'Invalid asset directory: {vision_asset}.'
+    object = vision_asset.split('_')[0]
 
-cam = 'cam0' # realsense camera name
-with open(CAMERA_EXTRINSICS_FILE, 'r') as stream:
-    data_loaded = yaml.safe_load(stream)
-print(data_loaded[cam]['pose']['position'])
+    start_toss = int(vision_asset.split('_')[1].split('-')[0])
+    end_toss = start_toss if '-' not in vision_asset else \
+        int(vision_asset.split('-')[1])
+    assert start_toss <= end_toss, f'Invalid toss range: {start_toss} ' + \
+        f'-{end_toss} inferred from {vision_asset=}.'
 
-cam_pos_dict = data_loaded[cam]['pose']['position']
-cam_trans = np.array([cam_pos_dict['x'], cam_pos_dict['y'], cam_pos_dict['z']]).reshape(-1, 1)
-cam_rot_dict = data_loaded[cam]['pose']['rotation']
-cam_axis_vec = np.array([cam_rot_dict['x'], cam_rot_dict['y'], cam_rot_dict['z']])
-yaml_path = './assets/config.yaml'
-toss_type = 'cube'
-start_time = file_utils.load_toss_time_from_yaml(toss_type, toss_id, 'start_time')
-end_time = file_utils.load_toss_time_from_yaml(toss_type, toss_id, 'end_time')
-print(f'start_time:{start_time.secs}.{start_time.nsecs}, end_time:{end_time.secs}.{end_time.nsecs}')
-# rosbag_processor.bag_to_depth_images(
-#     ROSBAG_NAME,
-#     DEPTH_ROS_TOPIC,
-#     DEPTH_DATA_DIR,
-#     start_time,
-#     end_time,
-#     img_dir=IMAGE_TXT_PATH,
-#     bundletrack_depth_dir=BUNDLETRACK_DEPTH,
-# )
-# print("Depth images generated")
-# rosbag_processor.bag_to_rgb_images(ROSBAG_NAME, RGB_ROS_TOPIC, BUNDLETRACK_RGB, start_time, end_time)
-rosbag_processor.bag_to_depth_rgb_images(
-    ROSBAG_NAME,
-    DEPTH_ROS_TOPIC,
-    RGB_ROS_TOPIC,
-    start_time,
-    end_time,
-    bundletrack_depth_dir=BUNDLETRACK_DEPTH,
-    bundletrack_rgb_dir=BUNDLETRACK_RGB)
-frame_num = len([name for name in os.listdir(BUNDLETRACK_RGB)])
-print(f'frame_num is {frame_num}')
-for frame_id in range(1, frame_num+1):
-    file_utils.create_annotated_poses(output_dir=ANNOTATED_POSES_DIR, frame_id=frame_id)
-# clean up
-try:
-    shutil.rmtree(DEPTH_DATA_DIR)
-    shutil.rmtree(RGB_DATA_DIR)
-    shutil.rmtree(TEXT_PATH)
-    print(f"Done clean up!")
-except Exception as e:
-    print(f"Error occurred: {e}")
-# rosbag_processor.extract_poses_with_timestamps(
-#     ROSBAG_NAME,
-#     DEPTH_ROS_TOPIC,
-#     RGB_ROS_TOPIC,
-#     JOINT_STATE_ROS_TOPIC,
-#     POSITION_FILE_PATH,
-#     RGB_DATA_DIR,
-#     start_time,
-#     end_time,
-#     bundletrack_rgb_dir=BUNDLETRACK_RGB,
-# )
-# frame_num = len([name for name in os.listdir(BUNDLETRACK_RGB)])
-# print("There are %i frames in total!" % frame_num)
-# positions = file_utils.import_data(POSITION_FILE_PATH)
-# file_utils.write_real_depth_as_txt(
-#     start_frame=1,
-#     end_frame=frame_num,
-#     img_dir=IMAGE_TXT_PATH,
-#     real_depth_dir=REAL_DEPTH_FILE,
-# )
-# print("Finished writing %i real depth text files." % frame_num)
-# meshcat = StartMeshcat()
-# for frame_id in tqdm(range(1, frame_num + 1)):
-#     urdf_filter.run_urdf_filter(
-#         meshcat,
-#         frame_id,
-#         positions,
-#         MASK_IAMGE_FILE,
-#         SIMULATED_DEPTH_FILE,
-#         REAL_DEPTH_FILE,
-#         cam_trans,
-#         cam_axis_vec,
-#     )
-#     urdf_filter.dilate(
-#         frame_id, mask_image_dir=MASK_IAMGE_FILE, dilated_mask_dir=DILATED_MASK_FILE
-#     )
-    # file_utils.generate_depth_img_without_robot(
-    #     REAL_DEPTH_FILE % frame_id,
-    #     MASK_IAMGE_FILE % frame_id,
-    #     FILTERED_DEPTH_FILE % frame_id,
-    # )
-    # depth_filter = depth_filter.DepthFilter(
-    #     frame_id,
-    #     RGB_DATA_DIR + "%04i.png",
-    #     FILTERED_DEPTH_FILE,
-    #     CUBE_SCREEN_DIR,
-    #     CUBE_DEPTH_DIR,
-    #     cam_trans,
-    #     cam_axis_vec,
-    # )
-    # depth_filter.visualize_depth_image()
-    # file_utils.denoise(
-    #     frame_id,
-    #     img_dir=CUBE_DEPTH_DIR,
-    #     denoise_mask_dir=DENOISE_MASK_DIR,
-    #     region=(8, 8),
-    # )
-    # file_utils.create_annotated_poses(output_dir=ANNOTATED_POSES_DIR, frame_id=frame_id)
-# file_utils.check_empty_img(DENOISE_MASK_DIR)
+    # Get the ROS bag, ensuring the start toss and end tosses are in the same
+    # bag.
+    rosbag_number = file_utils.load_rosbag_number_from_yaml(
+        object, start_toss, second_toss_number=end_toss)
+    depth_bag_file = file_utils.get_depth_bag_filename(rosbag_number)
+    odom_bag_file = file_utils.get_odom_bag_filename(rosbag_number)
+    odom_ros_topic = f"/tagslam/odom/body_{object}"
 
-# do this only once
-# sync = sync_data.Synchronizer(TAGSLAM_POSES_DIR, frame_num, start_time, end_time, save=True)
-# data = np.loadtxt(TAGSLAM_POSES_DIR+'tagslam.txt')
-# init_pose = data[0, 2:]
-# init_pose_mat = math_utils.pos_quat_to_trans_mat(init_pose.T)
-# init_pose_mat_cam = math_utils.world_to_camera(init_pose_mat, cam_trans, cam_axis_vec)
-# np.savetxt(
-#     os.path.join(ANNOTATED_POSES_DIR, "%04i.txt" % 0), init_pose_mat_cam
-# )  # save init cube pose in camera frame
-# print(f'Saved init pose at {os.path.join(ANNOTATED_POSES_DIR, "%04i.txt" % 0)}')
+    # Get the data and pose directories, checking if they already exist.
+    data_dir = file_utils.bundlesdf_video_dir(vision_asset, check_exists=False)
+    tagslam_dir = file_utils.tagslam_pose_dir(vision_asset, check_exists=False)
+    if op.exists(data_dir) or op.exists(tagslam_dir):
+        if clear_data:
+            print(f'Overwriting existing data at {data_dir} and/or ' + \
+                  f'{tagslam_dir}.')
+            if op.exists(data_dir):  os.system(f'rm -r {data_dir}')
+            if op.exists(tagslam_dir):  os.system(f'rm -r {tagslam_dir}')
+        else:
+            print(f'Exiting:  Data already exists at {data_dir} and/or ' + \
+                  f'{tagslam_dir} -- use --clear-data next time.')
+            exit()
+    file_utils.assure_created(data_dir)
+    file_utils.assure_created(tagslam_dir)
+
+    print(f'Processing {vision_asset} in ROS bag {rosbag_number}.')
+
+    # Get the remaining information to do the processing:  directories, times,
+    # camera extrinsics.
+    rgb_dir = file_utils.bundlesdf_video_rgb_dir(vision_asset)
+    depth_dir = file_utils.bundlesdf_video_depth_dir(vision_asset)
+    annotated_poses_dir = file_utils.bundlesdf_annotated_poses_dir(
+        vision_asset, create=True)
+    start_time = file_utils.load_toss_time_from_yaml(
+        object, start_toss, 'start_time', as_ros_time=True)
+    end_time = file_utils.load_toss_time_from_yaml(
+        object, end_toss, 'end_time', as_ros_time=True)
+    cam_trans, cam_rot_axis_angle = file_utils.load_camera_extrinsics(object)
+
+    # Extract the synchronized images and TagSLAM poses, writing them to
+    # bundlenets/data/{vision_asset}/ and bundlenets/cnets-data-generation/
+    # dataset/{vision_asset}/tagslam_poses/.
+    rosbag_processor.extract_synchronized_images_and_tagslam_poses(
+        start_time=start_time, end_time=end_time, depth_bag_file=depth_bag_file,
+        odom_bag_file=odom_bag_file, odom_topic=odom_ros_topic,
+        tagslam_pose_output_dir=tagslam_dir, rgb_output_dir=rgb_dir,
+        depth_output_dir=depth_dir
+    )
+
+    # Copy the camera intrinsics.
+    os.system(f'cp {file_utils.get_camera_intrinsics_filepath()} ' + \
+              f'{op.join(data_dir, "cam_K.txt")}')
+
+    # Create the annotated poses.  These are all the identity 4x4 transformation
+    # matrix, except for 0000.txt which has the first TagSLAM pose in camera
+    # frame.
+    rosbag_processor.save_initial_tagslam_pose_in_camera_frame(
+        tagslam_world_poses_dir=tagslam_dir,
+        annotated_poses_dir=annotated_poses_dir, cam_trans=cam_trans,
+        cam_rot_axis_angle=cam_rot_axis_angle
+    )
+    frame_num = len([name for name in os.listdir(rgb_dir)])
+    for frame_id in range(1, frame_num+1):
+        file_utils.create_annotated_poses(
+            output_dir=annotated_poses_dir, frame_id=frame_id)
+
+    print(f'Finished processing {vision_asset}.')
+
+
+if __name__ == '__main__':
+    main_command()  # pylint: disable=no-value-for-parameter
