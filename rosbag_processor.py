@@ -167,6 +167,8 @@ def extract_synchronized_images_and_tagslam_poses(
             synced_start_i = i
     tagslam_times = times[synced_start_i: synced_start_i + len(bundlesdf_times)]
     tagslam_poses = poses[synced_start_i: synced_start_i + len(bundlesdf_times)]
+    for i, pose in enumerate(tagslam_poses):
+        np.savetxt(op.join(tagslam_pose_output_dir, f'{i+1:04d}.txt'), pose)
 
     assert tagslam_times.shape == bundlesdf_times.shape, \
         f'Mismatched TagSLAM and BundleSDF timestamps: ' + \
