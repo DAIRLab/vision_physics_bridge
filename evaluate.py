@@ -1,21 +1,22 @@
+"""An evaluation script to inspect and analyze the results from BundleSDF."""
+
 import argparse
 import os
-from file_utils import load_rosbag_number_from_yaml, load_toss_time_from_yaml
-from rosbag_processor import extract_time_versus_poses
-import rospy
 import numpy as np
 import scipy.spatial as sp
 import matplotlib.pyplot as plt
 from scipy.spatial.transform import Rotation as R
 import cv2
 
-from math_utils import pos_quat_to_trans_mat, trans_mat_to_pos_quat, transform_bundletrack_origin_to_tagslam_origin, world_to_camera
+import file_utils
+import math_utils
+import rosbag_processor
 
-from sync_data import Synchronizer
 import yaml
 
 def get_cosine_sim(frame_id):
-    """Compare the output of BundleTrack with the ground-truth poses of tagslam."""
+    """Compare the output of BundleTrack with the ground-truth poses of tagslam.
+    """
     gt_pose = np.loadtxt(GT_POSE_DIR + "%04i.txt" % frame_id)
     output_pose = np.loadtxt(OUTPUT_POSE_DIR + "%04i.txt" % frame_id)
     return 1 - sp.distance.cdist(gt_pose, output_pose, "cosine")
@@ -43,9 +44,8 @@ def calculate_rotation_error(estimated_pose, ground_truth_pose):
     return rotation_error
 
 
-def calculate_success_rate(
-    translation_errors, rotation_errors, translation_threshold, rotation_threshold
-):
+def calculate_success_rate(translation_errors, rotation_errors,
+                           translation_threshold, rotation_threshold):
     num_frames = len(translation_errors)
     success_count = sum(
         te <= translation_threshold and re <= rotation_threshold
@@ -54,8 +54,10 @@ def calculate_success_rate(
     success_rate = (success_count / num_frames) * 100
     return success_rate
 
-def plot_with_time(bundletrack_time, gt_time, bundletrack_pose_dir, gt_poses, no_show=False):
-    """Plot the x, y, z of BundleTrack output versus ground-truth poses of tagslam."""
+def plot_with_time(bundletrack_time, gt_time, bundletrack_pose_dir, gt_poses,
+                   no_show=False):
+    """Plot the x, y, z of BundleTrack output versus ground-truth poses of
+    tagslam."""
     bundletrack_time = np.array(bundletrack_time)
     output_x, output_y, output_z = [], [], []  # translation
     gt_x, gt_y, gt_z = [], [], []
@@ -65,7 +67,7 @@ def plot_with_time(bundletrack_time, gt_time, bundletrack_pose_dir, gt_poses, no
     estimated_poses, ground_truth_poses = [], []
     for frame_id in range(1, frame_num + 1):
         output_pose = np.loadtxt(bundletrack_pose_dir + "%04i.txt" % frame_id)
-        output_pose = transform_bundletrack_origin_to_tagslam_origin(
+        output_pose = math_utils.transform_bundletrack_origin_to_tagslam_origin(
             output_pose,
             bundletrack_pose_dir,
             ODOM_FILE_PATH,
@@ -74,7 +76,7 @@ def plot_with_time(bundletrack_time, gt_time, bundletrack_pose_dir, gt_poses, no
             to_world=True,
         ) # camera frame
         estimated_poses.append(output_pose)
-        output_pose_ = trans_mat_to_pos_quat(output_pose)
+        output_pose_ = math_utils.trans_mat_to_pos_quat(output_pose)
         output_x.append(output_pose_[0])
         output_y.append(output_pose_[1])
         output_z.append(output_pose_[2])
@@ -114,19 +116,19 @@ def plot_with_time(bundletrack_time, gt_time, bundletrack_pose_dir, gt_poses, no
             gt_pose[5],
             gt_pose[6],
         )
-        ground_truth_poses.append(pos_quat_to_trans_mat(gt_pose))
+        ground_truth_poses.append(math_utils.pos_quat_to_trans_mat(gt_pose))
         ground_truth_w.append(w_)
         ground_truth_x.append(x_)
         ground_truth_y.append(y_)
         ground_truth_z.append(z_)
         ############# Transform to camera ##############
-        # gt_pose_trans = pos_quat_to_trans_mat(gt_pose)
-        # gt_pose_trans_cam = world_to_camera(
+        # gt_pose_trans = math_utils.pos_quat_to_trans_mat(gt_pose)
+        # gt_pose_trans_cam = math_utils.world_to_camera(
         #     gt_pose_trans,
         #     cam_trans,
         #     cam_axis_vec,
         # )
-        # gt_pos_quat_cam = trans_mat_to_pos_quat(gt_pose_trans_cam)
+        # gt_pos_quat_cam = math_utils.trans_mat_to_pos_quat(gt_pose_trans_cam)
         # gt_x.append(gt_pos_quat_cam[0])
         # gt_y.append(gt_pos_quat_cam[1])
         # gt_z.append(gt_pos_quat_cam[2])
@@ -144,7 +146,7 @@ def plot_with_time(bundletrack_time, gt_time, bundletrack_pose_dir, gt_poses, no
         
         ########### Transform to world again ############
         # gt_pose_world_test = camera_to_world(gt_pose_trans_cam)
-        # gt_pose_world_quat = trans_mat_to_pos_quat(gt_pose_world_test)
+        # gt_pose_world_quat = math_utils.trans_mat_to_pos_quat(gt_pose_world_test)
         # print("After world2cam and cam2world transform", gt_pose_world_quat)
         # gt_x_quat_test, gt_y_quat_test, gt_z_quat_test, gt_w_quat_test = (gt_pose_world_quat[3], 
         #                                    gt_pose_world_quat[4], 
@@ -168,12 +170,14 @@ def plot_with_time(bundletrack_time, gt_time, bundletrack_pose_dir, gt_poses, no
 
     # Evaluate based on 5deg5cm metric
     translation_errors = [
-        calculate_translation_error(estimated_pose, grount_truth_pose)
-        for estimated_pose, grount_truth_pose in zip(estimated_poses, ground_truth_poses)
+        calculate_translation_error(estimated_pose, ground_truth_pose)
+        for estimated_pose, ground_truth_pose in zip(estimated_poses,
+                                                     ground_truth_poses)
     ]
     rotation_errors = [
-        calculate_rotation_error(estimated_pose, grount_truth_pose)
-        for estimated_pose, grount_truth_pose in zip(estimated_poses, ground_truth_poses)
+        calculate_rotation_error(estimated_pose, ground_truth_pose)
+        for estimated_pose, ground_truth_pose in zip(estimated_poses,
+                                                     ground_truth_poses)
     ]
 
     # Set error thresholds for successful pose estimation
@@ -194,7 +198,8 @@ def plot_with_time(bundletrack_time, gt_time, bundletrack_pose_dir, gt_poses, no
     print(f"Success Rate: {success_rate:.2f}%")
 
     fig, axs = plt.subplots(2, 4)
-    fig.suptitle(f"{mean_trans_err:.2f}, {mean_rot_err:.2f} deg, {success_rate:.2f}%")
+    fig.suptitle(f"{mean_trans_err:.2f}, {mean_rot_err:.2f} deg, " + \
+                 f"{success_rate:.2f}%")
     axs[0, 0].plot(bundletrack_time, output_x, label="BundleTrack")
     axs[0, 0].plot(gt_time, gt_x, label="ground-truth")
     axs[0, 0].set_title("Position x")
@@ -249,7 +254,7 @@ def draw_coords_to_image():
     # tagslam_data = np.loadtxt(GT_POSE_DIR+'tagslam.txt')
     for frame_id in range(1, frame_num):
         output_pose = np.loadtxt(OUTPUT_POSE_DIR + "%04i.txt" % frame_id)
-        output_pose = transform_bundletrack_origin_to_tagslam_origin(
+        output_pose = math_utils.transform_bundletrack_origin_to_tagslam_origin(
             output_pose,
             OUTPUT_POSE_DIR,
             ODOM_FILE_PATH,
@@ -259,8 +264,8 @@ def draw_coords_to_image():
         rvec = output_pose[:3, :3]
         tvec = output_pose[:3, 3]
         # tagslam_pose = tagslam_data[frame_id, 2:]
-        # tagslam_mat = pos_quat_to_trans_mat(tagslam_pose)
-        # tagslam_mat = world_to_camera(tagslam_mat, cam_trans, cam_axis_vec)
+        # tagslam_mat = math_utils.pos_quat_to_trans_mat(tagslam_pose)
+        # tagslam_mat = math_utils.world_to_camera(tagslam_mat, cam_trans, cam_axis_vec)
         # rvec = tagslam_mat[:3, :3]
         # tvec = tagslam_mat[:3, 3]
         image_points, _ = cv2.projectPoints(axis_points, rvec, tvec, intrinsic, distCoeffs=np.zeros((5,1)))
@@ -283,8 +288,8 @@ def draw_coords_to_image():
 def save_init_pose():
     poses = np.loadtxt(os.path.join(GT_POSE_DIR, "tagslam.txt"))
     init_pose = poses[0, 1:]
-    mat = pos_quat_to_trans_mat(init_pose)
-    mat_cam = world_to_camera(mat, cam_trans, cam_axis_vec)
+    mat = math_utils.pos_quat_to_trans_mat(init_pose)
+    mat_cam = math_utils.world_to_camera(mat, cam_trans, cam_axis_vec)
     np.savetxt(os.path.join(ODOM_FILE_PATH, "%04i.txt" % 0), mat_cam)
     print(f'Initial pose saved to {ODOM_FILE_PATH}')
     
@@ -307,8 +312,7 @@ if __name__ == "__main__":
     trial_id = args.trial_id
     print(f'Processing toss {toss_id}, trial {trial_id}')
     TOSS_TYPE = 'cube'
-    yaml_path = './assets/config.yaml'
-    bag_num = load_rosbag_number_from_yaml(TOSS_TYPE, toss_id)
+    bag_num = file_utils.load_rosbag_number_from_yaml(TOSS_TYPE, toss_id)
     print(f'bag num: {bag_num}')
     depth_bag_file = f"/home/cnets-vision/mengti_ws/robot_filter/rosbags/raw_{bag_num}.bag"
     odom_bag_file = f"/home/cnets-vision/mengti_ws/robot_filter/rosbags/odom_{bag_num}.bag"
@@ -354,13 +358,11 @@ if __name__ == "__main__":
     cam_axis_vec = np.array([cam_rot_dict['x'], cam_rot_dict['y'],
                              cam_rot_dict['z']])
     
-    yaml_path = './assets/config.yaml'
-    toss_type = 'cube'
     frame_num = len([name for name in os.listdir(OUTPUT_POSE_DIR)])
     print(f"There are {frame_num} frames in output")
-    start_time = load_toss_time_from_yaml(toss_type, toss_id, 'start_time')
-    end_time = load_toss_time_from_yaml(toss_type, toss_id, 'end_time')
-    bundletrack_time = extract_time_versus_poses(
+    start_time = file_utils.load_toss_time_from_yaml(TOSS_TYPE, toss_id, 'start_time')
+    end_time = file_utils.load_toss_time_from_yaml(TOSS_TYPE, toss_id, 'end_time')
+    bundletrack_time = rosbag_processor.extract_time_versus_poses(
         start_time,
         end_time,
         depth_bag_file,

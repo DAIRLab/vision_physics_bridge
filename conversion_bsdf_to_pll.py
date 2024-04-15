@@ -103,26 +103,24 @@ class ConverterBundleSDFToPLL:
     only the object immediately after it has been released at the beginning of
     the toss.
     """
-    def __init__(self, bundlesdf_id: str, pll_id: str, start_frames: np.ndarray,
-                 bundlesdf_start_index: int,
-                 end_frames: np.ndarray, timestamps: np.ndarray,
-                 start_toss: int, end_toss: int,
-                 object: str, cycle_iteration: int,
+    def __init__(self, bundlesdf_id: str, pll_id: str, start_toss: int,
+                 end_toss: int, object: str, cycle_iteration: int,
                  cam_trans: np.ndarray, cam_rot_axis_angle: np.ndarray,
-                 frame_rate: int, z_table: float, plot: bool = False) -> None:
+                 frame_rate: int, z_table: float, relative_start_frames: list,
+                 relative_end_frames: list, start_ros_times: list,
+                 plot: bool = False) -> None:
         """Prepare for processing pose data from TagSLAM and BundleSDF.
 
         Args:
-            start_frames:  BundleSDF frame indices at which a PLL toss begins,
-                represented as the index after the start time of each toss.
-            end_frames:  BundleSDF frame indices at which a PLL toss ends,
-                represented as the index after the start time of each toss.
-            timestamps (N,):  BundleSDF timestamps.
-            bundlesdf_start_index:  The index of the first frame in the
-                BundleSDF trajectory that is used (can be 0 or 1, and only 1 if
-                the first frame is excluded to line up with TagSLAM times).
             start_toss:  First toss index.
             end_toss:  Last toss index.
+            relative_start_frames:  BundleSDF frame indices at which a PLL toss
+                begins, represented as the index after the start time of each
+                toss.
+            relative_end_frames:  BundleSDF frame indices at which a PLL toss
+                ends, represented as the index after the start time of each
+                toss.
+            start_ros_times:  ROS times at which each toss begins.
             toss_type:  The tossed object name.
             iteration_num:  The cycle iteration number of the BundleSDF/
                 ContactNets cycle.
@@ -137,8 +135,8 @@ class ConverterBundleSDFToPLL:
             plot:  Whether to show the overlay plot of BundleSDF and TagSLAM
                 trajectories.
         """
-        self.start_frames = start_frames
-        self.end_frames = end_frames
+        # self.start_frames = start_frames
+        # self.end_frames = end_frames
         self.start_toss = start_toss
         self.end_toss = end_toss
         self.object = object
@@ -160,8 +158,19 @@ class ConverterBundleSDFToPLL:
         self._set_up_directories()
 
         # Load the full pose trajectories from TagSLAM and BundleSDF.
-        self._load_poses(bsdf_times=timestamps,
-                         bsdf_start_index=bundlesdf_start_index)
+        self._load_poses()
+
+        # Compute the absolute start and end frames for each toss.
+        self._get_absolute_frames(start_ros_times, relative_start_frames,
+                                  relative_end_frames)
+
+    def _get_absolute_frames(self, start_ros_times, relative_start_frames,
+                             relative_end_frames) -> None:
+        """Compute the absolute start and end frames for each toss."""
+        self.start_frames = math_utils.convert_relative_frames_to_absolute(
+            relative_start_frames, self.bundlesdf_full_times, start_ros_times)
+        self.end_frames = math_utils.convert_relative_frames_to_absolute(
+            relative_end_frames, self.bundlesdf_full_times, start_ros_times)
 
     def _set_up_directories(self) -> None:
         """Given the stored object and start/end toss numbers, loads the
@@ -178,8 +187,7 @@ class ConverterBundleSDFToPLL:
         self.annotated_dir = file_utils.bundlesdf_annotated_poses_dir(
             self.dataset)
         
-    def _load_poses(self, bsdf_times: np.ndarray, bsdf_start_index: int
-                    ) -> None:
+    def _load_poses(self) -> None:
         """Load the timestamped poses reported from TagSLAM and BundleSDF,
         saving the results in attributes:
             - self.tagslam_full_times
@@ -199,7 +207,7 @@ class ConverterBundleSDFToPLL:
             bsdf_times (N,)
         """
         self._load_tagslam_poses()
-        self._load_bundlesdf_poses(bsdf_times, bsdf_start_index)
+        self._load_bundlesdf_poses()
 
         print(f'\nTarget frame rate: {self.frame_rate}\n')
 
@@ -229,18 +237,19 @@ class ConverterBundleSDFToPLL:
         self.tagslam_full_times = tagslam_data[:, 0]
         self.tagslam_full_poses = tagslam_data[:, 1:]
 
-    def _load_bundlesdf_poses(self, timestamps: np.ndarray, start_index: int
-                              ) -> None:
+    def _load_bundlesdf_poses(self) -> None:
         """Load all the poses reported by BundleSDF.  These are in world
         coordinates of the **TagSLAM body origin (converted from BundleSDF
-        origin in cameracoordinates via math_utils.transform_bundletrack_output)
-        with the following ordering:
+        origin in camera coordinates via
+        math_utils.transform_bundletrack_output) with the following ordering:
             [x, y, z, qx, qy, qz, qw]
         """
-        bundlesdf_poses, bundlesdf_times = [], []
+        bundlesdf_poses = []
+        bundlesdf_times = np.loadtxt(
+            op.join(op.dirname(self.tagslam_dir), 'bundlesdf_timestamps.txt'))
 
         # Add 1 for range bounds because BundleSDF poses are 1-indexed.
-        for i in range(1+start_index, len(timestamps)+1+start_index):
+        for i in range(1, bundlesdf_times.shape[0] + 1):
             trans_mat = np.loadtxt(op.join(self.bundlesdf_dir, "%04i.txt" % i))
             trans_mat = \
                 math_utils.transform_bundletrack_origin_to_tagslam_origin(
@@ -253,7 +262,6 @@ class ConverterBundleSDFToPLL:
                 )
             pos_quat = math_utils.trans_mat_to_pos_quat(trans_mat).reshape(7)
             bundlesdf_poses.append(pos_quat)
-            bundlesdf_times.append(timestamps[i-1])
 
         self.bundlesdf_full_poses = np.array(bundlesdf_poses)
         self.bundlesdf_full_times = np.array(bundlesdf_times)
@@ -458,11 +466,9 @@ class ConverterBundleSDFToPLL:
         """
         # Process TagSLAM and BundleSDF data.
         q_ts, p_ts, w_ts, v_ts = self._process_poses(
-            self.tagslam_full_poses, self.tagslam_full_times,
-            adjust_position=True)
+            self.tagslam_full_poses, self.tagslam_full_times)
         q_bsdf, p_bsdf, w_bsdf, v_bsdf = self._process_poses(
-            self.bundlesdf_full_poses, self.bundlesdf_full_times,
-            adjust_position=False)
+            self.bundlesdf_full_poses, self.bundlesdf_full_times)
         
         self.tagslam_full_processed_states = np.concatenate(
             (q_ts, p_ts, w_ts, v_ts), axis=1)
@@ -722,11 +728,6 @@ def main_command(vision_asset: str, bundlesdf_id: str, cycle_iteration: int):
     # Locate all the related files and directories for the given vision asset.
     rosbag_number = file_utils.load_rosbag_number_from_yaml(
         object, start_toss, second_toss_number=end_toss)
-    depth_bag_file = file_utils.get_depth_bag_filename(rosbag_number)
-    odom_bag_file = file_utils.get_odom_bag_filename(rosbag_number)
-    odom_ros_topic = f"/tagslam/odom/body_{object}"
-    tagslam_dir = file_utils.tagslam_pose_dir(vision_asset)
-    annotated_poses_dir = file_utils.bundlesdf_annotated_poses_dir(vision_asset)
 
     # Decode the BundleSDF run ID and find if there's an associated PLL run ID.
     if bundlesdf_id[:13] != 'bundlesdf_id_':
@@ -748,14 +749,11 @@ def main_command(vision_asset: str, bundlesdf_id: str, cycle_iteration: int):
     ])
     z_table = np.mean(table_heights)
     
-    # Start/end times are for the start and end of a BundleSDF trajectory, which
+    # Start times are for the start and end of a BundleSDF trajectory, which
     # starts with the object unmoving on the table, includes the toss wind-up
     # and execution, and ends with the object unmoving on the table again.
     start_ros_times = np.array([file_utils.load_toss_time_from_yaml(
         object, toss_i, 'start_time', as_ros_time=True) for toss_i in range(
-            start_toss, end_toss+1)])
-    end_ros_times = np.array([file_utils.load_toss_time_from_yaml(
-        object, toss_i, 'end_time', as_ros_time=True) for toss_i in range(
             start_toss, end_toss+1)])
     
     # Start/end frames are the indices of the longer BundleSDF trajectories that
@@ -769,40 +767,13 @@ def main_command(vision_asset: str, bundlesdf_id: str, cycle_iteration: int):
         object, toss_i, 'end_frame') for toss_i in range(
             start_toss, end_toss+1)])
 
-    # Rosbag processor extracts times associated with eventual BundleSDF poses
-    # based on the times for every depth image from the depth bag.  The below
-    # call additionally writes a tagslam.txt file that grabs TagSLAM poses from
-    # the odom bag and their associated timestamps.
-    bundletrack_time, bundletrack_start_index = \
-    rosbag_processor.extract_time_versus_poses(
-        start_ros_times[0], end_ros_times[-1], depth_bag_file, odom_bag_file,
-        odom_ros_topic, tagslam_dir, save=True
-    )
-
-    # Write annotated_poses/0000.txt file, which stores the first pose of the
-    # TagSLAM origin in camera frame (obtained by converting TagSLAM output).
-    rosbag_processor.save_initial_tagslam_pose_in_camera_frame(
-        tagslam_world_poses_dir=tagslam_dir,
-        annotated_poses_dir=annotated_poses_dir, cam_trans=cam_trans,
-        cam_rot_axis_angle=cam_rot_axis_angle
-    )
-
-    # Convert the start/end frames to be represented all as the indices after
-    # the start of the first included toss.  Before this conversion, each of
-    # the toss's start/end indices are relative to the individual toss's first
-    # frame.
-    start_frames = math_utils.convert_relative_frames_to_absolute(
-        relative_start_frames, bundletrack_time, start_ros_times)
-    end_frames = math_utils.convert_relative_frames_to_absolute(
-        relative_end_frames, bundletrack_time, start_ros_times)
-
+    # Do the conversion.
     converter = ConverterBundleSDFToPLL(
         bundlesdf_id=bundlesdf_id, pll_id=pll_id,
-        start_frames=start_frames, end_frames=end_frames,
-        timestamps=bundletrack_time,
-        bundlesdf_start_index=bundletrack_start_index,
-        start_toss=start_toss, end_toss=end_toss,
-        object=object, cycle_iteration=cycle_iteration,
+        relative_start_frames=relative_start_frames,
+        relative_end_frames=relative_end_frames,
+        start_ros_times=start_ros_times, start_toss=start_toss,
+        end_toss=end_toss, object=object, cycle_iteration=cycle_iteration,
         cam_trans=cam_trans, cam_rot_axis_angle=cam_rot_axis_angle,
         frame_rate=30, z_table=z_table, plot=True
     )

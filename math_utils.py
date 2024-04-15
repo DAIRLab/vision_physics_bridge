@@ -1,6 +1,7 @@
 import math
 import numpy as np
 import os.path as op
+import rospy
 from scipy.spatial.transform import Rotation as R
 
 
@@ -26,7 +27,7 @@ def extract_floats_from_camk(lines):
 
 def convert_relative_frames_to_absolute(
         relative_frames: np.ndarray, full_times: np.ndarray,
-        ros_times: np.ndarray) -> np.ndarray:
+        ros_times: rospy.rostime.Time) -> np.ndarray:
     """Converts frames relative to the start of a subsection of a longer
     trajectory to frames as absolute indices of the full trajectory.
     
@@ -47,6 +48,22 @@ def convert_relative_frames_to_absolute(
         absolute_frames[i] = subsection_start_frame + relative_frames[i]
     
     return absolute_frames
+
+
+def transform_body_points_to_world_given_body_pose(
+        points: np.ndarray, pose: np.ndarray) -> np.ndarray:
+    """Transform a set of points from the body frame to the world frame given
+    the body pose.  Interpret the pose as having order [x, y, z, qx, qy, qz,
+    qw]."""
+    assert points.ndim == 2 and points.shape[1] == 3
+    assert pose.ndim == 1 and pose.shape[0] == 7
+
+    xyz = pose[:3]
+    quat_xyzw = pose[3:]
+
+    rotation_matrix = R.from_quat(quat_xyzw).as_matrix()
+
+    return (rotation_matrix @ points.T).T + xyz
 
 
 def ros_time_to_float(ros_times: np.ndarray) -> np.ndarray:

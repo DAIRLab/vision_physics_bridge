@@ -26,7 +26,7 @@ tosses 2-3).  The subfolder contains the following data:
 
 In addition to the bundlenets/data directory, this script also creates a folder
 at bundlenets/cnets-data-generation/dataset/{vision_asset} that contains the
-following subfolders:
+following:
     - tagslam_poses/
         - XXXX.txt, 1 through N
         - tagslam.txt
@@ -34,6 +34,8 @@ following subfolders:
           qy, qz, qw].
         - The tagslam.txt file contains all the other XXXX.txt file contents
           plus timestamps at the front:  [t, x, y, z, qx, qy, qz, qw].
+    - bundlesdf_timestamps.txt
+        - The timestamps associated with the images in the BundlesDF dataset.
     - TODO: Figure out if the other subfolders are required.
 """
 

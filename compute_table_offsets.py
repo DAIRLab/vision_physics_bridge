@@ -34,6 +34,18 @@ PATIENCE = 200
 
 DESIRED_RETENTION = 0.5
 
+CUBE_HALF_WIDTH = 0.0524
+CUBE_CORNERS_IN_CUBE_FRAME = np.array([
+    [-CUBE_HALF_WIDTH, -CUBE_HALF_WIDTH,  CUBE_HALF_WIDTH],
+    [-CUBE_HALF_WIDTH, -CUBE_HALF_WIDTH, -CUBE_HALF_WIDTH],
+    [-CUBE_HALF_WIDTH,  CUBE_HALF_WIDTH, -CUBE_HALF_WIDTH],
+    [-CUBE_HALF_WIDTH,  CUBE_HALF_WIDTH,  CUBE_HALF_WIDTH],
+    [ CUBE_HALF_WIDTH, -CUBE_HALF_WIDTH,  CUBE_HALF_WIDTH],
+    [ CUBE_HALF_WIDTH, -CUBE_HALF_WIDTH, -CUBE_HALF_WIDTH],
+    [ CUBE_HALF_WIDTH,  CUBE_HALF_WIDTH, -CUBE_HALF_WIDTH],
+    [ CUBE_HALF_WIDTH,  CUBE_HALF_WIDTH,  CUBE_HALF_WIDTH]
+])
+
 
 def get_table_height_from_log(log_file: str) -> float:
     """From a recorded log file, extract the optimized table height."""
@@ -61,7 +73,8 @@ def get_table_height_from_log(log_file: str) -> float:
         # this line's retention percentage is above the desired retention rate.
         retention_percent = float(lines[line_i].split('(')[1].split('%)')[0])
         while retention_percent < DESIRED_RETENTION*100:
-            # TODO pick a different line
+            # Walk backwards until we find the smallest retention that is still
+            # above the desired retention threshold.
             line_i -= 1
             assert len(lines) + line_i >= 0, f'Could not find retention ' + \
                 f'rate in {log_file} above threshold {DESIRED_RETENTION} (' + \
@@ -130,6 +143,20 @@ class ROSBagDepthPlaneViewer:
             self.start_ros_times[0], self.end_ros_times[0], self.depth_bag_file)
 
         self.success = True
+
+        # If this is a cube example, plot the corners of the cube.
+        if 'cube' in vision_asset:
+            self.compute_cube_corners()
+
+    def compute_cube_corners(self) -> None:
+        """Get the TagSLAM-reported cube corners for the cube tosses."""
+        tagslam_pose_dir = file_utils.tagslam_pose_dir(
+            self.vision_asset, check_exists=True)
+        first_pose = np.loadtxt(op.join(tagslam_pose_dir, '0001.txt'))
+        world_pts = math_utils.transform_body_points_to_world_given_body_pose(
+            CUBE_CORNERS_IN_CUBE_FRAME, first_pose)
+        self.cube_corners_world = world_pts
+        self.cube_center = first_pose[:3]
 
     def convert_depth_image_to_point_cloud(self) -> None:
         """Given the depth images stored at self.raw_images, convert them to
@@ -373,6 +400,14 @@ class ROSBagDepthPlaneViewer:
         ax.set_xlim(X_LIMS)
         ax.set_ylim(Y_LIMS)
         ax.set_zlim(Z_LIMS)
+        if 'cube' in self.vision_asset:
+            ax.scatter(self.cube_center[0], self.cube_center[1],
+                       self.cube_center[2], s=10, color='g',
+                       label='Cube center')
+            ax.scatter(self.cube_corners_world[:, 0],
+                       self.cube_corners_world[:, 1],
+                       self.cube_corners_world[:, 2],
+                       s=10, color='r', label='Cube corners')
         ax.legend()
         ax.set_title(f'z_table = {self.z_table:.6f}m for max points within ' + \
                      f'+/- {self.epsilon:.6f}m ({retention_rate*100.0:.2f}%' + \
@@ -388,6 +423,14 @@ class ROSBagDepthPlaneViewer:
         ax.set_xlim(TIGHT_X_LIMS)
         ax.set_ylim(TIGHT_Y_LIMS)
         ax.set_zlim(TIGHT_Z_LIMS)
+        if 'cube' in self.vision_asset:
+            ax.scatter(self.cube_center[0], self.cube_center[1],
+                       self.cube_center[2], s=10, color='g',
+                       label='Cube center')
+            ax.scatter(self.cube_corners_world[:, 0],
+                       self.cube_corners_world[:, 1],
+                       self.cube_corners_world[:, 2],
+                       s=10, color='r', label='Cube corners')
         ax.legend()
         ax.set_title(f'z_table = {self.z_table:.6f}m for max points within ' + \
                      f'+/- {self.epsilon:.6f}m ({retention_rate*100.0:.2f}%' + \
