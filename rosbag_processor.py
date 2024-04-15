@@ -119,16 +119,26 @@ def extract_synchronized_images_and_tagslam_poses(
                                f'depth images too great ({diff} > ' + \
                                f'{TIME_SYNCHRONIZATION_TOLERANCE}).')
 
-    # Extract the TagSLAM poses from the odom bag.
-    poses = {}
-    for (_topic, msg, t) in odom_bag.read_messages(topics=[odom_topic]):
-        # Skip messages before the start time; stop past the end time.  Add a
-        # little extra buffer in case the first or last closest TagSLAM pose
-        # message is a bit outside this range.  This will get resolved
-        # afterwards with a synchronization step.
-        if t.to_sec() < start_time.to_sec() - TIME_EXCESS_BUFFER:  continue
-        if t.to_sec() > end_time.to_sec() + TIME_EXCESS_BUFFER:  break
+    # Write the BundleSDF timestamps to file.
+    np.savetxt(
+        op.join(op.dirname(tagslam_pose_output_dir),
+                'bundlesdf_timestamps.txt'),
+        bundlesdf_times
+    )
 
+    # Extract the TagSLAM poses from the odom bag.
+    poses, times = [], []
+    for (_topic, msg, t) in odom_bag.read_messages(topics=[odom_topic]):
+        # Skip messages before the start time; stop past the end time.  Add
+        # extra buffer in case the first or last closest TagSLAM pose message
+        # is a bit outside this range.  This will get resolved afterwards with a
+        # synchronization step.
+        if t.to_sec() < start_time.to_sec() - 2*TIME_EXCESS_BUFFER:  continue
+        if t.to_sec() > end_time.to_sec() + 2*TIME_EXCESS_BUFFER:  break
+
+        # Store the pose from the message.
+        # TODO Determine if we want to accommodate a TagSLAM height adjustment
+        # here by adding to the pose[2] term.
         pose = np.zeros((7,))
         pose[0] = msg.pose.pose.position.x
         pose[1] = msg.pose.pose.position.y
@@ -137,30 +147,30 @@ def extract_synchronized_images_and_tagslam_poses(
         pose[4] = msg.pose.pose.orientation.y
         pose[5] = msg.pose.pose.orientation.z
         pose[6] = msg.pose.pose.orientation.w
-        poses[t] = pose
+        poses.append(pose)
+        times.append(t.to_sec())
+
+    poses = np.array(poses)
+    times = np.array(times)
+    bundlesdf_times = np.array(bundlesdf_times)
 
     # Synchronize the TagSLAM poses with the depth images, writing the
     # synchronized poses to the TagSLAM poses directory.
-    tagslam_times = []
-    tagslam_poses = []
-    for i, bundlesdf_time in enumerate(bundlesdf_times):
-        closest_pose_time = min(
-            poses.keys(),
-            key=lambda t: abs(t.to_sec() - bundlesdf_time)
-        )
-        diff = abs(closest_pose_time.to_sec() - bundlesdf_time)
-        if diff <= TIME_SYNCHRONIZATION_TOLERANCE:
-            np.savetxt(
-                op.join(tagslam_pose_output_dir, f'{i+1:04d}.txt'),
-                poses[closest_pose_time]
-            )
-            tagslam_times.append(closest_pose_time.to_sec())
-            tagslam_poses.append(poses[closest_pose_time])
-            print(f'Wrote synchronized TagSLAM pose {i+1}')
-        else:
-            raise RuntimeError(f'ERROR: Time difference between TagSLAM and' + \
-                               f' depth images too great ({diff} > ' + \
-                               f'{TIME_SYNCHRONIZATION_TOLERANCE}).')
+    synced_start_i = 0
+    min_time_error = np.inf
+
+    for i in range(len(times) - len(bundlesdf_times) + 1):
+        current_time_portion = times[i:i+len(bundlesdf_times)]
+        time_error = np.linalg.norm(bundlesdf_times - current_time_portion)
+        if time_error < min_time_error:
+            min_time_error = time_error
+            synced_start_i = i
+    tagslam_times = times[synced_start_i: synced_start_i + len(bundlesdf_times)]
+    tagslam_poses = poses[synced_start_i: synced_start_i + len(bundlesdf_times)]
+
+    assert tagslam_times.shape == bundlesdf_times.shape, \
+        f'Mismatched TagSLAM and BundleSDF timestamps: ' + \
+        f'{tagslam_times.shape=} and {bundlesdf_times.shape=}.'
 
     # Lastly, write a tagslam.txt file that contains the synchronized TagSLAM
     # poses and timestamps.
