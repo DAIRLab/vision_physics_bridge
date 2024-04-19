@@ -2,6 +2,7 @@ import math
 import numpy as np
 import os.path as op
 import rospy
+from PIL import Image
 from scipy.spatial.transform import Rotation as R
 
 
@@ -50,20 +51,63 @@ def convert_relative_frames_to_absolute(
     return absolute_frames
 
 
-def transform_body_points_to_world_given_body_pose(
-        points: np.ndarray, pose: np.ndarray) -> np.ndarray:
-    """Transform a set of points from the body frame to the world frame given
-    the body pose.  Interpret the pose as having order [x, y, z, qx, qy, qz,
-    qw]."""
-    assert points.ndim == 2 and points.shape[1] == 3
-    assert pose.ndim == 1 and pose.shape[0] == 7
+def convert_depth_image_to_points(
+        depth_image: np.ndarray, fx: float, fy: float, cx: float, cy: float
+) -> np.ndarray:
+    """Convert a depth image to a point cloud represented in meters.  This
+    conversion disregards all points that are non-returns (i.e. depth == 0)."""
+    height, width = depth_image.shape
 
-    xyz = pose[:3]
-    quat_xyzw = pose[3:]
+    # Generate pixel grid.
+    x = np.arange(0, width)
+    y = np.arange(0, height)
+    xv, yv = np.meshgrid(x, y)
+
+    # Calculate corresponding 3D coordinates.
+    X = (xv - cx) * depth_image / fx
+    Y = (yv - cy) * depth_image / fy
+    Z = depth_image
+
+    # Stack the coordinates and reshape.
+    point_cloud = np.stack((X, Y, Z), axis=-1)
+    point_cloud = point_cloud.reshape((-1, 3))
+
+    # Filter out the non-returns and convert millimeters to meters.
+    point_cloud = point_cloud[np.any(point_cloud != 0, axis=1)] / 1000.0
+
+    return point_cloud
+
+
+def load_depth_image(depth_image_path: str) -> np.ndarray:
+    """Load a depth image at depth_image_path and return it as a numpy array."""
+    return np.array(Image.open(depth_image_path))
+
+
+def load_depth_image_to_points(
+        depth_image_path: str, fx: float, fy: float, cx: float, cy: float
+) -> np.ndarray:
+    """Load a depth image at depth_image_path and convert it to a point cloud
+    represented in meters.  This conversion disregards all points that are non-
+    returns (i.e. depth == 0)."""
+    depth_image = load_depth_image(depth_image_path)
+    return convert_depth_image_to_points(depth_image, fx, fy, cx, cy)
+
+
+def transform_point_coordinates_given_pose(
+        points_in_A: np.ndarray, pose_A_in_B: np.ndarray) -> np.ndarray:
+    """Transform a set of points represented in frame A to being represented in
+    frame B, given the pose of frame A in frame B.  Interpret the pose as having
+    order [x, y, z, qx, qy, qz, qw]."""
+    assert points_in_A.ndim == 2 and points_in_A.shape[1] == 3
+    assert pose_A_in_B.ndim == 1 and pose_A_in_B.shape[0] == 7
+
+    xyz = pose_A_in_B[:3]
+    quat_xyzw = pose_A_in_B[3:]
 
     rotation_matrix = R.from_quat(quat_xyzw).as_matrix()
 
-    return (rotation_matrix @ points.T).T + xyz
+    points_in_world = (rotation_matrix @ points_in_A.T).T + xyz
+    return points_in_world
 
 
 def ros_time_to_float(ros_times: np.ndarray) -> np.ndarray:
@@ -81,6 +125,20 @@ def ros_time_to_float(ros_times: np.ndarray) -> np.ndarray:
         float_time[i] = ros_times[i].secs + ros_times[i].nsecs * 1e-9
     
     return float_time
+
+
+def ros_geometry_transform_to_camera_extrinsics(ros_tf):
+    """Converts a ROS geometry transform message to a position-axisangle tuple.
+    """
+    cam_trans = np.array([ros_tf.translation.x,
+                    ros_tf.translation.y,
+                    ros_tf.translation.z])
+    quat = np.array([ros_tf.rotation.x,
+                     ros_tf.rotation.y,
+                     ros_tf.rotation.z,
+                     ros_tf.rotation.w])
+    cam_rot_axis_angle = quat_to_axis_angle(quat)
+    return cam_trans, cam_rot_axis_angle
 
 
 def axis_angle_to_rotation_matrix(axis, theta):
@@ -297,11 +355,31 @@ def setup_extrinsic(translation, axis_vec):
     return extrinsic
 
 
+def axis_angle_to_quat(axis_angle):
+    """Convert axis-angle to quaternion.  Returns xyzw ordering."""
+    return R.from_rotvec(axis_angle).as_quat()
+
+
+def quat_to_rotation_matrix(quat):
+    """Convert quaternion to rotation matrix.  Assumes xyzw ordering."""
+    return R.from_quat(quat).as_matrix()
+
+
+def rotation_matrix_to_quat(rot_mat):
+    """Convert rotation matrix to quaternion.  Returns xyzw ordering."""
+    return R.from_matrix(rot_mat).as_quat()
+
+
+def quat_to_axis_angle(quat):
+    """Convert quaternion to axis-angle.  Assumes xyzw ordering."""
+    return R.from_quat(quat).as_rotvec()
+
+
 def pos_quat_to_trans_mat(pos_quat):
     """Converts position-quaternion to transformation matrix.  Assumes
     quaternion is in xyzw ordering."""
     quat = pos_quat[3:]
-    rot = R.from_quat(quat).as_matrix()
+    rot = quat_to_rotation_matrix(quat)
     trans = pos_quat[:3].reshape(-1, 1)
     return np.vstack((np.hstack((rot, trans)), np.array([0, 0, 0, 1])))
 

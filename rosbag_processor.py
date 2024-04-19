@@ -9,15 +9,27 @@ import imageio
 from cv_bridge import CvBridge
 import numpy as np
 from tqdm import tqdm
-import math_utils
 from dataclasses import dataclass
 from nav_msgs.msg import Odometry
 from scipy.spatial.transform import Rotation as R
+
+import math_utils
+
 
 DEPTH_ROS_TOPIC = "/camera/aligned_depth_to_color/image_raw"
 JOINT_STATE_ROS_TOPIC = "/joint_states"
 RGB_ROS_TOPIC = "/camera/color/image_raw"
 ODOM_ROS_TOPIC = "/tagslam/odom/body_box"
+TAGSLAM_CAMERA_TOPICS = [
+    '/cam_sync/cam0/image_raw/compressed',
+    '/cam_sync/cam1/image_raw/compressed',
+    '/cam_sync/cam2/image_raw/compressed'
+]
+TAGSLAM_CAMERA_INFO_TOPICS = [
+    '/cam_sync/cam0/camera_info',
+    '/cam_sync/cam1/camera_info',
+    '/cam_sync/cam2/camera_info'
+]
 
 IMAGE_FILE_PATH = "./texts/images.txt"
 POSITION_FILE_PATH = "./texts/joint_position.txt"
@@ -73,8 +85,8 @@ def extract_synchronized_images_and_tagslam_poses(
         # the start/end times.  These messages will get further filtered during
         # the next synchronization step, which ensures all the depth readings
         # are strictly within the time range.
-        if t.to_sec() < start_time.to_sec() - TIME_EXCESS_BUFFER:  continue
-        if t.to_sec() > end_time.to_sec() + TIME_EXCESS_BUFFER:  break
+        if msg.header.stamp < start_time - TIME_EXCESS_BUFFER:  continue
+        if msg.header.stamp > end_time + TIME_EXCESS_BUFFER:  break
 
         if topic == depth_topic:
             cv_img_depth = bridge.imgmsg_to_cv2(msg, desired_encoding="16UC1")
@@ -126,29 +138,31 @@ def extract_synchronized_images_and_tagslam_poses(
         bundlesdf_times
     )
 
-    # Extract the TagSLAM poses from the odom bag.
+    # Extract the TagSLAM poses from the odom bag, storing them exactly as
+    # reported in the bag.  Note that this does not apply tagslam_offset.txt,
+    # which is left to be applied by the conversion_bsdf_to_pll.py script.
+    # offset = file_utils.get_tagslam_offset()
+    # print(f'Applying a TagSLAM offset: {offset}')
     poses, times = [], []
-    for (_topic, msg, t) in odom_bag.read_messages(topics=[odom_topic]):
+    for (_topic, msg, _t) in odom_bag.read_messages(topics=[odom_topic]):
         # Skip messages before the start time; stop past the end time.  Add
         # extra buffer in case the first or last closest TagSLAM pose message
         # is a bit outside this range.  This will get resolved afterwards with a
         # synchronization step.
-        if t.to_sec() < start_time.to_sec() - 2*TIME_EXCESS_BUFFER:  continue
-        if t.to_sec() > end_time.to_sec() + 2*TIME_EXCESS_BUFFER:  break
+        if msg.header.stamp < start_time - 2*TIME_EXCESS_BUFFER:  continue
+        if msg.header.stamp > end_time + 2*TIME_EXCESS_BUFFER:  break
 
         # Store the pose from the message.
-        # TODO Determine if we want to accommodate a TagSLAM height adjustment
-        # here by adding to the pose[2] term.
         pose = np.zeros((7,))
-        pose[0] = msg.pose.pose.position.x
-        pose[1] = msg.pose.pose.position.y
-        pose[2] = msg.pose.pose.position.z
+        pose[0] = msg.pose.pose.position.x #+ offset[0]
+        pose[1] = msg.pose.pose.position.y #+ offset[1]
+        pose[2] = msg.pose.pose.position.z #+ offset[2]
         pose[3] = msg.pose.pose.orientation.x
         pose[4] = msg.pose.pose.orientation.y
         pose[5] = msg.pose.pose.orientation.z
         pose[6] = msg.pose.pose.orientation.w
         poses.append(pose)
-        times.append(t.to_sec())
+        times.append(msg.header.stamp.to_sec())
 
     poses = np.array(poses)
     times = np.array(times)
@@ -240,6 +254,105 @@ def extract_depth_images(start_time, end_time, depth_bag_file):
         depth_msgs.append(image)
 
     return depth_times, depth_msgs
+
+
+"""Extract the black and white images from a raw bag file between start and end
+times.  Called by adjust_and_view_tagslam_offset.py."""
+def extract_tagslam_images_and_poses(
+        start_time, end_time, raw_bag_file, odom_bag_file, odom_topic):
+    raw_bag = rosbag.Bag(raw_bag_file, "r")
+    odom_bag = rosbag.Bag(odom_bag_file, "r")
+
+    poses, pose_times = [], []
+    for (_topic, msg, t) in odom_bag.read_messages(topics=[odom_topic]):
+        if msg.header.stamp < start_time:  continue
+        if msg.header.stamp > end_time:  break
+
+        # Store the pose from the message.
+        pose = np.zeros((7,))
+        pose[0] = msg.pose.pose.position.x
+        pose[1] = msg.pose.pose.position.y
+        pose[2] = msg.pose.pose.position.z
+        pose[3] = msg.pose.pose.orientation.x
+        pose[4] = msg.pose.pose.orientation.y
+        pose[5] = msg.pose.pose.orientation.z
+        pose[6] = msg.pose.pose.orientation.w
+        poses.append(pose)
+        pose_times.append(msg.header.stamp.to_sec())
+
+    bridge = CvBridge()
+
+    # Have a 2D list where the first index is the camera number and the second
+    # index is the list of times/messages for that camera.
+    image_times = {'cam0': [], 'cam1': [], 'cam2': []}
+    image_msgs = {'cam0': [], 'cam1': [], 'cam2': []}
+    # image_times, image_msgs = [[], [], []], [[], [], []]
+    for (topic, msg, ts) in raw_bag.read_messages(topics=TAGSLAM_CAMERA_TOPICS):
+        if ts.to_sec() < start_time.to_sec():  continue
+        if ts.to_sec() > end_time.to_sec():  break
+
+        camera_name = topic.split("/")[2]
+        image_times[camera_name].append(ts.to_sec())
+
+        image = bridge.compressed_imgmsg_to_cv2(
+            msg, desired_encoding="passthrough")
+        image_msgs[camera_name].append(image)
+
+    return pose_times, poses, image_times, image_msgs
+
+
+"""Extract the TagSLAM camera poses from an odometry bag file, which features
+the world-to-camX transformations in the /tf topic."""
+def get_tagslam_camera_extrinsics(odom_bag_file):
+    odom_bag = rosbag.Bag(odom_bag_file, "r")
+
+    # Get the camera extrinsics from the /tf topic.
+    extrinsics = {'cam0': None, 'cam1': None, 'cam2': None}
+    for (_topic, msg, _t) in odom_bag.read_messages(topics=["/tf"]):
+        for transform in msg.transforms:
+            if transform.child_frame_id in extrinsics.keys():
+                camera = transform.child_frame_id
+                assert transform.header.frame_id == 'world', 'Expected ' + \
+                    f'frame_id world but got {transform.header.frame_id}.'
+                extrinsics[camera] = transform.transform
+
+                if extrinsics['cam0'] and extrinsics['cam1'] and \
+                        extrinsics['cam2']:
+                    break
+
+    cam0_trans, cam0_axis_angle = \
+        math_utils.ros_geometry_transform_to_camera_extrinsics(
+            extrinsics['cam0'])
+    cam1_trans, cam1_axis_angle = \
+        math_utils.ros_geometry_transform_to_camera_extrinsics(
+            extrinsics['cam1'])
+    cam2_trans, cam2_axis_angle = \
+        math_utils.ros_geometry_transform_to_camera_extrinsics(
+            extrinsics['cam2'])
+
+    return cam0_trans, cam0_axis_angle, cam1_trans, cam1_axis_angle, \
+        cam2_trans, cam2_axis_angle
+
+
+"""Extract the TagSLAM camera intrinsics from a raw bag file, which features the
+intrinsics at the camera_info topics."""
+def get_tagslam_camera_intrinsics(raw_bag_file):
+    raw_bag = rosbag.Bag(raw_bag_file, "r")
+
+    # Get the camera extrinsics from the /tf topic.
+    intrinsics = {'cam0': None, 'cam1': None, 'cam2': None}
+    for (_topic, msg, _t) in raw_bag.read_messages(
+        topics=TAGSLAM_CAMERA_INFO_TOPICS):
+        camera = msg.header.frame_id[-4:]
+        if intrinsics[camera] == None:
+            intrinsics[camera] = np.array(msg.P)
+
+            if (intrinsics['cam0'] is not None) and \
+               (intrinsics['cam1'] is not None) and \
+               (intrinsics['cam2'] is not None):
+                break
+
+    return intrinsics
 
 
 
