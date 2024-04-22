@@ -155,7 +155,7 @@ def contactnets_output_dir(dataset: str, cycle_iteration: int, pll_id: str
     object = dataset.split('_')[0]
     results_dir = op.join(
         pll_file_utils.RESULTS_DIR, f'vision_{object}', dataset)
-    subdir = 'tagslam' if cycle_iteration==0 else \
+    subdir = 'tagslam' if cycle_iteration <= 0 else \
         f'bundlesdf_iteration_{cycle_iteration}'
     output_dir = op.join(results_dir, subdir, pll_id)
     assert op.exists(output_dir), f'PLL run results folder {output_dir} ' + \
@@ -192,7 +192,6 @@ def bundlesdf_video_depth_dir(dataset: str) -> str:
 def bundlesdf_video_mask_dir(dataset: str) -> str:
     """The BundleSDF input directory for RGB images for a particular dataset."""
     return bsdf_file_utils.video_mask_dir(dataset)
-
 
 
 """Yaml file parsing utilities."""

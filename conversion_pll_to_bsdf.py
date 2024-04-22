@@ -21,22 +21,45 @@ TRANSFORM_EXCLUDE_FILENAMES = [
 ]
 
 
+def batch_no_transform_function(points_wrt_T: np.ndarray,
+                                _bsdf_output_pose_dir: str,
+                                _annotated_poses_dir: str) -> np.ndarray:
+    """Function that does not transform the points at all.  This is used when
+    the PLL run used BundleSDF poses and no transformation is needed."""
+    return points_wrt_T
+
+
 class ConverterPLLToBundleSDF:
     """Class for processing shape data from PLL.  All of the data in a PLL run's
-    geometry output directory is processed, only changing the origin of the
-    body to match BundleSDF's origin (PLL represents in TagSLAM origin)."""
+    geometry output directory is processed.
+
+    The only change that might be needed is if the PLL run used TagSLAM poses
+    instead of BundleSDF poses.  In that case, PLL's body origin matches
+    TagSLAM's and needs to be converted to BundleSDF's origin.  TODO"""
     def __init__(self, pll_geom_output_dir: str,
                  bundlesdf_geom_input_dir: str,
                  bundlesdf_pose_output_dir: str,
                  annotated_poses_dir: str):
         # Do some checks on the input directories.
-        assert op.basename(pll_geom_output_dir) == 'geom_in_pll_frame', \
+        assert op.basename(pll_geom_output_dir) == 'geom_for_bsdf', \
             f'Unexpected PLL geometry output folder {pll_geom_output_dir}--' + \
-            f' was looking for geom_in_pll_frame folder.'
+            f' was looking for geom_for_bsdf folder.'
         assert op.basename(op.dirname(pll_geom_output_dir)) == \
             op.basename(bundlesdf_geom_input_dir), f'Expecting to find ' + \
             f'consistent PLL run IDs in {pll_geom_output_dir=} and ' + \
             f'{bundlesdf_geom_input_dir=}.'
+
+        # If the BundleSDF pose directory and annotated poses directory are not
+        # provided, then it is assumed that the PLL run used BundleSDF poses
+        # and no transformation is needed.
+        self.do_tagslam_to_bsdf_transform = True
+        if bundlesdf_pose_output_dir is None:
+            assert annotated_poses_dir is None, f'Expecting both ' + \
+                f'{bundlesdf_pose_output_dir=} and {annotated_poses_dir=} ' + \
+                f'to be None or both to be provided.'
+            self.do_tagslam_to_bsdf_transform = False
+            print('No transformation needed--PLL run used BundleSDF poses; ' + \
+                  'conversion will copy files without modification.')
 
         # Store the directories.
         self.pll_geom_output_dir = pll_geom_output_dir
@@ -85,10 +108,10 @@ class ConverterPLLToBundleSDF:
                 f'.pt files in {source_directory=} but found {content}.'
             print(f'{prefix} Transforming {content}... ', end='')
             self._transform_and_save(op.join(source_directory, content),
-                                        destination_directory)
+                                     destination_directory)
         
     def _transform_and_save(self, source_file: str,
-                                  destination_directory: str) -> None:
+                            destination_directory: str) -> None:
         """Transform the points from TagSLAM origin to BundleSDF origin and save
         the result."""
         points_wrt_tagslam = torch.load(source_file).detach().numpy()
@@ -103,7 +126,8 @@ class ConverterPLLToBundleSDF:
         trans_mat_t[:, :3, 3] = points_wrt_tagslam
 
         # Perform the batched conversion.
-        batch_transform_t_to_b_function = \
+        batch_transform_t_to_b_function = batch_no_transform_function if not \
+            self.do_tagslam_to_bsdf_transform else \
             math_utils.transform_points_wrt_tagslam_origin_to_bundletrack_origin
         trans_mat_b = batch_transform_t_to_b_function(
             points_wrt_T=trans_mat_t,
@@ -133,13 +157,16 @@ class ConverterPLLToBundleSDF:
               type=int,
               default=1,
               help="BundleSDF-PLL cycle iteration number that the PLL " + \
-                "geometry estimates come from (0 means PLL used TagSLAM " + \
-                "poses).")
+                "geometry estimates come from (-1 means PLL used TagSLAM " + \
+                "poses, 0 is invalid).")
 
 def main_command(vision_asset: str, pll_id: str, cycle_iteration: int):
     # First decode the system and start/end tosses from the provided asset
     # directory.
     assert '_' in vision_asset, f'Invalid asset directory: {vision_asset}.'
+    assert cycle_iteration != 0, f'cycle_iteration must be positive (PLL ' + \
+        f'trained with BundleSDF tracking) or -1 (PLL trained with TagSLAM ' + \
+        f'tracking), but got {cycle_iteration=}.'
 
     start_toss = int(vision_asset.split('_')[1].split('-')[0])
     end_toss = start_toss if '-' not in vision_asset else \
@@ -156,17 +183,26 @@ def main_command(vision_asset: str, pll_id: str, cycle_iteration: int):
         vision_asset, cycle_iteration=cycle_iteration, pll_id=pll_id)
     pll_geometry_output_dir = file_utils.contactnets_output_geometry_dir(
         vision_asset, cycle_iteration=cycle_iteration, pll_id=pll_id)
-    
-    # Load the BundleSDF run results folder from the pose data that was provided
-    # the PLL run.
-    bundlesdf_id = file_utils.load_bundlesdf_id_from_pll_json(pll_output_dir)
-    bundlesdf_pose_output_dir = file_utils.bundlesdf_pose_dir(
-        vision_asset, cycle_iteration=cycle_iteration,
-        bundlesdf_id=bundlesdf_id)
-    
-    # Load the annotated poses directory, which contains 0000.txt with the first
-    # frame's TagSLAM pose.
-    annotated_poses_dir = file_utils.bundlesdf_annotated_poses_dir(vision_asset)
+
+    # No origin conversion is needed if the PLL run used BundleSDF poses.  In
+    # that case, the geometry arrays will just be copied over exactly.
+    # Otherwise, the BundleSDF/TagSLAM poses are needed for the conversion.
+    if cycle_iteration <= 0:
+        bundlesdf_pose_output_dir = None
+        annotated_poses_dir = None
+    else:
+        # Load the BundleSDF run results folder from the pose data that was
+        # provided the PLL run.
+        bundlesdf_id = file_utils.load_bundlesdf_id_from_pll_json(
+            pll_output_dir)
+        bundlesdf_pose_output_dir = file_utils.bundlesdf_pose_dir(
+            vision_asset, cycle_iteration=cycle_iteration,
+            bundlesdf_id=bundlesdf_id)
+
+        # Load the annotated poses directory, which contains 0000.txt with the
+        # first frame's TagSLAM pose.
+        annotated_poses_dir = file_utils.bundlesdf_annotated_poses_dir(
+            vision_asset)
 
     bundlesdf_geometry_input_dir = file_utils.bundlesdf_geometry_dir(
         vision_asset, cycle_iteration=cycle_iteration, pll_run_id=pll_id,
