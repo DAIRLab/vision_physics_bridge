@@ -22,8 +22,8 @@ TRANSFORM_EXCLUDE_FILENAMES = [
 
 
 def batch_no_transform_function(points_wrt_T: np.ndarray,
-                                _bsdf_output_pose_dir: str,
-                                _annotated_poses_dir: str) -> np.ndarray:
+                                bsdf_output_pose_dir: str,
+                                annotated_poses_dir: str) -> np.ndarray:
     """Function that does not transform the points at all.  This is used when
     the PLL run used BundleSDF poses and no transformation is needed."""
     return points_wrt_T
@@ -39,7 +39,8 @@ class ConverterPLLToBundleSDF:
     def __init__(self, pll_geom_output_dir: str,
                  bundlesdf_geom_input_dir: str,
                  bundlesdf_pose_output_dir: str,
-                 annotated_poses_dir: str):
+                 annotated_poses_dir: str,
+                 do_tagslam_to_bsdf_transform: bool):
         # Do some checks on the input directories.
         assert op.basename(pll_geom_output_dir) == 'geom_for_bsdf', \
             f'Unexpected PLL geometry output folder {pll_geom_output_dir}--' + \
@@ -52,14 +53,19 @@ class ConverterPLLToBundleSDF:
         # If the BundleSDF pose directory and annotated poses directory are not
         # provided, then it is assumed that the PLL run used BundleSDF poses
         # and no transformation is needed.
-        self.do_tagslam_to_bsdf_transform = True
+        if do_tagslam_to_bsdf_transform is False:
+            print('No transformation needed--PLL run used BundleSDF poses; ' + \
+                  'conversion will copy files without modification.')
+
         if bundlesdf_pose_output_dir is None:
+            assert do_tagslam_to_bsdf_transform is False, f'Told to do ' + \
+                f'transformation from TagSLAM to BundleSDF origin, but ' + \
+                f'{bundlesdf_pose_output_dir=} is None.'
             assert annotated_poses_dir is None, f'Expecting both ' + \
                 f'{bundlesdf_pose_output_dir=} and {annotated_poses_dir=} ' + \
                 f'to be None or both to be provided.'
-            self.do_tagslam_to_bsdf_transform = False
-            print('No transformation needed--PLL run used BundleSDF poses; ' + \
-                  'conversion will copy files without modification.')
+
+        self.do_tagslam_to_bsdf_transform = do_tagslam_to_bsdf_transform
 
         # Store the directories.
         self.pll_geom_output_dir = pll_geom_output_dir
@@ -188,9 +194,12 @@ def main_command(vision_asset: str, pll_id: str, cycle_iteration: int):
     # that case, the geometry arrays will just be copied over exactly.
     # Otherwise, the BundleSDF/TagSLAM poses are needed for the conversion.
     if cycle_iteration <= 0:
-        bundlesdf_pose_output_dir = None
-        annotated_poses_dir = None
+        do_tagslam_to_bsdf_transform = True
+        raise NotImplementedError('TagSLAM to BundleSDF origin conversion ' + \
+            'for TagSLAM PLL runs not yet implemented.')
     else:
+        do_tagslam_to_bsdf_transform = False
+
         # Load the BundleSDF run results folder from the pose data that was
         # provided the PLL run.
         bundlesdf_id = file_utils.load_bundlesdf_id_from_pll_json(
@@ -213,7 +222,8 @@ def main_command(vision_asset: str, pll_id: str, cycle_iteration: int):
         pll_geom_output_dir=pll_geometry_output_dir,
         bundlesdf_geom_input_dir=bundlesdf_geometry_input_dir,
         bundlesdf_pose_output_dir=bundlesdf_pose_output_dir,
-        annotated_poses_dir=annotated_poses_dir
+        annotated_poses_dir=annotated_poses_dir,
+        do_tagslam_to_bsdf_transform=do_tagslam_to_bsdf_transform
     )
 
     converter.process_and_save()
