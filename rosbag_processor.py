@@ -1148,8 +1148,8 @@ def extract_time_versus_poses(
     data = np.concatenate((odom_time, tagslam_poses), axis=0)
     data = data.T #N, 8
     if save:
-        np.savetxt(output_dir + 'tagslam.txt', data)
-        print(output_dir + 'tagslam.txt saved!')
+        np.savetxt(os.path.join(output_dir, 'tagslam.txt'), data)
+        print(os.path.join(output_dir, 'tagslam.txt') + ' saved!')
     depth_bag.close()
     odom_bag.close()
     return bundletrack_time.reshape(-1,), bundletrack_start_index

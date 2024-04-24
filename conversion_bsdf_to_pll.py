@@ -102,7 +102,7 @@ class ConverterBundleSDFToPLL:
     only the object immediately after it has been released at the beginning of
     the toss.
     """
-    def __init__(self, bundlesdf_id: str, pll_id: str, start_toss: int,
+    def __init__(self, bundlesdf_id: str, start_toss: int,
                  end_toss: int, object: str, cycle_iteration: int,
                  cam_trans: np.ndarray, cam_rot_axis_angle: np.ndarray,
                  frame_rate: int, z_table: float, relative_start_frames: list,
@@ -142,7 +142,6 @@ class ConverterBundleSDFToPLL:
         self.iteration_num = cycle_iteration
 
         self.bundlesdf_id = bundlesdf_id
-        self.pll_id = pll_id
 
         self.plot = plot
         self.cam_trans = cam_trans
@@ -795,12 +794,9 @@ def main_command(vision_asset: str, bundlesdf_id: str, cycle_iteration: int):
     # Decode the BundleSDF run ID and find if there's an associated PLL run ID.
     if bundlesdf_id[:13] != 'bundlesdf_id_':
         bundlesdf_id = f'bundlesdf_id_{bundlesdf_id}'
-    pll_id = file_utils.bundlesdf_run_associated_pll_run_id(
-        dataset=vision_asset, bundlesdf_id=bundlesdf_id,
-        cycle_iteration=cycle_iteration)
 
     print(f'Processing toss {vision_asset} in raw_{rosbag_number}.bag from ' + \
-          f'BundleSDF run ID {bundlesdf_id} with associated PLL ID {pll_id}.\n')
+          f'BundleSDF run ID {bundlesdf_id}.\n')
 
     # Get the camera extrinsics.
     cam_trans, cam_rot_axis_angle = file_utils.load_camera_extrinsics(object)
@@ -832,7 +828,7 @@ def main_command(vision_asset: str, bundlesdf_id: str, cycle_iteration: int):
 
     # Do the conversion.
     converter = ConverterBundleSDFToPLL(
-        bundlesdf_id=bundlesdf_id, pll_id=pll_id,
+        bundlesdf_id=bundlesdf_id, 
         relative_start_frames=relative_start_frames,
         relative_end_frames=relative_end_frames,
         start_ros_times=start_ros_times, start_toss=start_toss,
