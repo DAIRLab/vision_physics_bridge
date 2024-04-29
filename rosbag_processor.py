@@ -69,32 +69,44 @@ def extract_synchronized_images_and_tagslam_poses(
         depth_bag_file: str, odom_bag_file: str, odom_topic: str,
         rgb_output_dir: str, depth_output_dir: str,
         tagslam_pose_output_dir: str, rgb_topic: str = RGB_ROS_TOPIC,
-        depth_topic: str = DEPTH_ROS_TOPIC
+        depth_topic: str = DEPTH_ROS_TOPIC, depth_offset_mm: int = 0
 ):
     depth_bag = rosbag.Bag(depth_bag_file, "r")
     odom_bag = rosbag.Bag(odom_bag_file, "r")
     bridge = CvBridge()
 
+    start_time = start_time.to_sec()
+    end_time = end_time.to_sec()
+
+    depth_offset_mm_formatted = np.array([depth_offset_mm]).astype(np.uint16)
+
     # Extract the RGB and depth images from the depth bag, including all frames
     # within the specified start and end times.
     topics = [depth_topic, rgb_topic]
     depth_images, rgb_images = {}, {}
-    for (topic, msg, t) in depth_bag.read_messages(topics=topics):
+    for (topic, msg, _t) in depth_bag.read_messages(topics=topics):
         # Skip messages before the start time; stop past the end time.  Add a
         # little extra buffer in case the first or last depth/RGB pairs straddle
         # the start/end times.  These messages will get further filtered during
         # the next synchronization step, which ensures all the depth readings
         # are strictly within the time range.
-        if msg.header.stamp < start_time - TIME_EXCESS_BUFFER:  continue
-        if msg.header.stamp > end_time + TIME_EXCESS_BUFFER:  break
+        if msg.header.stamp.to_sec() < start_time - TIME_EXCESS_BUFFER:
+            continue
+        if msg.header.stamp.to_sec() > end_time + TIME_EXCESS_BUFFER:
+            break
 
         if topic == depth_topic:
             cv_img_depth = bridge.imgmsg_to_cv2(msg, desired_encoding="16UC1")
-            depth_images[t] = cv_img_depth
+
+            # Incorporate the depth offset, excluding non-returns (depth=0).
+            cv_img_depth[cv_img_depth != 0] += depth_offset_mm_formatted
+
+            # Store the result.
+            depth_images[msg.header.stamp.to_sec()] = cv_img_depth
 
         elif topic == rgb_topic:
             cv_img_rgb = bridge.imgmsg_to_cv2(msg, "rgb8")
-            rgb_images[t] = cv_img_rgb
+            rgb_images[msg.header.stamp.to_sec()] = cv_img_rgb
 
     # Synchronize the depth and RGB images based on the timestamps, writing the
     # synchronized results to the depth and RGB output directories.
@@ -107,12 +119,11 @@ def extract_synchronized_images_and_tagslam_poses(
             print('Skipping frame outside time range.')
             continue
 
-        depth_time_sec = depth_time.to_sec()
         closest_rgb_time = min(
             rgb_images.keys(),
-            key=lambda t: abs(t.to_sec() - depth_time_sec)
+            key=lambda t: abs(t - depth_time)
         )
-        diff = abs(closest_rgb_time.to_sec() - depth_time_sec)
+        diff = abs(closest_rgb_time - depth_time)
         if diff <= TIME_SYNCHRONIZATION_TOLERANCE:
             imageio.imwrite(
                 op.join(depth_output_dir, f'{image_i:04d}.png'),
@@ -124,7 +135,7 @@ def extract_synchronized_images_and_tagslam_poses(
             )
             print(f'Wrote synchronized depth and RGB images {image_i}')
             image_i += 1
-            bundlesdf_times.append(depth_time.to_sec())
+            bundlesdf_times.append(depth_time)
 
         else:
             raise RuntimeError(f'ERROR: Time difference between RGB and ' + \
@@ -149,8 +160,10 @@ def extract_synchronized_images_and_tagslam_poses(
         # extra buffer in case the first or last closest TagSLAM pose message
         # is a bit outside this range.  This will get resolved afterwards with a
         # synchronization step.
-        if msg.header.stamp < start_time - 2*TIME_EXCESS_BUFFER:  continue
-        if msg.header.stamp > end_time + 2*TIME_EXCESS_BUFFER:  break
+        if msg.header.stamp.to_sec() < start_time - 2*TIME_EXCESS_BUFFER:
+            continue
+        if msg.header.stamp.to_sec() > end_time + 2*TIME_EXCESS_BUFFER:
+            break
 
         # Store the pose from the message.
         pose = np.zeros((7,))
@@ -248,7 +261,7 @@ def extract_depth_images(start_time, end_time, depth_bag_file):
         if msg.header.stamp >= end_time:
             break
 
-        depth_times.append(msg.header.stamp.secs + msg.header.stamp.nsecs*1e-9)
+        depth_times.append(msg.header.stamp.to_sec())
 
         image = bridge.imgmsg_to_cv2(msg, desired_encoding="passthrough")
         depth_msgs.append(image)

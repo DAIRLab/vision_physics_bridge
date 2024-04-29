@@ -451,9 +451,7 @@ def load_tagslam_images(vision_asset: str, frame_num: int):
 
 
 
-inspect_tagslam_poses_and_images('cube_2')
-
-# inspect_tagslam_times("cube_2", 1)
-
-# pdb.set_trace()
-# interactive_offset_adjustment("cube_2", 1)
+if __name__ == '__main__':
+    interactive_offset_adjustment('cube_2', 1)
+    inspect_tagslam_poses_and_images('cube_2')
+    # inspect_tagslam_times("cube_2", 1)

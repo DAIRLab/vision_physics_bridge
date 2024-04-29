@@ -786,17 +786,12 @@ def main_command(vision_asset: str, bundlesdf_id: str, cycle_iteration: int):
         int(vision_asset.split('-')[1])
     assert start_toss <= end_toss, f'Invalid toss range: {start_toss} ' + \
         f'-{end_toss} inferred from {vision_asset=}.'
-    
-    # Locate all the related files and directories for the given vision asset.
-    rosbag_number = file_utils.load_rosbag_number_from_yaml(
-        object, start_toss, second_toss_number=end_toss)
 
-    # Decode the BundleSDF run ID and find if there's an associated PLL run ID.
+    # Decode the BundleSDF run ID.
     if bundlesdf_id[:13] != 'bundlesdf_id_':
         bundlesdf_id = f'bundlesdf_id_{bundlesdf_id}'
-
-    print(f'Processing toss {vision_asset} in raw_{rosbag_number}.bag from ' + \
-          f'BundleSDF run ID {bundlesdf_id}.\n')
+    print(f'Processing toss {vision_asset} from BundleSDF run ID ' + \
+          f'{bundlesdf_id}.\n')
 
     # Get the camera extrinsics.
     cam_trans, cam_rot_axis_angle = file_utils.load_camera_extrinsics(object)

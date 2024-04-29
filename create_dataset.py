@@ -94,7 +94,7 @@ def main_command(vision_asset: str, clear_data: bool):
     file_utils.assure_created(data_dir)
     file_utils.assure_created(tagslam_dir)
 
-    print(f'Processing {vision_asset} in ROS bag {rosbag_number}.')
+    print(f'Processing {vision_asset} in ROS bag {rosbag_number}.\n')
 
     # Get the remaining information to do the processing:  directories, times,
     # camera extrinsics.
@@ -108,6 +108,10 @@ def main_command(vision_asset: str, clear_data: bool):
         object, end_toss, 'end_time', as_ros_time=True)
     cam_trans, cam_rot_axis_angle = file_utils.load_camera_extrinsics(object)
 
+    # Get the depth offset.
+    depth_offset_mm = -12
+    print(f'NOTE: Using hardcoded depth offset of {depth_offset_mm} mm.\n')
+
     # Extract the synchronized images and TagSLAM poses, writing them to
     # bundlenets/data/{vision_asset}/ and bundlenets/cnets-data-generation/
     # dataset/{vision_asset}/tagslam_poses/.
@@ -115,7 +119,7 @@ def main_command(vision_asset: str, clear_data: bool):
         start_time=start_time, end_time=end_time, depth_bag_file=depth_bag_file,
         odom_bag_file=odom_bag_file, odom_topic=odom_ros_topic,
         tagslam_pose_output_dir=tagslam_dir, rgb_output_dir=rgb_dir,
-        depth_output_dir=depth_dir
+        depth_output_dir=depth_dir, depth_offset_mm=depth_offset_mm
     )
 
     # Copy the camera intrinsics.
@@ -135,7 +139,24 @@ def main_command(vision_asset: str, clear_data: bool):
         file_utils.create_annotated_poses(
             output_dir=annotated_poses_dir, frame_id=frame_id)
 
-    print(f'Finished processing {vision_asset}.')
+    print(f'Finished creating dataset for {vision_asset}.')
+
+    # Visualize the depth offset with the ability to make adjustments for future
+    # calls to create_dataset.
+    if 'cube' in vision_asset:
+        print(f'Visualizing the results of depth offset = {depth_offset_mm}' + \
+              f' for {vision_asset}.')
+        import inspect_camera_alignments
+        inspect_camera_alignments.interactive_offset_adjustment(vision_asset, 1)
+    else:
+        print(f'No ground truth geometry for {vision_asset} so cannot ' + \
+              'visualize the results of the depth offset.')
+
+    # Lastly, compute the table offset for the experiment.
+    os.system('python ' + \
+              op.join(file_utils.DATA_GEN_DIR, 'compute_table_offsets.py') + \
+              f' single --vision-asset={vision_asset} --overwrite ' + \
+              f'--redirect-output')
 
 
 if __name__ == '__main__':

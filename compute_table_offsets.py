@@ -96,51 +96,37 @@ def get_table_height_from_log(log_file: str) -> float:
     return float(height_str)
 
 
-class ROSBagDepthPlaneViewer:
-    """Compute the table height for a single toss."""
+class DepthPlaneViewer:
+    """Compute the table height for a single toss from the stored depth images
+    in the BundleSDF dataset."""
     def __init__(self, vision_asset: str) -> None:
         self.vision_asset = vision_asset
         object = vision_asset.split('_')[:-1]
         object = object[0] if len(object) == 1 else f'{object[0]}_{object[1]}'
-
-        start_toss = int(vision_asset.split('_')[-1].split('-')[0])
-        end_toss = start_toss if '-' not in vision_asset else \
-            int(vision_asset.split('-')[1])
-        assert start_toss <= end_toss, f'Invalid toss range: {start_toss} ' + \
-            f'-{end_toss} inferred from {vision_asset=}.'
         
         # Locate all the related files and directories for the given vision
         # asset.
-        rosbag_num = file_utils.load_rosbag_number_from_yaml(
-            object, start_toss, second_toss_number=end_toss)
-        try:
-            self.depth_bag_file = file_utils.get_depth_bag_filename(rosbag_num)
-        except AssertionError as e:
-            print(e)
-            self.success = False
-            return
+        tagslam_dir = file_utils.tagslam_pose_dir(
+            vision_asset, check_exists=False)
+        depth_dir = file_utils.bundlesdf_video_depth_dir(vision_asset)
 
-        print(f'Processing toss {vision_asset} in raw_{rosbag_num}.bag.\n')
+        print(f'Processing toss {vision_asset} from existing dataset.\n')
 
         # Get the camera extrinsics, which are stored for every object.
         self.cam_p, self.cam_R_axis_angle = \
             file_utils.load_camera_extrinsics(object)
         self.cam_p = self.cam_p.squeeze()
         self.cam_R_axis_angle = self.cam_R_axis_angle.squeeze()
-    
-        # Start/end times are for the start and end of a BundleSDF trajectory,
-        # which starts with the object unmoving on the table, includes the toss
-        # wind-up and execution, and ends with the object unmoving on the table
-        # again.
-        self.start_ros_times = np.array([file_utils.load_toss_time_from_yaml(
-            object, toss_i, 'start_time', as_ros_time=True) for toss_i in range(
-                start_toss, end_toss+1)])
-        self.end_ros_times = np.array([file_utils.load_toss_time_from_yaml(
-            object, toss_i, 'end_time', as_ros_time=True) for toss_i in range(
-                start_toss, end_toss+1)])
         
-        self.times, self.raw_images = rosbag_processor.extract_depth_images(
-            self.start_ros_times[0], self.end_ros_times[0], self.depth_bag_file)
+        # Load the pre-existing dataset.
+        try:
+            self.times = np.loadtxt(op.join(
+                op.dirname(tagslam_dir), 'bundlesdf_timestamps.txt'))
+            self.raw_images = [
+                math_utils.load_depth_image(op.join(depth_dir, '0001.png'))]
+        except:
+            self.success = False
+            return
 
         self.success = True
 
@@ -153,7 +139,9 @@ class ROSBagDepthPlaneViewer:
         tagslam_pose_dir = file_utils.tagslam_pose_dir(
             self.vision_asset, check_exists=True)
         first_pose = np.loadtxt(op.join(tagslam_pose_dir, '0001.txt'))
-        world_pts = math_utils.transform_body_points_to_world_given_body_pose(
+
+        # Compute the cube corners in world frame.
+        world_pts = math_utils.transform_point_coordinates_given_pose(
             CUBE_CORNERS_IN_CUBE_FRAME, first_pose)
         self.cube_corners_world = world_pts
         self.cube_center = first_pose[:3]
@@ -485,6 +473,61 @@ class ROSBagDepthPlaneViewer:
         
 
 
+class ROSBagDepthPlaneViewer(DepthPlaneViewer):
+    """Compute the table height for a single toss from the depth messages in a
+    ROS bag."""
+    def __init__(self, vision_asset: str) -> None:
+        self.vision_asset = vision_asset
+        object = vision_asset.split('_')[:-1]
+        object = object[0] if len(object) == 1 else f'{object[0]}_{object[1]}'
+
+        start_toss = int(vision_asset.split('_')[-1].split('-')[0])
+        end_toss = start_toss if '-' not in vision_asset else \
+            int(vision_asset.split('-')[1])
+        assert start_toss <= end_toss, f'Invalid toss range: {start_toss} ' + \
+            f'-{end_toss} inferred from {vision_asset=}.'
+
+        # Locate all the related files and directories for the given vision
+        # asset.
+        rosbag_num = file_utils.load_rosbag_number_from_yaml(
+            object, start_toss, second_toss_number=end_toss)
+        try:
+            depth_bag_file = file_utils.get_depth_bag_filename(rosbag_num)
+        except AssertionError as e:
+            print(e)
+            self.success = False
+            return
+
+        print(f'Processing toss {vision_asset} in raw_{rosbag_num}.bag.\n')
+
+        # Get the camera extrinsics, which are stored for every object.
+        self.cam_p, self.cam_R_axis_angle = \
+            file_utils.load_camera_extrinsics(object)
+        self.cam_p = self.cam_p.squeeze()
+        self.cam_R_axis_angle = self.cam_R_axis_angle.squeeze()
+
+        # Start/end times are for the start and end of a BundleSDF trajectory,
+        # which starts with the object unmoving on the table, includes the toss
+        # wind-up and execution, and ends with the object unmoving on the table
+        # again.
+        start_ros_times = np.array([file_utils.load_toss_time_from_yaml(
+            object, toss_i, 'start_time', as_ros_time=True) for toss_i in range(
+                start_toss, end_toss+1)])
+        end_ros_times = np.array([file_utils.load_toss_time_from_yaml(
+            object, toss_i, 'end_time', as_ros_time=True) for toss_i in range(
+                start_toss, end_toss+1)])
+
+        # Load the times and images from the ROS bag.
+        self.times, self.raw_images = rosbag_processor.extract_depth_images(
+            start_ros_times[0], end_ros_times[0], depth_bag_file)
+
+        self.success = True
+
+        # If this is a cube example, plot the corners of the cube.
+        if 'cube' in vision_asset:
+            self.compute_cube_corners()
+
+
 #######################################################################
 @click.group()
 def cli():
@@ -502,15 +545,46 @@ def cli():
               type=bool,
               default=True,
               help="whether to visualize the point cloud processing.")
-def process_single_command(vision_asset: str, visualize: bool):
+@click.option('--overwrite/--keep-data',
+              type=bool,
+              default=False,
+              help="whether to overwrite or keep previously generated results")
+@click.option('--redirect-output/--use-terminal',
+              type=bool,
+              default=False,
+              help="whether to redirect output to a log file.")
+def process_single_command(vision_asset: str, visualize: bool,
+                           overwrite: bool, redirect_output: bool):
     assert '_' in vision_asset, f'Invalid asset directory: {vision_asset}.'
+    log_file = file_utils.point_cloud_processing_log_filepath(vision_asset)
+    if op.exists(log_file) and not overwrite:
+        plot_file = file_utils.point_cloud_processing_plot_filepath(
+            vision_asset)
+        if op.exists(plot_file):
+            print(f'Skipping {vision_asset} since found prior results.')
+            exit()
+
+    def process_single():
+        depth_plane_viewer = DepthPlaneViewer(vision_asset)
+        if not depth_plane_viewer.success:
+            print(f'Failed to find existing {vision_asset} dataset; ' + \
+                  f'resorting to ROS bag.')
+            depth_plane_viewer = ROSBagDepthPlaneViewer(vision_asset)
+        if depth_plane_viewer.success:
+            depth_plane_viewer.convert_depth_image_to_point_cloud()
+            depth_plane_viewer.compute_epsilon_and_table_offset(
+                save=True, show=visualize)
+            depth_plane_viewer.plot_point_cloud(save=True, show=visualize)
+        else:
+            print(f'Failed to process {vision_asset} in dataset or ROS bag.')
     
-    depth_plane_viewer = ROSBagDepthPlaneViewer(vision_asset)
-    if depth_plane_viewer.success:
-        depth_plane_viewer.convert_depth_image_to_point_cloud()
-        depth_plane_viewer.compute_epsilon_and_table_offset(
-            save=True, show=visualize)
-        depth_plane_viewer.plot_point_cloud(save=True, show=visualize)
+    if redirect_output:
+        with open(log_file, 'w') as f:
+            sys.stdout = f
+            process_single()
+        sys.stdout = sys.__stdout__
+    else:
+        process_single()
 
 
 # Use 'all' command to process all tosses found in config.yaml.
@@ -547,12 +621,19 @@ def process_all_command(visualize: bool, overwrite: bool):
         print(f'Processing {vision_asset} --> {log_file}')
         with open(log_file, 'w') as f:
             sys.stdout = f
-            depth_plane_viewer = ROSBagDepthPlaneViewer(vision_asset)
+            depth_plane_viewer = DepthPlaneViewer(vision_asset)
+            if not depth_plane_viewer.success:
+                print(f'Failed to find existing {vision_asset} dataset; ' + \
+                      f'resorting to ROS bag.')
+                depth_plane_viewer = ROSBagDepthPlaneViewer(vision_asset)
             if depth_plane_viewer.success:
                 depth_plane_viewer.convert_depth_image_to_point_cloud()
                 depth_plane_viewer.compute_epsilon_and_table_offset(
                     save=True, show=visualize)
                 depth_plane_viewer.plot_point_cloud(save=True, show=visualize)
+            else:
+                print(f'Failed to process {vision_asset} in dataset or ROS ' + \
+                      'bag.')
         sys.stdout = sys.__stdout__
 
 
