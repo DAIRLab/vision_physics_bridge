@@ -29,7 +29,7 @@ def batch_no_transform_function(points_wrt_T: np.ndarray,
     return points_wrt_T
 
 
-class ConverterPLLToBundleSDF:
+class GeometryConverterPLLToBundleSDF:
     """Class for processing shape data from PLL.  All of the data in a PLL run's
     geometry output directory is processed.
 
@@ -218,7 +218,7 @@ def main_command(vision_asset: str, pll_id: str, cycle_iteration: int):
         create=True
     )
 
-    converter = ConverterPLLToBundleSDF(
+    converter = GeometryConverterPLLToBundleSDF(
         pll_geom_output_dir=pll_geometry_output_dir,
         bundlesdf_geom_input_dir=bundlesdf_geometry_input_dir,
         bundlesdf_pose_output_dir=bundlesdf_pose_output_dir,

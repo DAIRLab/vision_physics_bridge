@@ -10,12 +10,14 @@ import click
 import os.path as op
 import numpy as np
 import torch
-from scipy.spatial.transform import Rotation
 from scipy import signal
+from scipy.spatial.transform import Rotation
 from pyquaternion import Quaternion
 import matplotlib.pyplot as plt
 import pdb
 import math
+import trimesh
+from trimesh.base import Trimesh
 from typing import Tuple, List
 
 import file_utils
@@ -83,7 +85,7 @@ def smooth_quaternions_pyquat(quats, alpha=0.5):
     return smoothed_quats #xyzw
 
 
-class ConverterBundleSDFToPLL:
+class TrajectoryConverterBundleSDFToPLL:
     """Class for processing pose data from BundleSDF.  Can load corresponding
     poses from TagSLAM, convert between BundleSDF and TagSLAM origins and
     between camera and world frames.
@@ -759,6 +761,86 @@ class ConverterBundleSDFToPLL:
                 print(f'\t{op.join(toss_bundlesdf_dir, toss_filenames[i])}')
 
 
+class GeometryConverterBundleSDFToPLL:
+    """Class for processing shape data from BundleSDF.
+
+    TODO:
+        - There could be two BundleSDF IDs, one for the tracking experiment and
+            one for the associated geometry reconstruction experiment, which
+            would have results within the tracking experiment.  For now, this
+            code only grabs the NeRF results from the tracking experiment's
+            associated NeRF run.
+    """
+    def __init__(self,
+                 bundlesdf_id: str, start_toss: int,
+                 end_toss: int, object: str, cycle_iteration: int):
+        # Get the BundleSDF results directory where we can find the meshes.
+        vision_asset = f'{object}_{start_toss}'
+        vision_asset += f'-{end_toss}' if start_toss != end_toss else ''
+
+        # Set up directories.
+        self._set_up_directories(vision_asset, cycle_iteration, bundlesdf_id)
+
+        # Load the BundleSDF results' mesh and compute its convex hull.  This
+        # mesh is already represented in world units about the BundleSDF
+        # tracking origin.
+        self.mesh_bsdf = trimesh.load(
+            op.join(self.nerf_results_dir, 'textured_mesh.obj'), force='mesh')
+        self.mesh_bsdf_hull = self.mesh_bsdf.convex_hull
+
+    def _set_up_directories(self, vision_asset: str, cycle_iteration: int,
+                            bundlesdf_id: str) -> None:
+        """Given the vision asset, cycle iteration, and BundleSDF ID, loads the
+        following attributes:
+            - self.nerf_results_dir
+            - self.geometry_for_pll_dir
+        """
+        self.nerf_results_dir = file_utils.bundlesdf_nerf_results_dir(
+            dataset=vision_asset, cycle_iteration=cycle_iteration,
+            bundlesdf_id=bundlesdf_id
+        )
+        self.geometry_for_pll_dir = file_utils.contactnets_input_geometry_dir(
+            vision_asset, cycle_iteration, bundlesdf_id)
+
+    def plot_mesh_and_hull_points(self):
+        mesh = self.mesh_bsdf
+        hull = self.mesh_bsdf_hull
+
+        verts1 = mesh.vertices
+        verts2 = hull.vertices
+        vert_norms2 = hull.vertex_normals  # These will be used as support dirs.
+
+        fig = plt.figure()
+        ax = fig.add_subplot(111, projection='3d')
+        ax.scatter(verts1[:, 0], verts1[:, 1], verts1[:, 2], s=0.1,
+                   label='Mesh vertices')
+        ax.scatter(verts2[:, 0], verts2[:, 1], verts2[:, 2], s=10, color='r',
+                   label='Convex hull vertices')
+        prefix = [''] + ['_']*(len(verts2)-1)
+        for i in range(len(verts2)):
+            ax.quiver(*verts2[i], *vert_norms2[i]/50, color='r',
+                      label=prefix[i]+'Vertex normals', zorder=1.5)
+        plt.legend()
+        plt.show()
+
+    def process_and_save(self):
+        """Process the data."""
+        # Get the convex hull's vertices and their associated normals.
+        support_points = self.mesh_bsdf_hull.vertices
+        support_directions = self.mesh_bsdf_hull.vertex_normals
+
+        # Write these as tensors to PLL's input geometry folder.
+        torch.save(
+            torch.tensor(support_points),
+            op.join(self.geometry_for_pll_dir, 'support_points.pt'))
+        torch.save(
+            torch.tensor(support_directions),
+            op.join(self.geometry_for_pll_dir, 'support_directions.pt'))
+
+        print(f'Saved {support_points.shape=} and {support_directions.shape=}.')
+
+
+
 #######################################################################
 @click.command()
 @click.option('--vision-asset',
@@ -773,11 +855,13 @@ class ConverterBundleSDFToPLL:
 @click.option('--cycle-iteration',
               type=int,
               default=1,
-              help="BundleSDF iteration number (0 means use TagSLAM poses).")
+              help="BundleSDF iteration number (can't choose 0 since that " + \
+                "means use TagSLAM poses).")
 
 def main_command(vision_asset: str, bundlesdf_id: str, cycle_iteration: int):
     # First decode the system and start/end tosses from the provided asset
     # directory.
+    assert cycle_iteration > 0, f'Invalid cycle iteration: {cycle_iteration}.'
     assert '_' in vision_asset, f'Invalid asset directory: {vision_asset}.'
     object = vision_asset.split('_')[0]
 
@@ -821,8 +905,8 @@ def main_command(vision_asset: str, bundlesdf_id: str, cycle_iteration: int):
         object, toss_i, 'end_frame') for toss_i in range(
             start_toss, end_toss+1)])
 
-    # Do the conversion.
-    converter = ConverterBundleSDFToPLL(
+    # Do the trajectory conversion.
+    traj_converter = TrajectoryConverterBundleSDFToPLL(
         bundlesdf_id=bundlesdf_id, 
         relative_start_frames=relative_start_frames,
         relative_end_frames=relative_end_frames,
@@ -832,10 +916,20 @@ def main_command(vision_asset: str, bundlesdf_id: str, cycle_iteration: int):
         frame_rate=30, z_table=z_table, plot=True
     )
 
-    converter.do_process()
-    converter.plot_trajectory(full_trajectory=True)
-    converter.plot_trajectory(full_trajectory=False)
-    converter.save_data(save_tagslam=True, save_bundlesdf=True)
+    traj_converter.do_process()
+    traj_converter.plot_trajectory(full_trajectory=True)
+    traj_converter.plot_trajectory(full_trajectory=False)
+    traj_converter.save_data(save_tagslam=True, save_bundlesdf=True)
+
+    # Do the geometry conversion.
+    geom_converter = GeometryConverterBundleSDFToPLL(
+        do_tagslam_to_bsdf_transform=False, bundlesdf_id=bundlesdf_id,
+        start_toss=start_toss, end_toss=end_toss, object=object,
+        cycle_iteration=cycle_iteration
+    )
+
+    geom_converter.process_and_save()
+    geom_converter.plot_mesh_and_hull_points()
 
 
 if __name__ == '__main__':

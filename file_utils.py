@@ -69,6 +69,17 @@ def get_pll_geometry_output_dir(system: str, cycle_iteration: int,
 
 
 """Directories."""
+def bundlesdf_run_results_dir(dataset: str, cycle_iteration: int,
+                              bundlesdf_id: str) -> str:
+    """BundleSDF's results directory for a particular run and dataset."""
+    bundlesdf_result_dir = bsdf_file_utils.results_dir(
+        dataset=dataset, cycle_iteration=cycle_iteration,
+        bundlesdf_id=bundlesdf_id
+    )
+    assert op.exists(bundlesdf_result_dir), f'Requires ' + \
+        f'{bundlesdf_result_dir} to exist but not found.'
+    return bundlesdf_result_dir
+
 def bundlesdf_pose_dir(dataset: str, cycle_iteration: int, bundlesdf_id: str
                        ) -> str:
     """BundleSDF's output pose directory for a particular dataset.  Contains
@@ -80,6 +91,22 @@ def bundlesdf_pose_dir(dataset: str, cycle_iteration: int, bundlesdf_id: str
     path = op.join(bundlesdf_result_dir, 'ob_in_cam')
     assert op.exists(path), f'Requires {path} to exist but not found.'
     return path
+
+def bundlesdf_nerf_results_dir(dataset: str, cycle_iteration: int,
+                               bundlesdf_id: str) -> str:
+    """BundleSDF's NeRF results directory for a particular run and dataset.
+    Gets the NeRF results from the same run that generated the trajectory."""
+    bundlesdf_result_dir = bundlesdf_run_results_dir(
+        dataset=dataset, cycle_iteration=cycle_iteration,
+        bundlesdf_id=bundlesdf_id
+    )
+    nerf_results_dir = bsdf_file_utils.nerf_results_subdir(
+        out_folder=bundlesdf_result_dir, bundlesdf_run_id=bundlesdf_id,
+        create=False
+    )
+    assert op.exists(nerf_results_dir), f'Requires {nerf_results_dir} to ' + \
+        f'exist but not found.'
+    return nerf_results_dir
 
 def bundlesdf_annotated_poses_dir(dataset: str, create: bool = False) -> str:
     """BundleSDF's input annotated pose directory for a particular dataset.
@@ -147,6 +174,17 @@ def contactnets_input_dir_bundlesdf(
     return assure_created(
         op.join(contactnets_input_dir(object), dataset, subdir_1, subdir_2,
                 subdir_3)
+    )
+
+def contactnets_input_geometry_dir(
+        dataset: str, iteration: int, bundlesdf_id: str,
+        create: bool = True) -> str:
+    """ContactNets' input directory for geometry information from BundleSDF."""
+    object = dataset.split('_')[0]
+    pll_asset_subdirs = op.join(f'vision_{object}', dataset)
+    return assure_created(
+        pll_file_utils.geom_for_pll_dir(
+            pll_asset_subdirs, bundlesdf_id, iteration, check_exists=False)
     )
 
 def contactnets_output_dir(dataset: str, cycle_iteration: int, pll_id: str
@@ -326,6 +364,17 @@ def get_odom_bag_filename(rosbag_number: int) -> str:
 
 
 """Filtering/visualization."""
+def get_tagslam_offset() -> np.ndarray:
+    """Get the TagSLAM offset from the data generation assets directory."""
+    filename = op.join(DATA_GEN_DIR, 'assets', 'tagslam_offset.txt')
+    return np.loadtxt(filename)
+
+def save_tagslam_offset(offset: np.ndarray) -> None:
+    """Save the TagSLAM offset to a file in the data generation assets
+    directory."""
+    filename = op.join(DATA_GEN_DIR, 'assets', 'tagslam_offset.txt')
+    np.savetxt(filename, offset)
+
 def point_cloud_processing_plot_filepath(dataset: str, eps: bool = False
                                          ) -> str:
     """Get the filepath for the point cloud processing plot."""
