@@ -7,11 +7,13 @@ like a less invasive solution."""
 
 import os.path as op
 import matplotlib
+matplotlib.use('TkAgg')
 import matplotlib.cm as cmx
 import matplotlib.pyplot as plt
 import numpy as np
 import pdb
 from typing import Tuple
+import cv2
 
 import file_utils, math_utils, rosbag_processor
 
@@ -102,7 +104,7 @@ def load_and_adjust_depth_readings_in_image(
     return depth_image
 
 def load_depth_image_as_points(vision_asset: str, frame_num: int,
-                               z_axis_offset_meters: float = 0.0) -> np.ndarray:
+                               z_axis_offset_meters: float = 0.0, smoothing: bool =False) -> np.ndarray:
     """Load a depth image from the BundlesDF dataset as a set of 3D points in
     world frame."""
     object = vision_asset.split('_')[0]
@@ -114,6 +116,10 @@ def load_depth_image_as_points(vision_asset: str, frame_num: int,
     # Load the depth image.
     depth_image = load_and_adjust_depth_readings_in_image(
         vision_asset, frame_num, z_axis_offset_meters)
+
+    if smoothing:
+        # filter the depth image using bilateral filter
+        depth_image = cv2.bilateralFilter(depth_image.astype(np.float32), 20, 20, 10)   # diameter, sigmaColor, sigmaSpace
 
     # Convert the depth image to point cloud.
     points_camera = math_utils.convert_depth_image_to_points(
@@ -338,14 +344,14 @@ def compute_camera_z_normal(vision_asset: str) -> np.ndarray:
     R_WC = math_utils.axis_angle_to_rotation_matrix(cam_rot_axis_angle, theta)
     return R_WC[:, 2]
 
-def interactive_offset_adjustment(vision_asset: str, frame_num: int):
+def interactive_offset_adjustment(vision_asset: str, frame_num: int, smoothing: bool = False):
     """Plot the depth image and the cube corners in world frame."""
     print(DEPTH_PLOT_HELP_PRINT)
 
     # Load the depth image, TagSLAM pose, camera z direction.
     pose = load_tagslam_pose(vision_asset, frame_num)
     cube_corners_world = compute_cube_corners_in_world(pose)
-    points_world = load_depth_image_as_points(vision_asset, frame_num)
+    points_world = load_depth_image_as_points(vision_asset, frame_num, smoothing=smoothing)
     points_world, mask = crop_point_cloud(points_world, cube_xyz=pose[:3])
     camera_z_normal = compute_camera_z_normal(vision_asset)
 
@@ -443,6 +449,7 @@ def interactive_offset_adjustment(vision_asset: str, frame_num: int):
         fig.canvas.flush_events()
 
     print(DEPTH_PLOT_INSTRUCTIONS_PRINT)
+    # plt.show()
     pdb.set_trace()
 
 def load_tagslam_images(vision_asset: str, frame_num: int):
@@ -452,6 +459,6 @@ def load_tagslam_images(vision_asset: str, frame_num: int):
 
 
 if __name__ == '__main__':
-    interactive_offset_adjustment('cube_2', 1)
-    inspect_tagslam_poses_and_images('cube_2')
+    interactive_offset_adjustment('cube_2', 1, smoothing=False)
+    # inspect_tagslam_poses_and_images('cube_2')
     # inspect_tagslam_times("cube_2", 1)
