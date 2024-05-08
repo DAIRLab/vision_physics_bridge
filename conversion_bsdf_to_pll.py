@@ -7,8 +7,10 @@ cube_2.  Still to be tested on multi-toss experiments.
 
 # import argparse
 import click
+import os
 import os.path as op
 import numpy as np
+import pdb
 import torch
 from scipy import signal
 from scipy.spatial.transform import Rotation
@@ -839,6 +841,11 @@ class GeometryConverterBundleSDFToPLL:
 
         print(f'Saved {support_points.shape=} and {support_directions.shape=}.')
 
+        # Copy over the mesh file as well.
+        mesh_filepath = op.join(self.nerf_results_dir, 'textured_mesh.obj')
+        new_filepath = op.join(self.geometry_for_pll_dir, 'mesh.obj')
+        os.system(f'cp {mesh_filepath} {new_filepath}')
+
 
 
 #######################################################################
@@ -869,13 +876,13 @@ def main_command(vision_asset: str, bundlesdf_id: str, cycle_iteration: int):
     end_toss = start_toss if '-' not in vision_asset else \
         int(vision_asset.split('-')[1])
     assert start_toss <= end_toss, f'Invalid toss range: {start_toss} ' + \
-        f'-{end_toss} inferred from {vision_asset=}.'
+            f'-{end_toss} inferred from {vision_asset=}.'
 
     # Decode the BundleSDF run ID.
     if bundlesdf_id[:13] != 'bundlesdf_id_':
         bundlesdf_id = f'bundlesdf_id_{bundlesdf_id}'
     print(f'Processing toss {vision_asset} from BundleSDF run ID ' + \
-          f'{bundlesdf_id}.\n')
+            f'{bundlesdf_id}.\n')
 
     # Get the camera extrinsics.
     cam_trans, cam_rot_axis_angle = file_utils.load_camera_extrinsics(object)
@@ -886,14 +893,14 @@ def main_command(vision_asset: str, bundlesdf_id: str, cycle_iteration: int):
         range(start_toss, end_toss+1)
     ])
     z_table = np.mean(table_heights)
-    
+
     # Start times are for the start and end of a BundleSDF trajectory, which
     # starts with the object unmoving on the table, includes the toss wind-up
     # and execution, and ends with the object unmoving on the table again.
     start_ros_times = np.array([file_utils.load_toss_time_from_yaml(
         object, toss_i, 'start_time', as_ros_time=True) for toss_i in range(
             start_toss, end_toss+1)])
-    
+
     # Start/end frames are the indices of the longer BundleSDF trajectories that
     # correspond to the ContactNets trajectories, which include only the
     # autonomous dynamics of the object dropping under gravity and colliding
@@ -923,9 +930,8 @@ def main_command(vision_asset: str, bundlesdf_id: str, cycle_iteration: int):
 
     # Do the geometry conversion.
     geom_converter = GeometryConverterBundleSDFToPLL(
-        do_tagslam_to_bsdf_transform=False, bundlesdf_id=bundlesdf_id,
-        start_toss=start_toss, end_toss=end_toss, object=object,
-        cycle_iteration=cycle_iteration
+        bundlesdf_id=bundlesdf_id, start_toss=start_toss, end_toss=end_toss,
+        object=object, cycle_iteration=cycle_iteration
     )
 
     geom_converter.process_and_save()
