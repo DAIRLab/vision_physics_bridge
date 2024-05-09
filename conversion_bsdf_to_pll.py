@@ -810,7 +810,7 @@ class GeometryConverterBundleSDFToPLL:
 
         verts1 = mesh.vertices
         verts2 = hull.vertices
-        vert_norms2 = hull.vertex_normals  # These will be used as support dirs.
+        vert_norms2 = hull.vertex_normals
 
         fig = plt.figure()
         ax = fig.add_subplot(111, projection='3d')
@@ -825,26 +825,89 @@ class GeometryConverterBundleSDFToPLL:
         plt.legend()
         plt.show()
 
+    def plot_support_directions_and_points(self, pts, dirs):
+        mesh = self.mesh_bsdf
+        hull = self.mesh_bsdf_hull
+
+        mesh_verts = mesh.vertices
+        hull_verts = hull.vertices
+
+        fig = plt.figure()
+        ax = fig.add_subplot(111, projection='3d')
+        ax.scatter(mesh_verts[:, 0], mesh_verts[:, 1], mesh_verts[:, 2], s=0.1,
+                   label='Mesh vertices')
+        ax.scatter(hull_verts[:, 0], hull_verts[:, 1], hull_verts[:, 2], s=10,
+                   color='r', label='Convex hull vertices')
+        ax.scatter(pts[:, 0], pts[:, 1], pts[:, 2], s=12,
+                   color='orange', label='Support points')
+
+        prefix = [''] + ['_']*(len(pts)-1)
+        for i in range(len(pts)):
+            ax.quiver(*pts[i], *dirs[i]/25, color='orange',
+                      label=prefix[i]+'Support directions', zorder=1.5)
+        plt.legend()
+        plt.show()
+
+    def query_support_directions_to_get_points(self):
+        # Use the convex hull.
+        hull = self.mesh_bsdf_hull
+        hull_points = hull.vertices
+
+        # Get some evenly-spaced query directions from PLL.
+        support_directions = file_utils.get_deep_support_query_directions()
+
+        # Compute the support point for every query direction, selecting out of
+        # the convex hull vertices.
+        support_points = torch.zeros_like(support_directions)
+
+        for i in range(support_directions.shape[0]):
+            dir = support_directions[i].reshape(1, 3)
+            dots = torch.sum(dir * hull_points, dim=1)
+            support_points[i, :] = torch.Tensor(hull_points[torch.argmax(dots)])
+
+        return support_points, support_directions
+
     def process_and_save(self):
         """Process the data."""
-        # Get the convex hull's vertices and their associated normals.
-        support_points = self.mesh_bsdf_hull.vertices
-        support_directions = self.mesh_bsdf_hull.vertex_normals
+        # Query different directions and get the support points.
+        support_points, support_directions = \
+            self.query_support_directions_to_get_points()
+        self.plot_support_directions_and_points(
+            support_points, support_directions)
 
         # Write these as tensors to PLL's input geometry folder.
         torch.save(
-            torch.tensor(support_points),
+            support_points,
             op.join(self.geometry_for_pll_dir, 'support_points.pt'))
         torch.save(
-            torch.tensor(support_directions),
+            support_directions,
             op.join(self.geometry_for_pll_dir, 'support_directions.pt'))
 
         print(f'Saved {support_points.shape=} and {support_directions.shape=}.')
 
-        # Copy over the mesh file as well.
-        mesh_filepath = op.join(self.nerf_results_dir, 'textured_mesh.obj')
+        # Copy over the convex hull in .obj format for PLL to show geometry
+        # comparisons.  This .obj file requires vertex, vertex normals, and face
+        # definitions where the faces' associated vertices are annotated with
+        # their associated vertex normals explicitly (otherwise error on
+        # Mengti's lab computer).
         new_filepath = op.join(self.geometry_for_pll_dir, 'mesh.obj')
-        os.system(f'cp {mesh_filepath} {new_filepath}')
+        with open(new_filepath, 'w') as f:
+            f.write(f'# Vertices\n')
+            for vertex in self.mesh_bsdf_hull.vertices:
+                f.write(f'v {vertex[0]} {vertex[1]} {vertex[2]}\n')
+
+            f.write(f'\n# Vertex normals\n')
+            for normal in self.mesh_bsdf_hull.vertex_normals:
+                f.write(f'vn {normal[0]} {normal[1]} {normal[2]}\n')
+
+            f.write(f'\n# Faces:  vertex index // vertex normal index\n')
+            for face in self.mesh_bsdf_hull.faces:
+                # +1 because obj files use 1-indexing but trimesh uses 0.
+                # This is of format v_i//vn_i, which for us are always the same.
+                f.write(f'f {face[0]+1}//{face[0]+1} ' + \
+                        f'{face[1]+1}//{face[1]+1} {face[2]+1}//{face[2]+1}\n')
+        print(f'Wrote convex hull from BundleSDF as mesh at {new_filepath}.')
+
 
 
 
@@ -912,6 +975,13 @@ def main_command(vision_asset: str, bundlesdf_id: str, cycle_iteration: int):
         object, toss_i, 'end_frame') for toss_i in range(
             start_toss, end_toss+1)])
 
+    # Do the geometry conversion.
+    geom_converter = GeometryConverterBundleSDFToPLL(
+        bundlesdf_id=bundlesdf_id, start_toss=start_toss, end_toss=end_toss,
+        object=object, cycle_iteration=cycle_iteration
+    )
+    geom_converter.process_and_save()
+
     # Do the trajectory conversion.
     traj_converter = TrajectoryConverterBundleSDFToPLL(
         bundlesdf_id=bundlesdf_id, 
@@ -922,20 +992,10 @@ def main_command(vision_asset: str, bundlesdf_id: str, cycle_iteration: int):
         cam_trans=cam_trans, cam_rot_axis_angle=cam_rot_axis_angle,
         frame_rate=30, z_table=z_table, plot=True
     )
-
     traj_converter.do_process()
     traj_converter.plot_trajectory(full_trajectory=True)
     traj_converter.plot_trajectory(full_trajectory=False)
     traj_converter.save_data(save_tagslam=True, save_bundlesdf=True)
-
-    # Do the geometry conversion.
-    geom_converter = GeometryConverterBundleSDFToPLL(
-        bundlesdf_id=bundlesdf_id, start_toss=start_toss, end_toss=end_toss,
-        object=object, cycle_iteration=cycle_iteration
-    )
-
-    geom_converter.process_and_save()
-    geom_converter.plot_mesh_and_hull_points()
 
 
 if __name__ == '__main__':

@@ -17,6 +17,7 @@ import re
 import yaml
 import rospy
 import sys
+from torch import Tensor
 
 import math_utils
 
@@ -361,6 +362,14 @@ def get_odom_bag_filename(rosbag_number: int) -> str:
     bag_filename = op.join(DATA_GEN_DIR, 'rosbags', f'odom_{rosbag_number}.bag')
     assert op.exists(bag_filename), f'Did not find expected {bag_filename}'
     return bag_filename
+
+
+"""Accessing parameters from other modules."""
+def get_deep_support_query_directions() -> Tensor:
+    """Get the evenly spaced query directions PLL uses for deep support network
+    training."""
+    from dair_pll import deep_support_function
+    return deep_support_function._SURFACE
 
 
 """Filtering/visualization."""
