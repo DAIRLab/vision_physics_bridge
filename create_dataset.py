@@ -62,9 +62,12 @@ import rosbag_processor
 def main_command(vision_asset: str, clear_data: bool):
     # First parse the system and start/end tosses from the provided asset name.
     assert '_' in vision_asset, f'Invalid asset directory: {vision_asset}.'
-    object = vision_asset.split('_')[0]
+    # want to split {xxx_xxx_..._xxx}_{x-x} into object={xxx_xxx_..._xxx} and {x-x}
+    # need to only split on the last underscore
+    object = vision_asset.split('_')[:-1]
+    object = '_'.join(object)
 
-    start_toss = int(vision_asset.split('_')[1].split('-')[0])
+    start_toss = int(vision_asset.split('_')[-1].split('-')[0])
     end_toss = start_toss if '-' not in vision_asset else \
         int(vision_asset.split('-')[1])
     assert start_toss <= end_toss, f'Invalid toss range: {start_toss} ' + \

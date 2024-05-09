@@ -77,6 +77,7 @@ def extract_synchronized_images_and_tagslam_poses(
 
     start_time = start_time.to_sec()
     end_time = end_time.to_sec()
+    print(f"start_time: {start_time}, end_time: {end_time}")
 
     depth_offset_mm_formatted = np.array([depth_offset_mm]).astype(np.uint16)
 
@@ -100,6 +101,8 @@ def extract_synchronized_images_and_tagslam_poses(
 
             # Incorporate the depth offset, excluding non-returns (depth=0).
             cv_img_depth[cv_img_depth != 0] += depth_offset_mm_formatted
+            # If we want to smooth the depth map
+            # cv_img_depth = cv2.bilateralFilter(cv_img_depth.astype(np.float32), 20, 20, 10).astype(np.uint16)   # diameter, sigmaColor, sigmaSpace
 
             # Store the result.
             depth_images[msg.header.stamp.to_sec()] = cv_img_depth
@@ -155,14 +158,17 @@ def extract_synchronized_images_and_tagslam_poses(
     # offset = file_utils.get_tagslam_offset()
     # print(f'Applying a TagSLAM offset: {offset}')
     poses, times = [], []
-    for (_topic, msg, _t) in odom_bag.read_messages(topics=[odom_topic]):
+    for (_topic, msg, _t) in tqdm(odom_bag.read_messages(topics=[odom_topic])):
         # Skip messages before the start time; stop past the end time.  Add
         # extra buffer in case the first or last closest TagSLAM pose message
         # is a bit outside this range.  This will get resolved afterwards with a
         # synchronization step.
+        print(f"Processing TagSLAM pose at time {msg.header.stamp.to_sec()}")
         if msg.header.stamp.to_sec() < start_time - 2*TIME_EXCESS_BUFFER:
+            print(f"Skipping frame before start time: {msg.header.stamp.to_sec()}, {start_time}")
             continue
         if msg.header.stamp.to_sec() > end_time + 2*TIME_EXCESS_BUFFER:
+            print(f"Stopping at frame after end time: {msg.header.stamp.to_sec()}, {end_time}")
             break
 
         # Store the pose from the message.
@@ -177,6 +183,7 @@ def extract_synchronized_images_and_tagslam_poses(
         poses.append(pose)
         times.append(msg.header.stamp.to_sec())
 
+    print(f'Extracted {len(poses)} TagSLAM poses from the odometry bag.')
     poses = np.array(poses)
     times = np.array(times)
     bundlesdf_times = np.array(bundlesdf_times)

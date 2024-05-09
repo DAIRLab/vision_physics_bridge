@@ -15,6 +15,8 @@ import torch
 from scipy import signal
 from scipy.spatial.transform import Rotation
 from pyquaternion import Quaternion
+import matplotlib
+matplotlib.use('TkAgg')
 import matplotlib.pyplot as plt
 import pdb
 import math
