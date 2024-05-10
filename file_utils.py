@@ -17,6 +17,7 @@ import re
 import yaml
 import rospy
 import sys
+import torch
 from torch import Tensor
 
 import math_utils
@@ -366,10 +367,13 @@ def get_odom_bag_filename(rosbag_number: int) -> str:
 
 """Accessing parameters from other modules."""
 def get_deep_support_query_directions() -> Tensor:
-    """Get the evenly spaced query directions PLL uses for deep support network
-    training."""
-    from dair_pll import deep_support_function
-    return deep_support_function._SURFACE
+    """Get roughly evenly-spaced query directions."""
+    linear_space = torch.linspace(-1, 1, steps=32)
+    grid = torch.cartesian_prod(linear_space, linear_space, linear_space)
+    points_on_box_surface = grid[grid.abs().max(dim=-1).values >= 1.0]
+    surface = points_on_box_surface / points_on_box_surface.norm(
+        dim=-1, keepdim=True)
+    return surface.to(torch.float64)
 
 
 """Filtering/visualization."""
