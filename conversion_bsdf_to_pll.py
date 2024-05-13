@@ -861,18 +861,20 @@ class GeometryConverterBundleSDFToPLL:
         # Compute the support point for every query direction, selecting out of
         # the convex hull vertices.
         support_points = torch.zeros_like(support_directions)
+        support_scalars = torch.zeros((support_directions.shape[0],))
 
         for i in range(support_directions.shape[0]):
             dir = support_directions[i].reshape(1, 3)
             dots = torch.sum(dir * hull_points, dim=1)
             support_points[i, :] = torch.Tensor(hull_points[torch.argmax(dots)])
+            support_scalars[i] = torch.max(dots)
 
-        return support_points, support_directions
+        return support_points, support_scalars, support_directions
 
     def process_and_save(self):
         """Process the data."""
         # Query different directions and get the support points.
-        support_points, support_directions = \
+        support_points, support_scalars, support_directions = \
             self.query_support_directions_to_get_points()
         self.plot_support_directions_and_points(
             support_points, support_directions)
@@ -881,6 +883,9 @@ class GeometryConverterBundleSDFToPLL:
         torch.save(
             support_points,
             op.join(self.geometry_for_pll_dir, 'support_points.pt'))
+        torch.save(
+            support_scalars,
+            op.join(self.geometry_for_pll_dir, 'support_scalars.pt'))
         torch.save(
             support_directions,
             op.join(self.geometry_for_pll_dir, 'support_directions.pt'))
