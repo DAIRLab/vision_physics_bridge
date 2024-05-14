@@ -3,7 +3,7 @@ import cv2
 import pywavefront
 import os
 import yaml
-from math_utils import pos_quat_to_trans_mat, setup_extrinsic, transform_bundletrack_origin_to_tagslam_origin, world_to_camera
+from math_utils import pos_quat_to_trans_mat, extrinsics_T_WC, transform_bundletrack_origin_to_tagslam_origin, world_to_camera
 import open3d as o3d
 
 # PARAMETERS
@@ -51,7 +51,7 @@ def get_initial_pose_overlay():
     scene = pywavefront.Wavefront(MESH_FILE, collect_faces=True)
     vertices = np.array(scene.vertices).T
     object_pose = np.loadtxt(ANNOTATED_POSE_FILE)
-    extrinsic_matrix = setup_extrinsic(cam_trans, cam_axis_vec)
+    extrinsic_matrix = extrinsics_T_WC(cam_trans, cam_axis_vec)
     total_transform = np.dot(extrinsic_matrix, object_pose)
     transformed_vertices = transform_points(vertices, total_transform)
 

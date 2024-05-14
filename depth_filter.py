@@ -1,6 +1,6 @@
 import numpy as np
 import open3d as o3d
-from math_utils import setup_extrinsic
+from math_utils import extrinsics_T_WC
 from visualization import VisOpen3D
 from tqdm import tqdm
 
@@ -45,7 +45,7 @@ class DepthFilter:
         self.depth_image_title = depth_image_dir % frame_id
         self.cube_screen_image_dir = cube_screen_image_dir % frame_id
         self.cube_depth_image_dir = cube_depth_image_dir % frame_id
-        self.extrinsic = setup_extrinsic(translation, axis_vec)
+        self.extrinsic = extrinsics_T_WC(translation, axis_vec)
         self.K = np.array(
             [
                 [380.2484436035156, 0, 314.2138977050781],

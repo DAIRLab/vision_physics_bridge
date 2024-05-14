@@ -17,8 +17,6 @@ import re
 import yaml
 import rospy
 import sys
-import torch
-from torch import Tensor
 
 import math_utils
 
@@ -269,10 +267,13 @@ def get_camera_intrinsics_filepath() -> str:
     """Get the filepath for the camera intrinsics file."""
     return op.join(DATA_GEN_DIR, 'assets', 'cam_K.txt')
 
-def load_camera_intrinsics() -> Tuple[float, float, float, float]:
+def load_camera_intrinsics(as_matrix: bool = False):
     """The camera intrinsics appear to be the same for every experiment.  They
     are stored in cnets-data-generation/cam_K.txt."""
     cam_K_file = get_camera_intrinsics_filepath()
+    if as_matrix:
+        return np.loadtxt(cam_K_file)
+
     with open(cam_K_file, 'r') as f:
         lines = f.readlines()
 
@@ -363,17 +364,6 @@ def get_odom_bag_filename(rosbag_number: int) -> str:
     bag_filename = op.join(DATA_GEN_DIR, 'rosbags', f'odom_{rosbag_number}.bag')
     assert op.exists(bag_filename), f'Did not find expected {bag_filename}'
     return bag_filename
-
-
-"""Accessing parameters from other modules."""
-def get_deep_support_query_directions() -> Tensor:
-    """Get roughly evenly-spaced query directions."""
-    linear_space = torch.linspace(-1, 1, steps=32)
-    grid = torch.cartesian_prod(linear_space, linear_space, linear_space)
-    points_on_box_surface = grid[grid.abs().max(dim=-1).values >= 1.0]
-    surface = points_on_box_surface / points_on_box_surface.norm(
-        dim=-1, keepdim=True)
-    return surface.to(torch.float64)
 
 
 """Filtering/visualization."""

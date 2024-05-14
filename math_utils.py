@@ -4,6 +4,18 @@ import os.path as op
 import rospy
 from PIL import Image
 from scipy.spatial.transform import Rotation as R
+import torch
+from torch import Tensor
+
+
+def get_deep_support_query_directions() -> Tensor:
+    """Get roughly evenly-spaced query directions."""
+    linear_space = torch.linspace(-1, 1, steps=32)
+    grid = torch.cartesian_prod(linear_space, linear_space, linear_space)
+    points_on_box_surface = grid[grid.abs().max(dim=-1).values >= 1.0]
+    surface = points_on_box_surface / points_on_box_surface.norm(
+        dim=-1, keepdim=True)
+    return surface.to(torch.float64)
 
 
 def log_mean(a, b):
@@ -220,7 +232,7 @@ def world_to_camera(m, translation, axis_vec):
     :param translation: camera translation in world frame
     :param axis_vec: camera axis vector in world frame
     """
-    extrinsic = setup_extrinsic(translation, axis_vec)
+    extrinsic = extrinsics_T_WC(translation, axis_vec)
     return extrinsic @ m
 
 
@@ -231,8 +243,8 @@ def camera_to_world(m, translation, axis_vec):
     :param translation: camera translation in world frame
     :param axis_vec: camera axis vector in world frame
     """
-    extrinsic = setup_extrinsic(translation, axis_vec)
-    return np.linalg.inv(extrinsic) @ m
+    extrinsic = extrinsics_T_CW(translation, axis_vec)
+    return extrinsic @ m
 
 
 def transform_bundletrack_origin_to_tagslam_origin(
@@ -334,10 +346,10 @@ def transform_points_wrt_tagslam_origin_to_bundletrack_origin(
     return points_wrt_B.reshape(original_shape)
 
 
-def setup_extrinsic(translation, axis_vec):
+def extrinsics_T_WC(translation, axis_vec):
     """
     Convert translation and axis-angle representation to extrinsic matrix.
-    
+
     Parameters:
     - translation: 3x1 numpy array, translation vector.
     - axis_vec: 3x1 numpy array, rotation represented in axis-angle (rodriques) form.
@@ -351,6 +363,25 @@ def setup_extrinsic(translation, axis_vec):
     extrinsic = np.eye(4)
     extrinsic[:3, :3] = rotation_inverse
     extrinsic[:3, 3] = translation_inverse
+
+    return extrinsic
+
+
+def extrinsics_T_CW(translation, axis_vec):
+    """
+    Convert translation and axis-angle representation to extrinsic matrix.
+    
+    Parameters:
+    - translation: 3x1 numpy array, translation vector.
+    - axis_vec: 3x1 numpy array, rotation represented in axis-angle (rodriques) form.
+
+    Returns:
+    - 4x4 numpy array, extrinsic matrix.
+    """
+    rotation_matrix = R.from_rotvec(axis_vec.ravel()).as_matrix()
+    extrinsic = np.eye(4)
+    extrinsic[:3, :3] = rotation_matrix
+    extrinsic[:3, 3] = translation.squeeze()
     
     return extrinsic
 
@@ -426,16 +457,28 @@ def slerp(q0, q1, t_array):
 
 def wxyz2xyzw(quat_wxyz):
     """
-    quat_wxyz: (N,4)
+    quat_wxyz: (N,4) or (4,)
     """
+    original_shape = quat_wxyz.shape
+
+    if len(original_shape) == 1:
+        assert original_shape[0] == 4
+        quat_wxyz = quat_wxyz.reshape(1, 4)
+
     w = quat_wxyz[:, 0:1]
     xyz = quat_wxyz[:, 1:]
-    return np.concatenate((xyz, w), axis=1)
+    return np.concatenate((xyz, w), axis=1).reshape(original_shape)
 
 def xyzw2wxyz(quat_xyzw):
     """
-    quat_xyzw: (N,4)
+    quat_xyzw: (N,4) or (4,)
     """
+    original_shape = quat_xyzw.shape
+
+    if len(original_shape) == 1:
+        assert original_shape[0] == 4
+        quat_xyzw = quat_xyzw.reshape(1, 4)
+
     xyz = quat_xyzw[:, 0:3]
     w = quat_xyzw[:, 3:4]
-    return np.concatenate((w, xyz), axis=1)
+    return np.concatenate((w, xyz), axis=1).reshape(original_shape)

@@ -25,11 +25,15 @@ TAGSLAM_CAMERA_TOPICS = [
     '/cam_sync/cam1/image_raw/compressed',
     '/cam_sync/cam2/image_raw/compressed'
 ]
+ALL_CAMERA_TOPICS = TAGSLAM_CAMERA_TOPICS + [RGB_ROS_TOPIC]
 TAGSLAM_CAMERA_INFO_TOPICS = [
     '/cam_sync/cam0/camera_info',
     '/cam_sync/cam1/camera_info',
     '/cam_sync/cam2/camera_info'
 ]
+REALSENSE_CAMERA_INFO_TOPIC = "/camera/color/camera_info"
+ALL_CAMERA_INFO_TOPICS = TAGSLAM_CAMERA_INFO_TOPICS + \
+    [REALSENSE_CAMERA_INFO_TOPIC]
 
 IMAGE_FILE_PATH = "./texts/images.txt"
 POSITION_FILE_PATH = "./texts/joint_position.txt"
@@ -276,9 +280,9 @@ def extract_depth_images(start_time, end_time, depth_bag_file):
     return depth_times, depth_msgs
 
 
-"""Extract the black and white images from a raw bag file between start and end
-times.  Called by adjust_and_view_tagslam_offset.py."""
-def extract_tagslam_images_and_poses(
+"""Extract the RGB and BW images from a raw bag file between start and end times
+Called by adjust_and_view_tagslam_offset.py."""
+def extract_camera_images_and_poses(
         start_time, end_time, raw_bag_file, odom_bag_file, odom_topic):
     raw_bag = rosbag.Bag(raw_bag_file, "r")
     odom_bag = rosbag.Bag(odom_bag_file, "r")
@@ -304,18 +308,22 @@ def extract_tagslam_images_and_poses(
 
     # Have a 2D list where the first index is the camera number and the second
     # index is the list of times/messages for that camera.
-    image_times = {'cam0': [], 'cam1': [], 'cam2': []}
-    image_msgs = {'cam0': [], 'cam1': [], 'cam2': []}
-    # image_times, image_msgs = [[], [], []], [[], [], []]
-    for (topic, msg, ts) in raw_bag.read_messages(topics=TAGSLAM_CAMERA_TOPICS):
+    image_times = {'cam0': [], 'cam1': [], 'cam2': [], 'realsense': []}
+    image_msgs = {'cam0': [], 'cam1': [], 'cam2': [], 'realsense': []}
+    for (topic, msg, ts) in raw_bag.read_messages(topics=ALL_CAMERA_TOPICS):
         if ts.to_sec() < start_time.to_sec():  continue
         if ts.to_sec() > end_time.to_sec():  break
 
-        camera_name = topic.split("/")[2]
-        image_times[camera_name].append(ts.to_sec())
+        if topic==RGB_ROS_TOPIC:
+            camera_name = 'realsense'
+            image = bridge.imgmsg_to_cv2(msg, desired_encoding="passthrough")
 
-        image = bridge.compressed_imgmsg_to_cv2(
-            msg, desired_encoding="passthrough")
+        else:
+            camera_name = topic.split("/")[2]
+            image = bridge.compressed_imgmsg_to_cv2(
+                msg, desired_encoding="passthrough")
+
+        image_times[camera_name].append(ts.to_sec())
         image_msgs[camera_name].append(image)
 
     return pose_times, poses, image_times, image_msgs
@@ -356,20 +364,22 @@ def get_tagslam_camera_extrinsics(odom_bag_file):
 
 """Extract the TagSLAM camera intrinsics from a raw bag file, which features the
 intrinsics at the camera_info topics."""
-def get_tagslam_camera_intrinsics(raw_bag_file):
+def get_all_camera_intrinsics(raw_bag_file):
     raw_bag = rosbag.Bag(raw_bag_file, "r")
 
     # Get the camera extrinsics from the /tf topic.
-    intrinsics = {'cam0': None, 'cam1': None, 'cam2': None}
+    intrinsics = {'cam0': None, 'cam1': None, 'cam2': None, 'realsense': None}
     for (_topic, msg, _t) in raw_bag.read_messages(
-        topics=TAGSLAM_CAMERA_INFO_TOPICS):
-        camera = msg.header.frame_id[-4:]
+        topics=ALL_CAMERA_INFO_TOPICS):
+        camera = 'realsense' if _topic==REALSENSE_CAMERA_INFO_TOPIC else \
+            msg.header.frame_id[-4:]
         if intrinsics[camera] == None:
             intrinsics[camera] = np.array(msg.P)
 
             if (intrinsics['cam0'] is not None) and \
                (intrinsics['cam1'] is not None) and \
-               (intrinsics['cam2'] is not None):
+               (intrinsics['cam2'] is not None) and \
+               (intrinsics['realsense'] is not None):
                 break
 
     return intrinsics

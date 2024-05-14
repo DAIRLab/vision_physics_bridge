@@ -158,7 +158,7 @@ def load_tagslam_pose(vision_asset: str, frame_num: int) -> np.ndarray:
     tagslam_path = op.join(tagslam_dir, f"{frame_num:04d}.txt")
     return np.loadtxt(tagslam_path)
 
-def load_tagslam_poses_and_images(vision_asset: str, frame_num: int):
+def load_poses_and_camera_images(vision_asset: str, frame_num: int):
     """"""
     object = vision_asset.split('_')[0]
     start_toss = int(vision_asset.split('_')[1].split('-')[0])
@@ -178,7 +178,7 @@ def load_tagslam_poses_and_images(vision_asset: str, frame_num: int):
     odom_ros_topic = f"/tagslam/odom/body_{object}"
 
     pose_times, poses, image_times, image_msgs = \
-        rosbag_processor.extract_tagslam_images_and_poses(
+        rosbag_processor.extract_camera_images_and_poses(
             start_time, end_time, raw_bag_file, odom_bag_file, odom_ros_topic
         )
     
@@ -191,7 +191,7 @@ def load_tagslam_poses_and_images(vision_asset: str, frame_num: int):
 def inspect_tagslam_times(vision_asset: str, frame_num: int):
     """Make a plot of the message times to ensure they are synchronized."""
     pose_times, _poses, image_times, _image_msgs = \
-        load_tagslam_poses_and_images(vision_asset, frame_num)
+        load_poses_and_camera_images(vision_asset, frame_num)
     
     t0 = pose_times[0]
     pose_times = np.array(pose_times) - t0
@@ -232,7 +232,7 @@ def get_all_camera_intrinsics_extrinsics(vision_asset: str):
                    'cam2': cam2_axis_angle,
                    'realsense': cam_axis_angle.squeeze()}
     
-    intrinsics = rosbag_processor.get_tagslam_camera_intrinsics(raw_bag_file)
+    intrinsics = rosbag_processor.get_all_camera_intrinsics(raw_bag_file)
     
     return intrinsics, translations, axis_angles
 
@@ -252,7 +252,7 @@ def inspect_tagslam_poses_and_images(vision_asset: str):
     world_to_cam2 = np.concatenate((world, cam2), axis=0)
     world_to_realsense = np.concatenate((world, realsense), axis=0)
 
-    pose_t, pose, image_t, image = load_tagslam_poses_and_images(
+    pose_t, pose, image_t, image = load_poses_and_camera_images(
         vision_asset, 1)
     cube_corners_world = compute_cube_corners_in_world(pose)
 
@@ -309,15 +309,18 @@ def inspect_tagslam_poses_and_images(vision_asset: str):
                 cube_corners_world, pose_cam_inv)
         
         # Get the camera intrinsics.
-        P = intrinsics[cam].reshape(3, 4)
+        P_matrix = intrinsics[cam].reshape(3, 4)
         
         XYZ1 = np.hstack((corners_in_cam, np.ones((8, 1))))
-        uvw = P @ XYZ1.T
+        uvw = P_matrix @ XYZ1.T
         x_pixel = uvw[0] / uvw[2]
         y_pixel = uvw[1] / uvw[2]
 
         plt.figure()
-        plt.imshow(image[cam], cmap='gray', vmin=0, vmax=255)
+        if cam == 'realsense':
+            plt.imshow(image[cam])
+        else:
+            plt.imshow(image[cam], cmap='gray', vmin=0, vmax=255)
         plt.scatter(x_pixel, y_pixel)
         plt.title(cam)
 
@@ -459,6 +462,6 @@ def load_tagslam_images(vision_asset: str, frame_num: int):
 
 
 if __name__ == '__main__':
-    interactive_offset_adjustment('cube_2', 1, smoothing=False)
-    # inspect_tagslam_poses_and_images('cube_2')
+    # interactive_offset_adjustment('cube_2', 1, smoothing=False)
+    inspect_tagslam_poses_and_images('cube_1')
     # inspect_tagslam_times("cube_2", 1)

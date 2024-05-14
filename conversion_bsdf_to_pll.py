@@ -856,7 +856,7 @@ class GeometryConverterBundleSDFToPLL:
         hull_points = hull.vertices
 
         # Get some evenly-spaced query directions from PLL.
-        support_directions = file_utils.get_deep_support_query_directions()
+        support_directions = math_utils.get_deep_support_query_directions()
 
         # Compute the support point for every query direction, selecting out of
         # the convex hull vertices.
