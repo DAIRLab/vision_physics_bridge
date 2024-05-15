@@ -90,10 +90,13 @@ class OverlayVideoGenerator:
         self.bundlesdf_poses_in_cam = poses
 
     def _get_tagslam_poses_in_world(self) -> None:
-        tagslam_dir = file_utils.tagslam_pose_dir(
+        # Use the synchronized pose estimates so the poses are aligned with the
+        # images.
+        tagslam_dir = file_utils.synchronized_tagslam_pose_dir(
             self.vision_asset, check_exists=True)
+
         # TagSLAM data stored as [t, x, y, z, qx, qy, qz, qw].
-        tagslam_data = np.loadtxt(op.join(tagslam_dir, 'tagslam.txt'))
+        tagslam_data = np.loadtxt(op.join(tagslam_dir, 'synced_tagslam.txt'))
 
         # Return TagSLAM poses as 4x4 homogeneous transforms.
         tagslam_poses_in_world = tagslam_data[:, 1:]

@@ -68,15 +68,13 @@ TIME_EXCESS_BUFFER = (1.0/30.0)/2
 
 """Create a dataset in the format required for the BundleSDF-PLL cyclic
 pipeline.  Called by create_dataset.py."""
-def extract_synchronized_images_and_tagslam_poses(
+def extract_synchronized_rgb_and_depth_images(
         start_time: rospy.rostime.Time, end_time: rospy.rostime.Time,
-        depth_bag_file: str, odom_bag_file: str, odom_topic: str,
-        rgb_output_dir: str, depth_output_dir: str,
-        tagslam_pose_output_dir: str, rgb_topic: str = RGB_ROS_TOPIC,
+        bag_file: str, rgb_output_dir: str, depth_output_dir: str,
+        dataset_dir: str, rgb_topic: str = RGB_ROS_TOPIC,
         depth_topic: str = DEPTH_ROS_TOPIC, depth_offset_mm: int = 0
 ):
-    depth_bag = rosbag.Bag(depth_bag_file, "r")
-    odom_bag = rosbag.Bag(odom_bag_file, "r")
+    depth_bag = rosbag.Bag(bag_file, "r")
     bridge = CvBridge()
 
     start_time = start_time.to_sec()
@@ -150,36 +148,39 @@ def extract_synchronized_images_and_tagslam_poses(
                                f'{TIME_SYNCHRONIZATION_TOLERANCE}).')
 
     # Write the BundleSDF timestamps to file.
-    np.savetxt(
-        op.join(op.dirname(tagslam_pose_output_dir),
-                'bundlesdf_timestamps.txt'),
-        bundlesdf_times
-    )
+    np.savetxt(op.join(dataset_dir, 'bundlesdf_timestamps.txt'),
+               bundlesdf_times)
+
+    depth_bag.close()
+
+def extract_tagslam_poses(
+        start_time: rospy.rostime.Time, end_time: rospy.rostime.Time,
+        bag_file: str, odom_topic: str, tagslam_pose_output_dir: str
+):
+    odom_bag = rosbag.Bag(bag_file, "r")
+
+    start_time = start_time.to_sec()
+    end_time = end_time.to_sec()
+    print(f"start_time: {start_time}, end_time: {end_time}")
 
     # Extract the TagSLAM poses from the odom bag, storing them exactly as
-    # reported in the bag.  Note that this does not apply tagslam_offset.txt,
-    # which is left to be applied by the conversion_bsdf_to_pll.py script.
-    # offset = file_utils.get_tagslam_offset()
-    # print(f'Applying a TagSLAM offset: {offset}')
+    # reported in the bag.
     poses, times = [], []
     for (_topic, msg, _t) in tqdm(odom_bag.read_messages(topics=[odom_topic])):
         # Skip messages before the start time; stop past the end time.  Add
         # extra buffer in case the first or last closest TagSLAM pose message
         # is a bit outside this range.  This will get resolved afterwards with a
         # synchronization step.
-        print(f"Processing TagSLAM pose at time {msg.header.stamp.to_sec()}")
         if msg.header.stamp.to_sec() < start_time - 2*TIME_EXCESS_BUFFER:
-            print(f"Skipping frame before start time: {msg.header.stamp.to_sec()}, {start_time}")
             continue
         if msg.header.stamp.to_sec() > end_time + 2*TIME_EXCESS_BUFFER:
-            print(f"Stopping at frame after end time: {msg.header.stamp.to_sec()}, {end_time}")
             break
 
         # Store the pose from the message.
         pose = np.zeros((7,))
-        pose[0] = msg.pose.pose.position.x #+ offset[0]
-        pose[1] = msg.pose.pose.position.y #+ offset[1]
-        pose[2] = msg.pose.pose.position.z #+ offset[2]
+        pose[0] = msg.pose.pose.position.x
+        pose[1] = msg.pose.pose.position.y
+        pose[2] = msg.pose.pose.position.z
         pose[3] = msg.pose.pose.orientation.x
         pose[4] = msg.pose.pose.orientation.y
         pose[5] = msg.pose.pose.orientation.z
@@ -188,39 +189,20 @@ def extract_synchronized_images_and_tagslam_poses(
         times.append(msg.header.stamp.to_sec())
 
     print(f'Extracted {len(poses)} TagSLAM poses from the odometry bag.')
-    poses = np.array(poses)
-    times = np.array(times)
-    bundlesdf_times = np.array(bundlesdf_times)
+    tagslam_poses = np.array(poses)
+    tagslam_times = np.array(times)
 
-    # Synchronize the TagSLAM poses with the depth images, writing the
-    # synchronized poses to the TagSLAM poses directory.
-    synced_start_i = 0
-    min_time_error = np.inf
-
-    for i in range(len(times) - len(bundlesdf_times) + 1):
-        current_time_portion = times[i:i+len(bundlesdf_times)]
-        time_error = np.linalg.norm(bundlesdf_times - current_time_portion)
-        if time_error < min_time_error:
-            min_time_error = time_error
-            synced_start_i = i
-    tagslam_times = times[synced_start_i: synced_start_i + len(bundlesdf_times)]
-    tagslam_poses = poses[synced_start_i: synced_start_i + len(bundlesdf_times)]
     for i, pose in enumerate(tagslam_poses):
         np.savetxt(op.join(tagslam_pose_output_dir, f'{i+1:04d}.txt'), pose)
 
-    assert tagslam_times.shape == bundlesdf_times.shape, \
-        f'Mismatched TagSLAM and BundleSDF timestamps: ' + \
-        f'{tagslam_times.shape=} and {bundlesdf_times.shape=}.'
-
-    # Lastly, write a tagslam.txt file that contains the synchronized TagSLAM
-    # poses and timestamps.
+    # Lastly, write a tagslam.txt file that contains the TagSLAM poses and
+    # timestamps.
     tagslam_times = np.array(tagslam_times).reshape(-1, 1)
     tagslam_poses = np.array(tagslam_poses).reshape(-1, 7)
     tagslam_data = np.concatenate((tagslam_times, tagslam_poses), axis=1)
     np.savetxt(op.join(tagslam_pose_output_dir, 'tagslam.txt'), tagslam_data)
-    print('Wrote synchronized TagSLAM poses and timestamps as tagslam.txt.')
+    print('Wrote TagSLAM poses and timestamps as tagslam.txt.')
 
-    depth_bag.close()
     odom_bag.close()
 
 
@@ -228,21 +210,22 @@ def extract_synchronized_images_and_tagslam_poses(
 camera frame.  This gets stored as a 4x4 transformation matrix titled 0000.txt
 in the annotated_poses directory.  Called by create_dataset.py."""
 def save_initial_tagslam_pose_in_camera_frame(
-        tagslam_world_poses_dir: str, annotated_poses_dir: str,
+        synced_tagslam_world_poses_dir: str, annotated_poses_dir: str,
         cam_trans: np.ndarray, cam_rot_axis_angle: np.ndarray
 ) -> None:
-    """Given the extracted TagSLAM poses in world frame stored in tagslam.txt,
-    write the 0th annotated pose as the TagSLAM origin's initial pose in camera
-    frame.
+    """Given the extracted TagSLAM poses in world frame stored in
+    synced_tagslam.txt, write the 0th annotated pose as the TagSLAM origin's
+    initial pose in camera frame.
 
     Args:
-        tagslam_world_poses_dir
+        synced_tagslam_world_poses_dir
         annotated_poses_dir
         cam_trans
         cam_rot_axis_angle
     """
     # Load the previously extracted TagSLAM world-frame trajectory.
-    data = np.loadtxt(os.path.join(tagslam_world_poses_dir, "tagslam.txt"))
+    data = np.loadtxt(
+        os.path.join(synced_tagslam_world_poses_dir, "synced_tagslam.txt"))
 
     # Get the first pose by eliminating the timestamp and all subsequent poses.
     init_pose = data[0, 1:]

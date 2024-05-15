@@ -142,8 +142,20 @@ def bundlesdf_video_dir(dataset: str, check_exists: bool = False) -> str:
 
 def tagslam_pose_dir(dataset: str, check_exists: bool = False) -> str:
     """TagSLAM's pose directory for a particular dataset.  Contains tagslam.txt
-    file."""
+    file and XXXX.txt files for every timestamp corresponding to the times in
+    the first column of tagslam.txt."""
     path = op.join(DATA_GEN_DIR, 'dataset', dataset, 'tagslam_poses')
+    if check_exists:
+        assert op.exists(path), f'Requires {path} to exist but not found.'
+    return path
+
+def synchronized_tagslam_pose_dir(dataset: str, check_exists: bool = False
+                                  ) -> str:
+    """TagSLAM's synchronized pose directory for a particular dataset.  Contains
+    synced_tagslam.txt file and XXXX.txt files for every timestamp corresponding
+    to bundlesdf_timestamps.txt in this directory's parent directory."""
+    path = op.join(
+        DATA_GEN_DIR, 'dataset', dataset, 'synchronized_tagslam_poses')
     if check_exists:
         assert op.exists(path), f'Requires {path} to exist but not found.'
     return path
@@ -220,17 +232,20 @@ def table_height_calibration_dir() -> str:
     """Directory for the point cloud processing output plots."""
     return assure_created(op.join(DATA_GEN_DIR, 'table_calibration'))
 
-def bundlesdf_video_rgb_dir(dataset: str) -> str:
+def bundlesdf_video_rgb_dir(dataset: str, check_exists: bool = True) -> str:
     """The BundleSDF input directory for RGB images for a particular dataset."""
-    return bsdf_file_utils.video_rgb_dir(dataset)
+    return bsdf_file_utils.video_rgb_dir(
+        dataset, check_parent_exists=check_exists)
 
-def bundlesdf_video_depth_dir(dataset: str) -> str:
+def bundlesdf_video_depth_dir(dataset: str, check_exists: bool = True) -> str:
     """The BundleSDF input directory for RGB images for a particular dataset."""
-    return bsdf_file_utils.video_depth_dir(dataset)
+    return bsdf_file_utils.video_depth_dir(
+        dataset, check_parent_exists=check_exists)
 
-def bundlesdf_video_mask_dir(dataset: str) -> str:
+def bundlesdf_video_mask_dir(dataset: str, check_exists: bool = True) -> str:
     """The BundleSDF input directory for RGB images for a particular dataset."""
-    return bsdf_file_utils.video_mask_dir(dataset)
+    return bsdf_file_utils.video_mask_dir(
+        dataset, check_parent_exists=check_exists)
 
 def overlay_video_filepath(
         dataset: str, bundlesdf_id: str, cycle_iteration: int) -> str:
