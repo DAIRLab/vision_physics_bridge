@@ -56,8 +56,9 @@ import rosbag_processor
 
 class DatasetCreator:
     """Class to assist with dataset creation for a given vision asset."""
-    def __init__(self, vision_asset: str):
+    def __init__(self, vision_asset: str, tagslam_only: bool = False):
         self.vision_asset = vision_asset
+        self.tagslam_only = tagslam_only
 
         # Parse the system and start/end tosses from the provided asset name.
         assert '_' in vision_asset, f'Invalid asset directory: {vision_asset}.'
@@ -90,6 +91,7 @@ class DatasetCreator:
             self.vision_asset, check_exists=False)
         self.depth_dir = file_utils.bundlesdf_video_depth_dir(
             self.vision_asset, check_exists=False)
+
         self.annotated_poses_dir = file_utils.bundlesdf_annotated_poses_dir(
             self.vision_asset, create=True)
 
@@ -114,18 +116,23 @@ class DatasetCreator:
         print(f'Processing {self.vision_asset} in ROS bag ' + \
               f'{self.rosbag_number}.\n')
 
-        self._create_images()
+        if not self.tagslam_only:
+            self._create_images()
         self._create_tagslam_poses()
         self._create_synchronized_tagslam_poses()
         self._create_annotated_poses()
 
-        # Copy the camera intrinsics.
-        os.system(f'cp {file_utils.get_camera_intrinsics_filepath()} ' + \
-                f'{op.join(self.data_dir, "cam_K.txt")}')
+        if not self.tagslam_only:
+            # Copy the camera intrinsics.
+            os.system(f'cp {file_utils.get_camera_intrinsics_filepath()} ' + \
+                    f'{op.join(self.data_dir, "cam_K.txt")}')
 
-        self._compute_table_offset()
+            self._compute_table_offset()
 
-        print(f'Finished creating dataset for {self.vision_asset}.')
+            print(f'Finished creating dataset for {self.vision_asset}.')
+
+        else:
+            print(f'Finished creating TagSLAM data for {self.vision_asset}.')
 
     def _create_images(self):
         depth_bag_file = file_utils.get_depth_bag_filename(self.rosbag_number)
@@ -174,6 +181,15 @@ class DatasetCreator:
         tagslam_data = np.loadtxt(op.join(self.tagslam_dir, 'tagslam.txt'))
         tagslam_times = tagslam_data[:, 0]
         tagslam_poses = tagslam_data[:, 1:]
+
+        # Give a rough idea of how many poses TagSLAM skipped.
+        n_tagslam_in_window = np.sum(
+            (tagslam_times >= self.start_time.to_sec()) &
+            (tagslam_times <= self.end_time.to_sec())
+        )
+        print(f'\nSynchronizing TagSLAM poses:  going from ' + \
+              f'{n_tagslam_in_window} TagSLAM poses to {len(bsdf_times)} ' + \
+              f'to synchronize with BundleSDF timestamps.\n')
 
         # Estimate each pose at the BundleSDF timestamps.
         synced_poses = np.zeros((len(bsdf_times), 7))
@@ -251,15 +267,19 @@ class DatasetCreator:
               default=None,
               help="directory of the asset folder e.g. cube_2-3; encodes " + \
                    "system and tosses.")
+@click.option('--all/--tagslam-only',
+              type=bool,
+              default=True,
+              help="whether to generate all data or just TagSLAM-related data.")
 @click.option('--clear-data/--keep-data',
               default=False,
               help="whether to clear data folder before regenerating.")
 
-def main_command(vision_asset: str, clear_data: bool):
+def main_command(vision_asset: str, all: bool, clear_data: bool):
     # Get the data and pose directories, checking if they already exist.
     data_dir = file_utils.bundlesdf_video_dir(vision_asset, check_exists=False)
     tagslam_dir = file_utils.tagslam_pose_dir(vision_asset, check_exists=False)
-    if op.exists(data_dir) or op.exists(tagslam_dir):
+    if all and (op.exists(data_dir) or op.exists(tagslam_dir)):
         if clear_data:
             print(f'Overwriting existing data at {data_dir} and/or ' + \
                   f'{tagslam_dir}.')
@@ -270,8 +290,22 @@ def main_command(vision_asset: str, clear_data: bool):
                   f'{tagslam_dir} -- use --clear-data next time.')
             exit()
 
+    elif op.exists(tagslam_dir):
+        if clear_data:
+            print(f'Overwriting existing TagSLAM data at {tagslam_dir}.')
+            synced_dir = file_utils.synchronized_tagslam_pose_dir(
+                vision_asset, check_exists=False)
+            assert op.exists(data_dir), f'Expected {data_dir=} to exist to ' + \
+                f'be able to overwrite TagSLAM data only, but it does not.'
+            if op.exists(synced_dir):  os.system(f'rm -r {synced_dir}')
+            if op.exists(tagslam_dir):  os.system(f'rm -r {tagslam_dir}')
+        else:
+            print(f'Exiting:  TagSLAM data already exists at {tagslam_dir} ' + \
+                  f' -- use --clear-data next time.')
+            exit()
+
     # Create the dataset.
-    dataset_creator = DatasetCreator(vision_asset)
+    dataset_creator = DatasetCreator(vision_asset, tagslam_only = not all)
     dataset_creator.create()
 
 
