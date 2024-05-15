@@ -119,12 +119,14 @@ class OverlayVideoGenerator:
         vis = meshcat.Visualizer()
 
         ##################
-        vis["tagslam_cube"].set_object(
-            g.Box([0.1048, 0.1048, 0.1048]),
-            g.MeshLambertMaterial(
-                color=TAGSLAM_COLOR, reflectivity=0.0, transparent=0,
-                opacity=.4)
-        )
+        # Only render the cube in the TagSLAM trajectory if the object is cube.
+        if 'cube' in self.vision_asset:
+            vis["tagslam_cube"].set_object(
+                g.Box([0.1048, 0.1048, 0.1048]),
+                g.MeshLambertMaterial(
+                    color=TAGSLAM_COLOR, reflectivity=0.0, transparent=0,
+                    opacity=.4)
+            )
         vis["bundlesdf_mesh"].set_object(
             g.ObjMeshGeometry.from_file(self.mesh_file),
             g.MeshLambertMaterial(
@@ -202,7 +204,8 @@ class OverlayVideoGenerator:
                 T_WA = self.tagslam_poses_in_world[i]
                 T_CB = self.bundlesdf_poses_in_cam[i]
 
-                self.vis["tagslam_cube"].set_transform(self.T_MW @ T_WA)
+                if 'cube' in self.vision_asset:
+                    self.vis["tagslam_cube"].set_transform(self.T_MW @ T_WA)
                 self.vis["bundlesdf_mesh"].set_transform(self.T_MC @ T_CB)
 
                 mesh_im = self.vis.get_image()
