@@ -58,6 +58,10 @@ def get_table_height_from_log(log_file: str) -> float:
 
     with open(log_file, 'r') as f:
         lines = f.readlines()
+    if len(lines) < 4:
+        print(f'Found {log_file} but it is empty -- Skipping.')
+        return None
+    
     last_lines = lines[-4:]
 
     # Handle the case where the log exists but it didn't compute table height.

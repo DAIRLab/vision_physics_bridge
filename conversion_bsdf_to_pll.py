@@ -780,7 +780,7 @@ class GeometryConverterBundleSDFToPLL:
     """
     def __init__(self,
                  bundlesdf_id: str, start_toss: int,
-                 end_toss: int, object: str, cycle_iteration: int):
+                 end_toss: int, object: str, cycle_iteration: int, plot: bool):
         # Get the BundleSDF results directory where we can find the meshes.
         vision_asset = f'{object}_{start_toss}'
         vision_asset += f'-{end_toss}' if start_toss != end_toss else ''
@@ -794,6 +794,7 @@ class GeometryConverterBundleSDFToPLL:
         self.mesh_bsdf = trimesh.load(
             op.join(self.nerf_results_dir, 'textured_mesh.obj'), force='mesh')
         self.mesh_bsdf_hull = self.mesh_bsdf.convex_hull
+        self.plot = plot
 
     def _set_up_directories(self, vision_asset: str, cycle_iteration: int,
                             bundlesdf_id: str) -> None:
@@ -879,8 +880,9 @@ class GeometryConverterBundleSDFToPLL:
         # Query different directions and get the support points.
         support_points, support_scalars, support_directions = \
             self.query_support_directions_to_get_points()
-        self.plot_support_directions_and_points(
-            support_points, support_directions)
+        if self.plot:
+            self.plot_support_directions_and_points(
+                support_points, support_directions)
 
         # Write these as tensors to PLL's input geometry folder.
         torch.save(
@@ -941,9 +943,16 @@ class GeometryConverterBundleSDFToPLL:
               type=bool,
               default=True,
               help="whether to make an overlay video.")
+@click.option('--remote/--local',
+              default=False,
+              help="whether to run on a remote server.")
+@click.option('--show/--noshow',
+              default=True,
+              help="whether to show the plots.")
+
 
 def main_command(vision_asset: str, bundlesdf_id: str, cycle_iteration: int,
-                 make_overlay: bool):
+                 make_overlay: bool, remote: bool, show: bool):
     # First decode the system and start/end tosses from the provided asset
     # directory.
     assert cycle_iteration > 0, f'Invalid cycle iteration: {cycle_iteration}.'
@@ -993,7 +1002,7 @@ def main_command(vision_asset: str, bundlesdf_id: str, cycle_iteration: int,
     # Do the geometry conversion.
     geom_converter = GeometryConverterBundleSDFToPLL(
         bundlesdf_id=bundlesdf_id, start_toss=start_toss, end_toss=end_toss,
-        object=object, cycle_iteration=cycle_iteration
+        object=object, cycle_iteration=cycle_iteration, plot=show
     )
     geom_converter.process_and_save()
 
@@ -1005,7 +1014,7 @@ def main_command(vision_asset: str, bundlesdf_id: str, cycle_iteration: int,
         start_ros_times=start_ros_times, start_toss=start_toss,
         end_toss=end_toss, object=object, cycle_iteration=cycle_iteration,
         cam_trans=cam_trans, cam_rot_axis_angle=cam_rot_axis_angle,
-        frame_rate=30, z_table=z_table, plot=True
+        frame_rate=30, z_table=z_table, plot=show
     )
     traj_converter.do_process()
     traj_converter.plot_trajectory(full_trajectory=True)
@@ -1015,7 +1024,7 @@ def main_command(vision_asset: str, bundlesdf_id: str, cycle_iteration: int,
     # Create an overlay video.
     if make_overlay:
         overlay_generator = OverlayVideoGenerator(
-            vision_asset, bundlesdf_id, cycle_iteration)
+            vision_asset, bundlesdf_id, cycle_iteration, remote)
         overlay_generator.make_overlay_video()
     else:
         print('Skipping overlay video creation.')

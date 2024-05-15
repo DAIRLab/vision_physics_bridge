@@ -196,18 +196,26 @@ class DatasetCreator:
 
         for i, bsdf_time in enumerate(bsdf_times):
             # Find the two TagSLAM times that sandwich the current BSDF time.
-            before_idx = np.where(tagslam_times < bsdf_time)[0][-1]
             after_idx = np.where(tagslam_times > bsdf_time)[0][0]
-            assert after_idx-before_idx == 1, f'Expected 1 between ' + \
-                f'{before_idx=} and {after_idx=}.'
+            try:
+                before_idx = np.where(tagslam_times < bsdf_time)[0][-1]
+                assert after_idx-before_idx == 1, f'Expected 1 between ' + \
+                    f'{before_idx=} and {after_idx=}.'
+            except IndexError:
+                before_idx = 0
+                print(f'bsdf frame {i} is before the first TagSLAM pose.')
 
-            # Linearly interpolate the TagSLAM pose.
+            # Lin2early interpolate the TagSLAM pose.
             t1 = tagslam_times[before_idx]
             t2 = tagslam_times[after_idx]
-            fraction = (bsdf_time - t1) / (t2 - t1)
             p1 = tagslam_poses[before_idx]
             p2 = tagslam_poses[after_idx]
-            interpolated_pose = p1 + fraction*(p2 - p1)
+            if t1 == t2:
+                assert before_idx == 0 and after_idx == 0
+                interpolated_pose = p1
+            else:
+                fraction = (bsdf_time - t1) / (t2 - t1)
+                interpolated_pose = p1 + fraction*(p2 - p1)
 
             # Correct the quaternion in case it is no longer unit normal.
             interpolated_pose[3:7] /= np.linalg.norm(interpolated_pose[3:7])
@@ -244,11 +252,11 @@ class DatasetCreator:
         # Visualize the depth offset with the ability to make adjustments for
         # future calls to create_dataset.
         if 'cube' in self.vision_asset:
-            print(f'Visualizing the results of {self.depth_offset_mm=} for ' + \
+            print(f'Skip visualizing the results of {self.depth_offset_mm=} for ' + \
                 f'{self.vision_asset}.')
-            import inspect_camera_alignments
-            inspect_camera_alignments.interactive_offset_adjustment(
-                self.vision_asset, 1)
+            # import inspect_camera_alignments
+            # inspect_camera_alignments.interactive_offset_adjustment(
+            #     self.vision_asset, 1)
         else:
             print(f'No ground truth geometry for {self.vision_asset} so ' + \
                   f'cannot visualize the results of the depth offset.')
@@ -257,7 +265,7 @@ class DatasetCreator:
         os.system('python ' + \
                 op.join(file_utils.DATA_GEN_DIR, 'compute_table_offsets.py') + \
                 f' single --vision-asset={self.vision_asset} --overwrite ' + \
-                f'--redirect-output')
+                f'--redirect-output  --no-visualize')
 
 
 

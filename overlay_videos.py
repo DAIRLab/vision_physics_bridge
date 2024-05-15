@@ -30,7 +30,7 @@ class OverlayVideoGenerator:
     """Generate an overlay video to compare TagSLAM and BundleSDF poses to the
     observed RGB images."""
     def __init__(self, vision_asset: str, bundlesdf_id: str,
-                 cycle_iteration: int):
+                 cycle_iteration: int, remote: bool = False):
         # First decode the system and start/end tosses from the provided asset
         # directory.
         assert cycle_iteration > 0, f'Invalid {cycle_iteration=}.'
@@ -50,6 +50,7 @@ class OverlayVideoGenerator:
         self.vision_asset = vision_asset
         self.bundlesdf_id = bundlesdf_id
         self.cycle_iteration = cycle_iteration
+        self.remote = remote
 
         # Get the camera intrinsics and extrinsics.
         self.fx, self.fy, self.cx, self.cy = file_utils.load_camera_intrinsics()
@@ -76,6 +77,8 @@ class OverlayVideoGenerator:
         # videos.
         self.output_file = file_utils.overlay_video_filepath(
             vision_asset, bundlesdf_id, cycle_iteration)
+        if not op.exists(op.dirname(self.output_file)):
+            os.makedirs(op.dirname(self.output_file))
 
     def _get_bundletrack_poses_in_cam(self) -> None:
         ob_in_cam_dir = file_utils.bundlesdf_pose_dir(
@@ -144,10 +147,19 @@ class OverlayVideoGenerator:
         base_url = "http://127.0.0.1"
         meshcat_url = f'{base_url}:{vis.url().split(":")[-1]}'
 
-        ### Need x server to run. Either run locally or run remotely with x
-        # forward configured.
+        ### Need x server to run. Either run locally or run remotely with x forward
+        # configured.
+        if self.remote:
+            # Run Xvfb to create a virtual display.
+            print("Running Xvfb (virtual display) for rendering.")
+            import subprocess
+            self.xvfb_process = subprocess.Popen(['Xvfb', ':99', '-screen', '0', '640x480x24'])
+            os.environ['DISPLAY'] = ':99'
+
         options = webdriver.ChromeOptions()
         options.add_argument('--headless')
+        if self.remote:
+            options.add_argument('--no-sandbox')
         self.driver = webdriver.Chrome(options=options)
 
         # Set the desired window size.
@@ -256,6 +268,11 @@ class OverlayVideoGenerator:
         # If not exited properly, orphan chrome processes will remain active.
         self.driver.quit()
         print(f'Wrote overlay video to {self.output_file}')
+        if self.remote:
+            # If not exited properly, orphan Xvfb processes will remain active.
+            self.xvfb_process.terminate()
+            self.xvfb_process.wait()
+            print("Terminated Xvfb process")
 
 
 
@@ -275,10 +292,13 @@ class OverlayVideoGenerator:
               default=1,
               help="BundleSDF iteration number (can't choose 0 since that " + \
                 "means use TagSLAM poses).")
+@click.option('--remote/--local',
+              default=False,
+              help="whether to run on a remote server.")
 
-def main_command(vision_asset: str, bundlesdf_id: str, cycle_iteration: int):
+def main_command(vision_asset: str, bundlesdf_id: str, cycle_iteration: int, remote: bool):
     overlay_video_generator = OverlayVideoGenerator(
-        vision_asset, bundlesdf_id, cycle_iteration)
+        vision_asset, bundlesdf_id, cycle_iteration, remote=remote)
     overlay_video_generator.make_overlay_video()
 
 

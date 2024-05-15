@@ -117,7 +117,7 @@ def extract_synchronized_rgb_and_depth_images(
     # synchronized results to the depth and RGB output directories.
     image_i = 1
     bundlesdf_times = []
-    for depth_time in depth_images:
+    for depth_time in tqdm(depth_images, desc='Writing synchronized depth and RGB images'):
         # Strictly filter for depth readings within the time range.  Note that
         # the closest RGB reading might be slightly outside this range.
         if depth_time < start_time or depth_time > end_time:
@@ -138,7 +138,7 @@ def extract_synchronized_rgb_and_depth_images(
                 op.join(rgb_output_dir, f'{image_i:04d}.png'),
                 rgb_images[closest_rgb_time]
             )
-            print(f'Wrote synchronized depth and RGB images {image_i}')
+            # print(f'Wrote synchronized depth and RGB images {image_i}')
             image_i += 1
             bundlesdf_times.append(depth_time)
 
@@ -171,9 +171,9 @@ def extract_tagslam_poses(
         # extra buffer in case the first or last closest TagSLAM pose message
         # is a bit outside this range.  This will get resolved afterwards with a
         # synchronization step.
-        if msg.header.stamp.to_sec() < start_time - 2*TIME_EXCESS_BUFFER:
+        if msg.header.stamp.to_sec() < start_time - 10*TIME_EXCESS_BUFFER:
             continue
-        if msg.header.stamp.to_sec() > end_time + 2*TIME_EXCESS_BUFFER:
+        if msg.header.stamp.to_sec() > end_time + 10*TIME_EXCESS_BUFFER:
             break
 
         # Store the pose from the message.
