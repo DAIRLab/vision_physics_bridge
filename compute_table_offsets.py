@@ -535,12 +535,30 @@ class ROSBagDepthPlaneViewer(DepthPlaneViewer):
 
 
 #######################################################################
+def process_single(asset_name: str, visualize: bool):
+    depth_plane_viewer = DepthPlaneViewer(asset_name)
+    if not depth_plane_viewer.success:
+        print(f'Failed to find existing {asset_name} dataset; ' + \
+                f'resorting to ROS bag.')
+        depth_plane_viewer = ROSBagDepthPlaneViewer(asset_name)
+    if depth_plane_viewer.success:
+        depth_plane_viewer.convert_depth_image_to_point_cloud()
+        depth_plane_viewer.compute_epsilon_and_table_offset(
+            save=True, show=visualize)
+        depth_plane_viewer.plot_point_cloud(save=True, show=visualize)
+    else:
+        print(f'Failed to process {asset_name} in dataset or ROS bag.')
+
+
+#######################################################################
 @click.group()
 def cli():
     pass
 
 
-# Use 'single' command to process a single vision asset.
+# Use 'single' command to process a single vision asset.  This can be a single
+# toss or multi-toss, which will get processed as several single tosses
+# sequentially.
 @cli.command('single')
 @click.option('--vision-asset',
               type=str,
@@ -562,35 +580,34 @@ def cli():
 def process_single_command(vision_asset: str, visualize: bool,
                            overwrite: bool, redirect_output: bool):
     assert '_' in vision_asset, f'Invalid asset directory: {vision_asset}.'
-    log_file = file_utils.point_cloud_processing_log_filepath(vision_asset)
-    if op.exists(log_file) and not overwrite:
-        plot_file = file_utils.point_cloud_processing_plot_filepath(
-            vision_asset)
-        if op.exists(plot_file):
-            print(f'Skipping {vision_asset} since found prior results.')
-            exit()
 
-    def process_single():
-        depth_plane_viewer = DepthPlaneViewer(vision_asset)
-        if not depth_plane_viewer.success:
-            print(f'Failed to find existing {vision_asset} dataset; ' + \
-                  f'resorting to ROS bag.')
-            depth_plane_viewer = ROSBagDepthPlaneViewer(vision_asset)
-        if depth_plane_viewer.success:
-            depth_plane_viewer.convert_depth_image_to_point_cloud()
-            depth_plane_viewer.compute_epsilon_and_table_offset(
-                save=True, show=visualize)
-            depth_plane_viewer.plot_point_cloud(save=True, show=visualize)
-        else:
-            print(f'Failed to process {vision_asset} in dataset or ROS bag.')
+    # Get the object and toss numbers since we will compute the table height for
+    # each toss independently.
+    object = vision_asset.split('_')[:-1]
+    object = '_'.join(object)
+    start_toss = int(vision_asset.split('_')[-1].split('-')[0])
+    end_toss = start_toss if '-' not in vision_asset else \
+        int(vision_asset.split('-')[1])
+    toss_nums = range(start_toss, end_toss+1)
+
+    for toss_i in toss_nums:
+        single_asset = f'{object}_{toss_i}'
     
-    if redirect_output:
-        with open(log_file, 'w') as f:
-            sys.stdout = f
+        log_file = file_utils.point_cloud_processing_log_filepath(single_asset)
+        if op.exists(log_file) and not overwrite:
+            plot_file = file_utils.point_cloud_processing_plot_filepath(
+                single_asset)
+            if op.exists(plot_file):
+                print(f'Skipping {single_asset} since found prior results.')
+                exit()
+
+        if redirect_output:
+            with open(log_file, 'w') as f:
+                sys.stdout = f
+                process_single(single_asset, visualize)
+            sys.stdout = sys.__stdout__
+        else:
             process_single()
-        sys.stdout = sys.__stdout__
-    else:
-        process_single()
 
 
 # Use 'all' command to process all tosses found in config.yaml.
