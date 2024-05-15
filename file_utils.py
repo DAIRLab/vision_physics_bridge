@@ -1,4 +1,5 @@
 from copy import deepcopy
+import datetime
 from typing import Tuple, List
 import numpy as np
 from PIL import Image
@@ -230,6 +231,20 @@ def bundlesdf_video_depth_dir(dataset: str) -> str:
 def bundlesdf_video_mask_dir(dataset: str) -> str:
     """The BundleSDF input directory for RGB images for a particular dataset."""
     return bsdf_file_utils.video_mask_dir(dataset)
+
+def overlay_video_filepath(
+        dataset: str, bundlesdf_id: str, cycle_iteration: int) -> str:
+    """The directory for all overlay videos."""
+    overlay_video_dir = op.join(DATA_GEN_DIR, 'videos')
+
+    if not bundlesdf_id.startswith('bundlesdf_id_'):
+        bundlesdf_id = f'bundlesdf_id_{bundlesdf_id}'
+
+    now = datetime.datetime.now()
+    date_str = now.strftime('%m%d')
+    filename = f'{date_str}_{dataset}_{bundlesdf_id[13:]}_{cycle_iteration}.mp4'
+
+    return op.join(overlay_video_dir, filename)
 
 
 """Yaml file parsing utilities."""

@@ -68,11 +68,14 @@ class OverlayVideoGenerator:
         )
         self.mesh_file = op.join(nerf_results_dir, 'textured_mesh.obj')
 
-        # Plan to put the output video in the BundleSDF results directory.
-        bundlesdf_results_dir = file_utils.bundlesdf_run_results_dir(
-            vision_asset, cycle_iteration, bundlesdf_id)
-        self.output_file = op.join(bundlesdf_results_dir, 'overlay.mp4')
-
+        # # Plan to put the output video in the BundleSDF results directory.
+        # bundlesdf_results_dir = file_utils.bundlesdf_run_results_dir(
+        #     vision_asset, cycle_iteration, bundlesdf_id)
+        # self.output_file = op.join(bundlesdf_results_dir, 'overlay.mp4')
+        # Plan to put the output video in a single directory for all overlay
+        # videos.
+        self.output_file = file_utils.overlay_video_filepath(
+            vision_asset, bundlesdf_id, cycle_iteration)
 
     def _get_bundletrack_poses_in_cam(self) -> None:
         ob_in_cam_dir = file_utils.bundlesdf_pose_dir(
@@ -127,6 +130,7 @@ class OverlayVideoGenerator:
                     color=TAGSLAM_COLOR, reflectivity=0.0, transparent=0,
                     opacity=.4)
             )
+        vis["tagslam_triad"].set_object(g.triad(scale=0.1))
         vis["bundlesdf_mesh"].set_object(
             g.ObjMeshGeometry.from_file(self.mesh_file),
             g.MeshLambertMaterial(
@@ -206,6 +210,7 @@ class OverlayVideoGenerator:
 
                 if 'cube' in self.vision_asset:
                     self.vis["tagslam_cube"].set_transform(self.T_MW @ T_WA)
+                self.vis["tagslam_triad"].set_transform(self.T_MW @ T_WA)
                 self.vis["bundlesdf_mesh"].set_transform(self.T_MC @ T_CB)
 
                 mesh_im = self.vis.get_image()
