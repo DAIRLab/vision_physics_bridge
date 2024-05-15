@@ -7,7 +7,6 @@ cube_2.  Still to be tested on multi-toss experiments.
 
 # import argparse
 import click
-import os
 import os.path as op
 import numpy as np
 import pdb
@@ -21,11 +20,12 @@ import matplotlib.pyplot as plt
 import pdb
 import math
 import trimesh
-from trimesh.base import Trimesh
 from typing import Tuple, List
 
 import file_utils
 import math_utils
+
+from overlay_videos import OverlayVideoGenerator
 
 
 FILTER_ORIENTATIONS = True
@@ -764,6 +764,8 @@ class TrajectoryConverterBundleSDFToPLL:
                     op.join(toss_bundlesdf_dir, toss_filenames[i]))
                 print(f'\t{op.join(toss_bundlesdf_dir, toss_filenames[i])}')
 
+        print(f'\n')
+
 
 class GeometryConverterBundleSDFToPLL:
     """Class for processing shape data from BundleSDF.
@@ -934,8 +936,13 @@ class GeometryConverterBundleSDFToPLL:
               default=1,
               help="BundleSDF iteration number (can't choose 0 since that " + \
                 "means use TagSLAM poses).")
+@click.option('--make-overlay/--skip-overlay',
+              type=bool,
+              default=True,
+              help="whether to make an overlay video.")
 
-def main_command(vision_asset: str, bundlesdf_id: str, cycle_iteration: int):
+def main_command(vision_asset: str, bundlesdf_id: str, cycle_iteration: int,
+                 make_overlay: bool):
     # First decode the system and start/end tosses from the provided asset
     # directory.
     assert cycle_iteration > 0, f'Invalid cycle iteration: {cycle_iteration}.'
@@ -1003,6 +1010,14 @@ def main_command(vision_asset: str, bundlesdf_id: str, cycle_iteration: int):
     traj_converter.plot_trajectory(full_trajectory=True)
     traj_converter.plot_trajectory(full_trajectory=False)
     traj_converter.save_data(save_tagslam=True, save_bundlesdf=True)
+
+    # Create an overlay video.
+    if make_overlay:
+        overlay_generator = OverlayVideoGenerator(
+            vision_asset, bundlesdf_id, cycle_iteration)
+        overlay_generator.make_overlay_video()
+    else:
+        print('Skipping overlay video creation.')
 
 
 if __name__ == '__main__':

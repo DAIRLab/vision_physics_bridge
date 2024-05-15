@@ -21,13 +21,14 @@ import file_utils
 
 
 
-# video resolution
-IMAGE_WIDTH = 640
-IMAGE_HEIGHT = 480
+# Overlay video settings.
+TAGSLAM_COLOR = 0xff0000
+BUNDLESDF_COLOR = 0x00ff00
 
 
 class OverlayVideoGenerator:
-    """"""
+    """Generate an overlay video to compare TagSLAM and BundleSDF poses to the
+    observed RGB images."""
     def __init__(self, vision_asset: str, bundlesdf_id: str,
                  cycle_iteration: int):
         # First decode the system and start/end tosses from the provided asset
@@ -45,8 +46,6 @@ class OverlayVideoGenerator:
         # Decode the BundleSDF run ID.
         if bundlesdf_id[:13] != 'bundlesdf_id_':
             bundlesdf_id = f'bundlesdf_id_{bundlesdf_id}'
-        print(f'Processing toss {vision_asset} from BundleSDF run ID ' + \
-                f'{bundlesdf_id}.\n')
         
         self.vision_asset = vision_asset
         self.bundlesdf_id = bundlesdf_id
@@ -69,8 +68,10 @@ class OverlayVideoGenerator:
         )
         self.mesh_file = op.join(nerf_results_dir, 'textured_mesh.obj')
 
-        # TODO: don't hardcode this.
-        self.output_file = f'./videos/{self.vision_asset}.mp4'
+        # Plan to put the output video in the BundleSDF results directory.
+        bundlesdf_results_dir = file_utils.bundlesdf_run_results_dir(
+            vision_asset, cycle_iteration, bundlesdf_id)
+        self.output_file = op.join(bundlesdf_results_dir, 'overlay.mp4')
 
 
     def _get_bundletrack_poses_in_cam(self) -> None:
@@ -78,7 +79,6 @@ class OverlayVideoGenerator:
             self.vision_asset, self.cycle_iteration, self.bundlesdf_id)
 
         frame_num = len([name for name in os.listdir(ob_in_cam_dir)])
-        print("%i frames in total!"%frame_num)
         poses = np.zeros((frame_num, 4, 4))
         for frame_id in range(1, frame_num+1):
             pose = np.loadtxt(op.join(ob_in_cam_dir, "%04i.txt" % frame_id))
@@ -115,25 +115,28 @@ class OverlayVideoGenerator:
     def _set_up_meshcat(self) -> None:
         # Can specify zmq_url="tcp://127.0.0.1:6000" argument after the first
         # run but the frame will mismatch.
+        print('\nNo need to open this link: ', end='')
         vis = meshcat.Visualizer()
 
         ##################
         vis["tagslam_cube"].set_object(
             g.Box([0.1048, 0.1048, 0.1048]),
             g.MeshLambertMaterial(
-                color=0x00ff00, reflectivity=0.0, transparent=0, opacity=.4)
+                color=TAGSLAM_COLOR, reflectivity=0.0, transparent=0,
+                opacity=.4)
         )
         vis["bundlesdf_mesh"].set_object(
             g.ObjMeshGeometry.from_file(self.mesh_file),
             g.MeshLambertMaterial(
-                color=0xff0000, reflectivity=0.0, transparent=0, opacity=.4)
+                color=BUNDLESDF_COLOR, reflectivity=0.0, transparent=0,
+                opacity=.4)
         )
         ########################
         base_url = "http://127.0.0.1"
         meshcat_url = f'{base_url}:{vis.url().split(":")[-1]}'
 
-        ### Need x server to run. Either run locally or run remotely with x forward
-        # configured.
+        ### Need x server to run. Either run locally or run remotely with x
+        # forward configured.
         options = webdriver.ChromeOptions()
         options.add_argument('--headless')
         self.driver = webdriver.Chrome(options=options)
@@ -164,9 +167,9 @@ class OverlayVideoGenerator:
         vis["cam"].set_transform(self.T_WC)
         vis["cam_view"].set_transform(self.T_WC)
 
-        # The PerspectiveCamera API does not allow for vertical adjustment of the
-        # center of the optical axis.  The horizontal offset is accomplished via
-        # the filmOffset according to filmGauge's scale.
+        # The PerspectiveCamera API does not allow for vertical adjustment of
+        # the center of the optical axis.  The horizontal offset is accomplished
+        # via the filmOffset according to filmGauge's scale.
         fov_y = 2*np.arctan(self.image_height/(2*self.fy))*180/np.pi
         cam = g.PerspectiveCamera(
             fov=fov_y, zoom=1, aspect=self.image_width/self.image_height,
@@ -186,10 +189,11 @@ class OverlayVideoGenerator:
         self.vis = vis
 
     def make_overlay_video(self) -> None:
+        print(f'Starting overlay video generation (could take minutes).')
         self._set_up_meshcat()
 
         with TemporaryDirectory(prefix="ros-process-") as tmpdir:
-            print(tmpdir)
+            print(f'Storing temporary files at {tmpdir}')
 
             # Use tqdm to show a progress bar.
             for i in tqdm(range(self.bundlesdf_poses_in_cam.shape[0])):
@@ -203,8 +207,8 @@ class OverlayVideoGenerator:
 
                 mesh_im = self.vis.get_image()
 
-                # If vertical offset were significant, can manually adjust for
-                # it with the below lines.
+                # Sadly meshcat's PerspectiveCamera doesn't compensate for cy,
+                # only cx.  So the below manually compensates for cy.
                 shift_pixels_up = round(2*(self.image_height/2 - self.cy))
                 upper_buffer = np.zeros(
                     (max(0, -shift_pixels_up), self.image_width, 4)
@@ -240,6 +244,7 @@ class OverlayVideoGenerator:
         self.vis.delete()
         # If not exited properly, orphan chrome processes will remain active.
         self.driver.quit()
+        print(f'Wrote overlay video to {self.output_file}')
 
 
 
