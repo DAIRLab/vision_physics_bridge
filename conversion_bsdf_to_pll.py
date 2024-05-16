@@ -1026,6 +1026,7 @@ def main_command(vision_asset: str, bundlesdf_id: str, cycle_iteration: int,
         overlay_generator = OverlayVideoGenerator(
             vision_asset, bundlesdf_id, cycle_iteration, remote)
         overlay_generator.make_overlay_video()
+        overlay_generator.make_optimized_keyframe_overlay_images()
     else:
         print('Skipping overlay video creation.')
 

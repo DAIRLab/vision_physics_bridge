@@ -386,6 +386,33 @@ def extrinsics_T_CW(translation, axis_vec):
     return extrinsic
 
 
+def inverse_homogeneous_transformation(transform: Tensor) -> Tensor:
+    """Produce the inverse of a homogeneous transform.  If a homogeneous
+    transformation matrix is of the form:
+
+        T = [ R  d ]
+            [ 0  1 ]
+
+    for T (4,4), R (3,3), and d (3,1), then the inverse is:
+    
+        inv(T) = [ R^T  -R^T*d ]
+                 [  0      1   ]
+    """
+    assert transform.shape == (4, 4)
+
+    # Split into rotation and translation components.
+    rot_mat = transform[:3, :3]
+    translation = transform[:3, 3]
+
+    # Build the inverse.
+    inv_transform = np.zeros((4, 4))
+    inv_transform[:3, :3] = rot_mat.T
+    inv_transform[:3, 3] = -rot_mat.T @ translation
+    inv_transform[3, 3] = 1
+
+    return inv_transform
+
+
 def axis_angle_to_quat(axis_angle):
     """Convert axis-angle to quaternion.  Returns xyzw ordering."""
     return R.from_rotvec(axis_angle).as_quat()

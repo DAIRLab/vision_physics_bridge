@@ -261,6 +261,13 @@ def overlay_video_filepath(
 
     return op.join(overlay_video_dir, filename)
 
+def keyframe_overlay_image_filepath(
+        dataset: str, bundlesdf_id: str, cycle_iteration: int) -> str:
+    """The directory for a NeRF run's optimized keyframe pose overlays."""
+    nerf_results_dir = bundlesdf_nerf_results_dir(
+        dataset, cycle_iteration, bundlesdf_id)
+    return assure_created(op.join(nerf_results_dir, 'keyframe_overlays'))
+
 
 """Yaml file parsing utilities."""
 def load_camera_extrinsics(object: str) -> Tuple[np.ndarray, np.ndarray]:
@@ -375,11 +382,77 @@ def load_bundlesdf_id_from_pll_json(pll_output_dir: str) -> str:
         return f'bundlesdf_id_{bundlesdf_id}'
     return bundlesdf_id
 
+def load_pll_id_from_bundlesdf_yml(bundlesdf_output_dir: str) -> str:
+    """Load the PLL ID associated with a BundleSDF run from its NeRF
+    configuration file stored in its output directory."""
+    yml_file = op.join(bundlesdf_output_dir, 'config_nerf.yml')
+    assert op.exists(yml_file), f'Did not find {yml_file}.'
+
+    with open(yml_file, 'r') as f:
+        data = yaml.safe_load(f)
+
+    geometry_dir = data['geometry_dir']
+    if geometry_dir == None:
+        return None
+
+    pll_id = op.basename(geometry_dir)
+    assert pll_id.startswith('pll_id_'), f'Unexpected PLL ID {pll_id=}.'
+
+    return pll_id
+
 def load_table_z_height(object, toss_number) -> float:
     """Load the table height associated with an object and toss."""
     with open(table_calibration_yaml_filepath(), 'r') as f:
         data = yaml.safe_load(f)
     return data[object][toss_number]
+
+def load_keyframe_indices_from_nerf_results_yml(
+        dataset: str, cycle_iteration: int, bundlesdf_id: str) -> list:
+    """Load the indices of all keyframes from a NeRF run."""
+    run_results_dir = bundlesdf_run_results_dir(
+        dataset, cycle_iteration, bundlesdf_id)
+
+    # Get the highest numbered frame folder.
+    highest_frame = 0
+    for frame_folder in os.listdir(run_results_dir):
+        if frame_folder.isdigit():
+            highest_frame = max(highest_frame, int(frame_folder))
+
+    # Load keyframes.yml in this highest numbered frame folder.
+    keyframes_yml = op.join(run_results_dir, f'{highest_frame:04d}',
+                            'keyframes.yml')
+    with open(keyframes_yml, 'r') as f:
+        data = yaml.safe_load(f)
+
+    # Get a list of all the keyframe indices.
+    keyframe_indices = []
+    for keyframe_str in data.keys():
+        keyframe_indices.append(int(keyframe_str.split('keyframe_')[-1]))
+
+    return keyframe_indices
+
+def load_optimized_keyframe_poses_from_nerf_results(
+        dataset: str, cycle_iteration: int, bundlesdf_id: str) -> np.ndarray:
+    """While BundleSDF trains the NeRF model, it produces optimized poses for
+    all of the keyframes.  This function loads these optimized poses from the
+    NeRF results directory, converting them to the standard ob_in_cam format."""
+    nerf_results_dir = bundlesdf_nerf_results_dir(
+        dataset, cycle_iteration, bundlesdf_id)
+    keyframe_data = np.loadtxt(
+        op.join(nerf_results_dir, 'poses_after_nerf.txt'))
+
+    # The keyframe data is of size (4*n_keyframes, 4), where each group of 4
+    # rows is a 4x4 homogeneous transform.  Convert this to (n_keyframes, 4, 4).
+    keyframe_tfs = keyframe_data.reshape(-1, 4, 4)
+
+    # This directory is stored as camera in object frame, so do the conversion
+    # to object in camera frame.
+    keyframes_ob_in_cam = np.zeros_like(keyframe_tfs)
+    for i, keyframe_tf in enumerate(keyframe_tfs):
+        keyframes_ob_in_cam[i] = math_utils.inverse_homogeneous_transformation(
+            keyframe_tf)
+
+    return keyframes_ob_in_cam
 
 
 """ROS Bag utilities."""
