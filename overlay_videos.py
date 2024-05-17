@@ -81,7 +81,7 @@ class OverlayVideoGenerator:
         # self.output_file = op.join(bundlesdf_results_dir, 'overlay.mp4')
         # Plan to put the output video in a single directory for all overlay
         # videos.
-        self.output_file = file_utils.overlay_video_filepath(
+        self.output_file = file_utils.inspection_overlay_video_filepath(
             vision_asset, bundlesdf_id, cycle_iteration)
         if not op.exists(op.dirname(self.output_file)):
             os.makedirs(op.dirname(self.output_file))
@@ -311,7 +311,7 @@ class OverlayVideoGenerator:
         self._get_bundletrack_keyframes()
         self._set_up_meshcat()
 
-        output_dir = file_utils.keyframe_overlay_image_filepath(
+        output_dir = file_utils.inspection_keyframe_overlay_image_dir(
             self.vision_asset, self.bundlesdf_id, self.cycle_iteration)
         os.system(f'rm {output_dir}/*')
 

@@ -15,6 +15,7 @@ def to_homo(pts):
     homo = np.concatenate((pts, np.ones((pts.shape[0],1))),axis=-1)
     return homo
 
+# TODO: trajectory metric here
 def add_err(pred,gt,model_pts):
     """
     Average Distance of Model Points for objects with no indistinguishable views
@@ -25,6 +26,7 @@ def add_err(pred,gt,model_pts):
     e = np.linalg.norm(pred_pts - gt_pts, axis=1).mean()
     return e
 
+# TODO: trajectory metric here
 def adi_err(pred,gt,model_pts):
     """
     @pred: 4x4 mat

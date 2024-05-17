@@ -4,8 +4,17 @@ import os.path as op
 import rospy
 from PIL import Image
 from scipy.spatial.transform import Rotation as R
+import sys
 import torch
 from torch import Tensor
+
+DATA_GEN_DIR = op.dirname(op.realpath(__file__))
+REPO_DIR = op.dirname(DATA_GEN_DIR)
+PLL_DIR = op.join(REPO_DIR, 'dair_pll')
+
+sys.path.append(PLL_DIR)    # For importing dair_pll.
+
+from dair_pll import quaternion
 
 
 def get_deep_support_query_directions() -> Tensor:
@@ -509,3 +518,23 @@ def xyzw2wxyz(quat_xyzw):
     xyz = quat_xyzw[:, 0:3]
     w = quat_xyzw[:, 3:4]
     return np.concatenate((w, xyz), axis=1).reshape(original_shape)
+
+
+def quaternion_error(quat1_wxyz, quat2_wxyz):
+    """Input quaternions must be in wxyz format.  Returns the angular error in
+    radians between the two quaternions over time.  Inputs can be (N, 4) or
+    (4,)."""
+    # Check inputs.
+    assert quat1_wxyz.shape == quat2_wxyz.shape
+    if quat1_wxyz.ndim == 1:
+        assert quat1_wxyz.shape[0] == 4
+        quat1_wxyz = quat1_wxyz.reshape(1, 4)
+        quat2_wxyz = quat2_wxyz.reshape(1, 4)
+
+    quat1_wxyz = torch.Tensor(quat1_wxyz)
+    quat2_wxyz = torch.Tensor(quat2_wxyz)
+
+    quat_shift = quaternion.multiply(quaternion.inverse(quat1_wxyz), quat2_wxyz)
+    rot = quaternion.log(quat_shift)
+
+    return torch.sqrt((rot**2).sum(dim=-1))

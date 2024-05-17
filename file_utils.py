@@ -247,26 +247,87 @@ def bundlesdf_video_mask_dir(dataset: str, check_exists: bool = True) -> str:
     return bsdf_file_utils.video_mask_dir(
         dataset, check_parent_exists=check_exists)
 
-def overlay_video_filepath(
+
+"""Manual inspection directories."""
+def inspection_dir() -> str:
+    """When running BundleSDF-to-PLL conversion, there are several result
+    inspection files that can be created to manually inspect the performance.
+    Put all of these files in a head directory at cnets-data-generation/
+    consolidated_results/."""
+    return assure_created(op.join(DATA_GEN_DIR, 'consolidated_results'))
+
+def inspection_overlay_video_filepath(
         dataset: str, bundlesdf_id: str, cycle_iteration: int) -> str:
     """The directory for all overlay videos."""
-    overlay_video_dir = op.join(DATA_GEN_DIR, 'videos')
+    overlay_video_dir = op.join(inspection_dir(), 'videos')
 
-    if not bundlesdf_id.startswith('bundlesdf_id_'):
-        bundlesdf_id = f'bundlesdf_id_{bundlesdf_id}'
+    if bundlesdf_id.startswith('bundlesdf_id_'):
+        bundlesdf_id = bundlesdf_id[13:]
 
     now = datetime.datetime.now()
     date_str = now.strftime('%m%d')
-    filename = f'{date_str}_{dataset}_{bundlesdf_id[13:]}_{cycle_iteration}.mp4'
+    filename = f'{date_str}_{dataset}_{bundlesdf_id}_{cycle_iteration}.mp4'
 
     return op.join(overlay_video_dir, filename)
 
-def keyframe_overlay_image_filepath(
+def inspection_keyframe_overlay_image_dir(
         dataset: str, bundlesdf_id: str, cycle_iteration: int) -> str:
     """The directory for a NeRF run's optimized keyframe pose overlays."""
-    nerf_results_dir = bundlesdf_nerf_results_dir(
-        dataset, cycle_iteration, bundlesdf_id)
-    return assure_created(op.join(nerf_results_dir, 'keyframe_overlays'))
+    parent_dir = op.join(inspection_dir(), 'keyframe_overlays')
+
+    if bundlesdf_id.startswith('bundlesdf_id_'):
+        bundlesdf_id = bundlesdf_id[13:]
+
+    now = datetime.datetime.now()
+    date_str = now.strftime('%m%d')
+    child_dir_name = f'{date_str}_{dataset}_{bundlesdf_id}_{cycle_iteration}'
+
+    return assure_created(op.join(parent_dir, child_dir_name))
+
+def inspection_trajectory_plots_dir_and_prefix(
+        dataset: str, bundlesdf_id: str, cycle_iteration: int) -> str:
+    """The directory for all trajectory plots."""
+    traj_dir = assure_created(op.join(inspection_dir(), 'trajectories'))
+
+    if bundlesdf_id.startswith('bundlesdf_id_'):
+        bundlesdf_id = bundlesdf_id[13:]
+
+    now = datetime.datetime.now()
+    date_str = now.strftime('%m%d')
+    prefix = f'{date_str}_{dataset}_{bundlesdf_id}_{cycle_iteration}'
+
+    return traj_dir, prefix
+
+# TODO use this function, use mesh_cleaned.obj
+def inspection_mesh_filepath(
+        dataset: str, bundlesdf_id: str, cycle_iteration: int) -> str:
+    """The directory for all meshes."""
+    mesh_dir = assure_created(op.join(inspection_dir(), 'meshes'))
+
+    if bundlesdf_id.startswith('bundlesdf_id_'):
+        bundlesdf_id = bundlesdf_id[13:]
+
+    now = datetime.datetime.now()
+    date_str = now.strftime('%m%d')
+    filename = \
+        f'{date_str}_{dataset}_{bundlesdf_id}_{cycle_iteration}_cleaned.obj'
+
+    return op.join(mesh_dir, filename)
+
+# TODO use this function
+def inspection_3d_slice_video_filepath(
+        dataset: str, bundlesdf_id: str, cycle_iteration: int) -> str:
+    """The directory for all 3D slice plots."""
+    slice_plot_dir = assure_created(op.join(inspection_dir(), '3d_slice_plots'))
+
+    if bundlesdf_id.startswith('bundlesdf_id_'):
+        bundlesdf_id = bundlesdf_id[13:]
+
+    now = datetime.datetime.now()
+    date_str = now.strftime('%m%d')
+    filename = f'{date_str}_{dataset}_{bundlesdf_id}_{cycle_iteration}.mp4'
+
+    return op.join(slice_plot_dir, filename)
 
 
 """Yaml file parsing utilities."""
