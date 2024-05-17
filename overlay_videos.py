@@ -313,7 +313,8 @@ class OverlayVideoGenerator:
 
         output_dir = file_utils.inspection_keyframe_overlay_image_dir(
             self.vision_asset, self.bundlesdf_id, self.cycle_iteration)
-        os.system(f'rm {output_dir}/*')
+        if os.listdir(output_dir):
+            os.system(f'rm {output_dir}/*')
 
         for bsdf_i, bsdf_pose in zip(self.keyframe_indices, self.keyframe_tfs):
             # This i is 1-indexed since it's the BundleSDF frame number.  All of

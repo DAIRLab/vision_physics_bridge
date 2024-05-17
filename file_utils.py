@@ -259,7 +259,7 @@ def inspection_dir() -> str:
 def inspection_overlay_video_filepath(
         dataset: str, bundlesdf_id: str, cycle_iteration: int) -> str:
     """The directory for all overlay videos."""
-    overlay_video_dir = op.join(inspection_dir(), 'videos')
+    overlay_video_dir = op.join(inspection_dir(), 'overlay_videos')
 
     if bundlesdf_id.startswith('bundlesdf_id_'):
         bundlesdf_id = bundlesdf_id[13:]
