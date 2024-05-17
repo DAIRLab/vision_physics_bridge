@@ -7,6 +7,7 @@ cube_2.  Still to be tested on multi-toss experiments.
 
 # import argparse
 import click
+import os
 import os.path as op
 import numpy as np
 import pdb
@@ -20,12 +21,13 @@ import matplotlib.pyplot as plt
 import pdb
 import math
 import trimesh
-from typing import Tuple, List
+from typing import Tuple
 
 import file_utils
 import math_utils
 
 from overlay_videos import OverlayVideoGenerator
+from vis_utils import SDFSliceViewer
 
 
 FILTER_ORIENTATIONS = True
@@ -1008,6 +1010,10 @@ class GeometryConverterBundleSDFToPLL:
         self.mesh_bsdf_hull = self.mesh_bsdf.convex_hull
         self.plot = plot
 
+        self.vision_asset = vision_asset
+        self.bundlesdf_id = bundlesdf_id
+        self.cycle_iteration = cycle_iteration
+
     def _set_up_directories(self, vision_asset: str, cycle_iteration: int,
                             bundlesdf_id: str) -> None:
         """Given the vision asset, cycle iteration, and BundleSDF ID, loads the
@@ -1087,6 +1093,44 @@ class GeometryConverterBundleSDFToPLL:
 
         return support_points, support_scalars, support_directions
 
+    def _copy_meshes(self):
+        """Copy the mesh_cleaned.obj file over to the cnets-data-generation/
+        consolidated_results/meshes/ directory for manual inspection.
+
+        For later subsequent PLL runs, create a mesh.obj convex hull file out of
+        the BundleSDF world dimensions file.  This involves copying over the
+        convex hull in .obj format for PLL to show geometry comparisons.  This
+        .obj file requires vertex, vertex normals, and face definitions where
+        the faces' associated vertices are annotated with their associated
+        vertex normals explicitly (otherwise error on Mengti's lab computer).
+        """
+        # Copy mesh_cleaned.obj from the BundleSDF NeRF results to the
+        # inspection folder.
+        original_mesh_path = op.join(self.nerf_results_dir, 'mesh_cleaned.obj')
+        new_mesh_path = file_utils.inspection_mesh_filepath(
+            self.vision_asset, self.bundlesdf_id, self.cycle_iteration)
+        os.system(f'cp {original_mesh_path} {new_mesh_path}')
+        print(f'Copied mesh from BundleSDF to {new_mesh_path}.\n')
+
+        # Write the custom convex hull mesh file for PLL later.
+        new_filepath = op.join(self.geometry_for_pll_dir, 'mesh.obj')
+        with open(new_filepath, 'w') as f:
+            f.write(f'# Vertices\n')
+            for vertex in self.mesh_bsdf_hull.vertices:
+                f.write(f'v {vertex[0]} {vertex[1]} {vertex[2]}\n')
+
+            f.write(f'\n# Vertex normals\n')
+            for normal in self.mesh_bsdf_hull.vertex_normals:
+                f.write(f'vn {normal[0]} {normal[1]} {normal[2]}\n')
+
+            f.write(f'\n# Faces:  vertex index // vertex normal index\n')
+            for face in self.mesh_bsdf_hull.faces:
+                # +1 because obj files use 1-indexing but trimesh uses 0.
+                # This is of format v_i//vn_i, which for us are always the same.
+                f.write(f'f {face[0]+1}//{face[0]+1} ' + \
+                        f'{face[1]+1}//{face[1]+1} {face[2]+1}//{face[2]+1}\n')
+        print(f'Wrote convex hull from BundleSDF as mesh at {new_filepath}.')
+
     def process_and_save(self):
         """Process the data."""
         # Query different directions and get the support points.
@@ -1109,28 +1153,8 @@ class GeometryConverterBundleSDFToPLL:
 
         print(f'Saved {support_points.shape=} and {support_directions.shape=}.')
 
-        # Copy over the convex hull in .obj format for PLL to show geometry
-        # comparisons.  This .obj file requires vertex, vertex normals, and face
-        # definitions where the faces' associated vertices are annotated with
-        # their associated vertex normals explicitly (otherwise error on
-        # Mengti's lab computer).
-        new_filepath = op.join(self.geometry_for_pll_dir, 'mesh.obj')
-        with open(new_filepath, 'w') as f:
-            f.write(f'# Vertices\n')
-            for vertex in self.mesh_bsdf_hull.vertices:
-                f.write(f'v {vertex[0]} {vertex[1]} {vertex[2]}\n')
-
-            f.write(f'\n# Vertex normals\n')
-            for normal in self.mesh_bsdf_hull.vertex_normals:
-                f.write(f'vn {normal[0]} {normal[1]} {normal[2]}\n')
-
-            f.write(f'\n# Faces:  vertex index // vertex normal index\n')
-            for face in self.mesh_bsdf_hull.faces:
-                # +1 because obj files use 1-indexing but trimesh uses 0.
-                # This is of format v_i//vn_i, which for us are always the same.
-                f.write(f'f {face[0]+1}//{face[0]+1} ' + \
-                        f'{face[1]+1}//{face[1]+1} {face[2]+1}//{face[2]+1}\n')
-        print(f'Wrote convex hull from BundleSDF as mesh at {new_filepath}.')
+        # Write the mesh files to inspection directories.
+        self._copy_meshes()
 
 
 
@@ -1241,6 +1265,11 @@ def main_command(vision_asset: str, bundlesdf_id: str, cycle_iteration: int,
         overlay_generator.make_optimized_keyframe_overlay_images()
     else:
         print('Skipping overlay video creation.')
+
+    # Generate the SDF slice images.
+    sdf_slice_generator = SDFSliceViewer(
+        vision_asset, bundlesdf_id, cycle_iteration)
+    sdf_slice_generator.visualization()
 
 
 if __name__ == '__main__':

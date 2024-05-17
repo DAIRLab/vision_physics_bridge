@@ -298,7 +298,6 @@ def inspection_trajectory_plots_dir_and_prefix(
 
     return traj_dir, prefix
 
-# TODO use this function, use mesh_cleaned.obj
 def inspection_mesh_filepath(
         dataset: str, bundlesdf_id: str, cycle_iteration: int) -> str:
     """The directory for all meshes."""
@@ -314,11 +313,11 @@ def inspection_mesh_filepath(
 
     return op.join(mesh_dir, filename)
 
-# TODO use this function
 def inspection_3d_slice_video_filepath(
         dataset: str, bundlesdf_id: str, cycle_iteration: int) -> str:
     """The directory for all 3D slice plots."""
-    slice_plot_dir = assure_created(op.join(inspection_dir(), '3d_slice_plots'))
+    slice_plot_dir = assure_created(
+        op.join(inspection_dir(), '3d_slice_videos'))
 
     if bundlesdf_id.startswith('bundlesdf_id_'):
         bundlesdf_id = bundlesdf_id[13:]
@@ -326,6 +325,22 @@ def inspection_3d_slice_video_filepath(
     now = datetime.datetime.now()
     date_str = now.strftime('%m%d')
     filename = f'{date_str}_{dataset}_{bundlesdf_id}_{cycle_iteration}.mp4'
+
+    return op.join(slice_plot_dir, filename)
+
+def inspection_3d_slice_figure_filepath(
+        dataset: str, bundlesdf_id: str, cycle_iteration: int) -> str:
+    """The directory for all 3D slice plots."""
+    slice_plot_dir = assure_created(
+        op.join(inspection_dir(), '3d_slice_figures'))
+
+    if bundlesdf_id.startswith('bundlesdf_id_'):
+        bundlesdf_id = bundlesdf_id[13:]
+
+    now = datetime.datetime.now()
+    date_str = now.strftime('%m%d')
+    filename = \
+        f'{date_str}_{dataset}_{bundlesdf_id}_{cycle_iteration}.fig.pickle'
 
     return op.join(slice_plot_dir, filename)
 
