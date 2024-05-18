@@ -5,7 +5,7 @@ import numpy as np
 import os
 import os.path as op
 import pdb
-from PIL import Image
+from PIL import Image, ImageDraw, ImageFont
 from tempfile import TemporaryDirectory
 import rosbag
 from selenium import webdriver
@@ -51,6 +51,9 @@ class OverlayVideoGenerator:
         self.bundlesdf_id = bundlesdf_id
         self.cycle_iteration = cycle_iteration
         self.remote = remote
+        self.start_toss = start_toss
+        self.end_toss = end_toss
+        self.object = object
 
         # Get the camera intrinsics and extrinsics.
         self.fx, self.fy, self.cx, self.cy = file_utils.load_camera_intrinsics()
@@ -228,6 +231,52 @@ class OverlayVideoGenerator:
             self.xvfb_process.wait()
             print("Terminated Xvfb process")
 
+    def _get_absolute_frames(self) -> None:
+        """Determine the start and end frames of each PLL toss relative to the
+        beginning of the full overlay video.  This is necessary to label the
+        video with the toss number."""
+        relative_start_frames = np.array([file_utils.load_field_from_yaml(
+            self.object, toss_i, 'start_frame') for toss_i in range(
+                self.start_toss, self.end_toss+1)])
+        relative_end_frames = np.array([file_utils.load_field_from_yaml(
+            self.object, toss_i, 'end_frame') for toss_i in range(
+                self.start_toss, self.end_toss+1)])
+        start_ros_times = np.array([file_utils.load_toss_time_from_yaml(
+            self.object, toss_i, 'start_time', as_ros_time=True) for toss_i \
+                in range(self.start_toss, self.end_toss+1)])
+        tagslam_dir = file_utils.synchronized_tagslam_pose_dir(
+            self.vision_asset, check_exists=True)
+        bundlesdf_times = np.loadtxt(
+            op.join(op.dirname(tagslam_dir), 'bundlesdf_timestamps.txt'))
+
+        self.start_frames = math_utils.convert_relative_frames_to_absolute(
+            relative_start_frames, bundlesdf_times, start_ros_times)
+        self.end_frames = math_utils.convert_relative_frames_to_absolute(
+            relative_end_frames, bundlesdf_times, start_ros_times)
+
+    def _add_watermark(self, im: Image, frame_i: int) -> Image:
+        """Add a label to the image to specify whether the portion of the video
+        is part of the PLL toss or not."""
+        # First determine if the frame index is within a PLL toss.
+        if not hasattr(self, 'start_frames'):
+            self._get_absolute_frames()
+
+        # A frame is within a PLL toss if it is greater than the start frame and
+        # less than the same toss's end frame.
+        if np.sum(frame_i >= self.start_frames) == \
+            np.sum(frame_i<=self.end_frames):
+            toss_i = self.start_toss + np.sum(frame_i >= self.start_frames) - 1
+
+            # Add a PLL toss label to the image.
+            print(f'Adding toss {toss_i} label to frame {frame_i}.')
+            draw = ImageDraw.Draw(im)
+            draw.polygon([(25, 435), (100, 435), (100, 475), (25, 475)],
+                         fill='black')
+            draw.text((30, 440), f'Toss {toss_i}', fill='white',
+                      font=ImageFont.truetype('arial.ttf', 20))
+
+        return im
+
     def _render_one_image(self, frame_i: int, T_WA: np.ndarray,
                           T_CB: np.ndarray) -> Image:
         """Given the frame index, TagSLAM pose in world, and BundleSDF pose in
@@ -260,6 +309,11 @@ class OverlayVideoGenerator:
         mesh_im = Image.fromarray(small).convert('RGBA')
 
         im.paste(mesh_im, (0,0), mask = mesh_im)
+
+        # Add annotation to show what portions of the video are part of a toss
+        # trajectory we give to PLL.
+        self._add_watermark(im, frame_i)
+
         return im
 
     def make_overlay_video(self) -> None:
