@@ -336,9 +336,11 @@ figx.show()\n''')
 
 
 class SDFSliceViewer:
-    """TODO"""
-    def __init__(self, vision_asset: str, bundlesdf_id: str,
-                 cycle_iteration: int):
+    """Generate visuals to inspect a slice of the trained SDF, including
+    plotting other relevant points like points sampled on the generated mesh and
+    contact points given during SDF training."""
+    def __init__(self, vision_asset: str, tracking_bundlesdf_id: str,
+                 nerf_bundlesdf_id: str, cycle_iteration: int):
         # First decode the system and start/end tosses from the provided asset
         # directory.
         assert cycle_iteration > 0, f'Invalid {cycle_iteration=}.'
@@ -351,23 +353,40 @@ class SDFSliceViewer:
                 f'-{end_toss} inferred from {vision_asset=}.'
 
         # Decode the BundleSDF run ID.
-        if bundlesdf_id[:13] != 'bundlesdf_id_':
-            bundlesdf_id = f'bundlesdf_id_{bundlesdf_id}'
+        if tracking_bundlesdf_id[:13] != 'bundlesdf_id_':
+            tracking_bundlesdf_id = f'bundlesdf_id_{tracking_bundlesdf_id}'
+        if nerf_bundlesdf_id is None:
+            nerf_bundlesdf_id = tracking_bundlesdf_id
+        elif nerf_bundlesdf_id[:13] != 'bundlesdf_id_':
+            nerf_bundlesdf_id = f'bundlesdf_id_{nerf_bundlesdf_id}'
         
         self.vision_asset = vision_asset
-        self.bundlesdf_id = bundlesdf_id
+        self.tracking_bundlesdf_id = tracking_bundlesdf_id
+        self.nerf_bundlesdf_id = nerf_bundlesdf_id
         self.cycle_iteration = cycle_iteration
 
     def visualization(self):
-        # Get an output filename without the extension.
+        # Get output filenames for the raw figure and video.
         video_output_file = file_utils.inspection_3d_slice_video_filepath(
-            self.vision_asset, self.bundlesdf_id, self.cycle_iteration)
+            dataset=self.vision_asset,
+            tracking_bundlesdf_id=self.tracking_bundlesdf_id,
+            nerf_bundlesdf_id=self.nerf_bundlesdf_id,
+            cycle_iteration=self.cycle_iteration
+        )
         figure_output_file = file_utils.inspection_3d_slice_figure_filepath(
-            self.vision_asset, self.bundlesdf_id, self.cycle_iteration)
+            dataset=self.vision_asset,
+            tracking_bundlesdf_id=self.tracking_bundlesdf_id,
+            nerf_bundlesdf_id=self.nerf_bundlesdf_id,
+            cycle_iteration=self.cycle_iteration
+        )
 
         # Load the mesh of the normalized SDF-space geometry.
         nerf_results_dir = file_utils.bundlesdf_nerf_results_dir(
-            self.vision_asset, self.cycle_iteration, self.bundlesdf_id)
+            dataset=self.vision_asset,
+            tracking_bundlesdf_id=self.tracking_bundlesdf_id,
+            nerf_bundlesdf_id=self.nerf_bundlesdf_id,
+            cycle_iteration=self.cycle_iteration
+        )
         obj_file = op.join(nerf_results_dir, 'mesh_cleaned.obj')
 
         # Sample points on the mesh.
@@ -396,7 +415,3 @@ class SDFSliceViewer:
                 cps_near_sdf_filepath, cps_slices_filepath,
                 cps_slices_pred_filepath, video_output_file=video_output_file,
                 figure_output_file=figure_output_file)
-
-
-
-

@@ -93,16 +93,17 @@ def bundlesdf_pose_dir(dataset: str, cycle_iteration: int, bundlesdf_id: str
     assert op.exists(path), f'Requires {path} to exist but not found.'
     return path
 
-def bundlesdf_nerf_results_dir(dataset: str, cycle_iteration: int,
-                               bundlesdf_id: str) -> str:
+def bundlesdf_nerf_results_dir(
+        dataset: str, cycle_iteration: int, tracking_bundlesdf_id: str,
+        nerf_bundlesdf_id: str) -> str:
     """BundleSDF's NeRF results directory for a particular run and dataset.
-    Gets the NeRF results from the same run that generated the trajectory."""
+    Gets the NeRF results from the NeRF run associated with a tracking run."""
     bundlesdf_result_dir = bundlesdf_run_results_dir(
         dataset=dataset, cycle_iteration=cycle_iteration,
-        bundlesdf_id=bundlesdf_id
+        bundlesdf_id=tracking_bundlesdf_id
     )
     nerf_results_dir = bsdf_file_utils.nerf_results_subdir(
-        out_folder=bundlesdf_result_dir, bundlesdf_run_id=bundlesdf_id,
+        out_folder=bundlesdf_result_dir, bundlesdf_run_id=nerf_bundlesdf_id,
         create=False
     )
     assert op.exists(nerf_results_dir), f'Requires {nerf_results_dir} to ' + \
@@ -195,10 +196,11 @@ def contactnets_input_geometry_dir(
     """ContactNets' input directory for geometry information from BundleSDF."""
     object = dataset.split('_')[0]
     pll_asset_subdirs = op.join(f'vision_{object}', dataset)
-    return assure_created(
-        pll_file_utils.geom_for_pll_dir(
-            pll_asset_subdirs, bundlesdf_id, iteration, check_exists=False)
-    )
+    geom_for_pll_dir = pll_file_utils.geom_for_pll_dir(
+        pll_asset_subdirs, bundlesdf_id, iteration, check_exists=False)
+    if create:
+        return assure_created(geom_for_pll_dir)
+    return geom_for_pll_dir
 
 def contactnets_output_dir(dataset: str, cycle_iteration: int, pll_id: str
                            ) -> str:
@@ -257,90 +259,114 @@ def inspection_dir() -> str:
     return assure_created(op.join(DATA_GEN_DIR, 'consolidated_results'))
 
 def inspection_overlay_video_filepath(
-        dataset: str, bundlesdf_id: str, cycle_iteration: int) -> str:
+        dataset: str, tracking_bundlesdf_id: str, nerf_bundlesdf_id: str,
+        cycle_iteration: int) -> str:
     """The directory for all overlay videos."""
     overlay_video_dir = op.join(inspection_dir(), 'overlay_videos')
 
-    if bundlesdf_id.startswith('bundlesdf_id_'):
-        bundlesdf_id = bundlesdf_id[13:]
+    if tracking_bundlesdf_id.startswith('bundlesdf_id_'):
+        tracking_bundlesdf_id = tracking_bundlesdf_id[13:]
+    if nerf_bundlesdf_id.startswith('bundlesdf_id_'):
+        nerf_bundlesdf_id = nerf_bundlesdf_id[13:]
 
     now = datetime.datetime.now()
     date_str = now.strftime('%m%d')
-    filename = f'{date_str}_{dataset}_{bundlesdf_id}_{cycle_iteration}.mp4'
+    filename = f'{date_str}_{dataset}_{tracking_bundlesdf_id}_' + \
+        f'{nerf_bundlesdf_id}_{cycle_iteration}.mp4'
 
     return op.join(overlay_video_dir, filename)
 
 def inspection_keyframe_overlay_image_dir(
-        dataset: str, bundlesdf_id: str, cycle_iteration: int) -> str:
+        dataset: str, tracking_bundlesdf_id: str, nerf_bundlesdf_id: str,
+        cycle_iteration: int) -> str:
     """The directory for a NeRF run's optimized keyframe pose overlays."""
     parent_dir = op.join(inspection_dir(), 'keyframe_overlays')
 
-    if bundlesdf_id.startswith('bundlesdf_id_'):
-        bundlesdf_id = bundlesdf_id[13:]
+    if tracking_bundlesdf_id.startswith('bundlesdf_id_'):
+        tracking_bundlesdf_id = tracking_bundlesdf_id[13:]
+    if nerf_bundlesdf_id.startswith('bundlesdf_id_'):
+        nerf_bundlesdf_id = nerf_bundlesdf_id[13:]
 
     now = datetime.datetime.now()
     date_str = now.strftime('%m%d')
-    child_dir_name = f'{date_str}_{dataset}_{bundlesdf_id}_{cycle_iteration}'
+    child_dir_name = f'{date_str}_{dataset}_{tracking_bundlesdf_id}_' + \
+        f'{nerf_bundlesdf_id}_{cycle_iteration}'
 
     return assure_created(op.join(parent_dir, child_dir_name))
 
 def inspection_trajectory_plots_dir_and_prefix(
-        dataset: str, bundlesdf_id: str, cycle_iteration: int) -> str:
+        dataset: str, tracking_bundlesdf_id: str, nerf_bundlesdf_id: str,
+        cycle_iteration: int) -> str:
     """The directory for all trajectory plots."""
     traj_dir = assure_created(op.join(inspection_dir(), 'trajectories'))
 
-    if bundlesdf_id.startswith('bundlesdf_id_'):
-        bundlesdf_id = bundlesdf_id[13:]
+    if tracking_bundlesdf_id.startswith('bundlesdf_id_'):
+        tracking_bundlesdf_id = tracking_bundlesdf_id[13:]
+    if nerf_bundlesdf_id.startswith('bundlesdf_id_'):
+        nerf_bundlesdf_id = nerf_bundlesdf_id[13:]
 
     now = datetime.datetime.now()
     date_str = now.strftime('%m%d')
-    prefix = f'{date_str}_{dataset}_{bundlesdf_id}_{cycle_iteration}'
+    prefix = f'{date_str}_{dataset}_{tracking_bundlesdf_id}_' + \
+        f'{nerf_bundlesdf_id}_{cycle_iteration}'
 
     return traj_dir, prefix
 
 def inspection_mesh_filepath(
-        dataset: str, bundlesdf_id: str, cycle_iteration: int) -> str:
+        dataset: str, tracking_bundlesdf_id: str, nerf_bundlesdf_id: str,
+        cycle_iteration: int) -> str:
     """The directory for all meshes."""
     mesh_dir = assure_created(op.join(inspection_dir(), 'meshes'))
 
-    if bundlesdf_id.startswith('bundlesdf_id_'):
-        bundlesdf_id = bundlesdf_id[13:]
+    if tracking_bundlesdf_id.startswith('bundlesdf_id_'):
+        tracking_bundlesdf_id = tracking_bundlesdf_id[13:]
+    if nerf_bundlesdf_id.startswith('bundlesdf_id_'):
+        nerf_bundlesdf_id = nerf_bundlesdf_id[13:]
 
     now = datetime.datetime.now()
     date_str = now.strftime('%m%d')
     filename = \
-        f'{date_str}_{dataset}_{bundlesdf_id}_{cycle_iteration}_cleaned.obj'
+        f'{date_str}_{dataset}_{tracking_bundlesdf_id}_' + \
+            f'{nerf_bundlesdf_id}_{cycle_iteration}_cleaned.obj'
 
     return op.join(mesh_dir, filename)
 
 def inspection_3d_slice_video_filepath(
-        dataset: str, bundlesdf_id: str, cycle_iteration: int) -> str:
+        dataset: str, tracking_bundlesdf_id: str, nerf_bundlesdf_id: str,
+        cycle_iteration: int) -> str:
     """The directory for all 3D slice plots."""
     slice_plot_dir = assure_created(
         op.join(inspection_dir(), '3d_slice_videos'))
 
-    if bundlesdf_id.startswith('bundlesdf_id_'):
-        bundlesdf_id = bundlesdf_id[13:]
+    if tracking_bundlesdf_id.startswith('bundlesdf_id_'):
+        tracking_bundlesdf_id = tracking_bundlesdf_id[13:]
+    if nerf_bundlesdf_id.startswith('bundlesdf_id_'):
+        nerf_bundlesdf_id = nerf_bundlesdf_id[13:]
 
     now = datetime.datetime.now()
     date_str = now.strftime('%m%d')
-    filename = f'{date_str}_{dataset}_{bundlesdf_id}_{cycle_iteration}.mp4'
+    filename = f'{date_str}_{dataset}_{tracking_bundlesdf_id}_' + \
+        f'{nerf_bundlesdf_id}_{cycle_iteration}.mp4'
 
     return op.join(slice_plot_dir, filename)
 
 def inspection_3d_slice_figure_filepath(
-        dataset: str, bundlesdf_id: str, cycle_iteration: int) -> str:
+        dataset: str, tracking_bundlesdf_id: str, nerf_bundlesdf_id: str,
+        cycle_iteration: int) -> str:
     """The directory for all 3D slice plots."""
     slice_plot_dir = assure_created(
         op.join(inspection_dir(), '3d_slice_figures'))
 
-    if bundlesdf_id.startswith('bundlesdf_id_'):
-        bundlesdf_id = bundlesdf_id[13:]
+    if tracking_bundlesdf_id.startswith('bundlesdf_id_'):
+        tracking_bundlesdf_id = tracking_bundlesdf_id[13:]
+    if nerf_bundlesdf_id.startswith('bundlesdf_id_'):
+        nerf_bundlesdf_id = nerf_bundlesdf_id[13:]
 
     now = datetime.datetime.now()
     date_str = now.strftime('%m%d')
     filename = \
-        f'{date_str}_{dataset}_{bundlesdf_id}_{cycle_iteration}.fig.pickle'
+        f'{date_str}_{dataset}_{tracking_bundlesdf_id}_' + \
+            f'{nerf_bundlesdf_id}_{cycle_iteration}.fig.pickle'
 
     return op.join(slice_plot_dir, filename)
 
@@ -508,12 +534,16 @@ def load_keyframe_indices_from_nerf_results_yml(
     return keyframe_indices
 
 def load_optimized_keyframe_poses_from_nerf_results(
-        dataset: str, cycle_iteration: int, bundlesdf_id: str) -> np.ndarray:
+        dataset: str, cycle_iteration: int, tracking_bundlesdf_id: str,
+        nerf_bundlesdf_id: str) -> np.ndarray:
     """While BundleSDF trains the NeRF model, it produces optimized poses for
     all of the keyframes.  This function loads these optimized poses from the
     NeRF results directory, converting them to the standard ob_in_cam format."""
     nerf_results_dir = bundlesdf_nerf_results_dir(
-        dataset, cycle_iteration, bundlesdf_id)
+        dataset=dataset, cycle_iteration=cycle_iteration,
+        tracking_bundlesdf_id=tracking_bundlesdf_id,
+        nerf_bundlesdf_id=nerf_bundlesdf_id
+    )
     keyframe_data = np.loadtxt(
         op.join(nerf_results_dir, 'poses_after_nerf.txt'))
 

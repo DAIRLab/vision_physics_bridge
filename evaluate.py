@@ -518,7 +518,8 @@ class TrajectoryPerformanceEvaluator:
             file_utils.load_camera_extrinsics(self.object)
 
         traj_conv = TrajectoryConverterBundleSDFToPLL(
-            bundlesdf_id=self.bundlesdf_id, 
+            tracking_bundlesdf_id=self.bundlesdf_id,
+            nerf_bundlesdf_id=self.bundlesdf_id,  # TODO want to change?
             relative_start_frames=relative_start_frames,
             relative_end_frames=relative_end_frames,
             start_ros_times=start_ros_times, start_toss=self.start_toss,

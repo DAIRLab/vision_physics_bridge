@@ -110,10 +110,11 @@ class TrajectoryConverterBundleSDFToPLL:
     only the object immediately after it has been released at the beginning of
     the toss.
     """
-    def __init__(self, bundlesdf_id: str, start_toss: int,
-                 end_toss: int, object: str, cycle_iteration: int,
-                 cam_trans: np.ndarray, cam_rot_axis_angle: np.ndarray,
-                 frame_rate: int, z_table: float, relative_start_frames: list,
+    def __init__(self, tracking_bundlesdf_id: str, nerf_bundlesdf_id: str,
+                 start_toss: int, end_toss: int, object: str,
+                 cycle_iteration: int, cam_trans: np.ndarray,
+                 cam_rot_axis_angle: np.ndarray, frame_rate: int,
+                 z_table: float, relative_start_frames: list,
                  relative_end_frames: list, start_ros_times: list,
                  plot: bool = False) -> None:
         """Prepare for processing pose data from TagSLAM and BundleSDF.
@@ -149,7 +150,8 @@ class TrajectoryConverterBundleSDFToPLL:
         self.object = object
         self.iteration_num = cycle_iteration
 
-        self.bundlesdf_id = bundlesdf_id
+        self.tracking_bundlesdf_id = tracking_bundlesdf_id
+        self.nerf_bundlesdf_id = nerf_bundlesdf_id
 
         self.plot = plot
         self.cam_trans = cam_trans
@@ -189,10 +191,10 @@ class TrajectoryConverterBundleSDFToPLL:
             self.dataset, check_exists=True)
         self.bundlesdf_dir = file_utils.bundlesdf_pose_dir(
             self.dataset, cycle_iteration=self.iteration_num,
-            bundlesdf_id=self.bundlesdf_id)
+            bundlesdf_id=self.tracking_bundlesdf_id)
         self.annotated_dir = file_utils.bundlesdf_annotated_poses_dir(
             self.dataset)
-        
+
     def _load_poses(self) -> None:
         """Load the timestamped poses reported from TagSLAM and BundleSDF,
         saving the results in attributes:
@@ -306,14 +308,17 @@ class TrajectoryConverterBundleSDFToPLL:
         # frame directory, in keyframes.yml.
         keyframe_idx = \
             file_utils.load_keyframe_indices_from_nerf_results_yml(
-                self.dataset, self.iteration_num, self.bundlesdf_id)
+                self.dataset, self.iteration_num, self.tracking_bundlesdf_id)
         self.keyframe_idx = [i-1 for i in keyframe_idx]
 
         # Get the adjusted keyframe poses from the BundleSDF NeRF results'
         # poses_after_nerf.txt.
         keyframe_tfs = \
             file_utils.load_optimized_keyframe_poses_from_nerf_results(
-                self.dataset, self.iteration_num, self.bundlesdf_id)
+                dataset=self.dataset, cycle_iteration=self.iteration_num,
+                tracking_bundlesdf_id=self.tracking_bundlesdf_id,
+                nerf_bundlesdf_id=self.nerf_bundlesdf_id
+            )
 
         keyframe_b_poses = []
         keyframe_t_poses = []
@@ -838,15 +843,17 @@ class TrajectoryConverterBundleSDFToPLL:
             # data goes.
             pll_bsdf_asset_dir = file_utils.contactnets_input_dir_bundlesdf(
                 dataset=self.dataset, iteration=self.iteration_num,
-                bundlesdf_id=self.bundlesdf_id, full=full_trajectory)
+                bundlesdf_id=self.tracking_bundlesdf_id, full=full_trajectory)
             plot_name = '' if full else f'toss_{toss_num}_'
-            plot_name += f'{self.bundlesdf_id}.png'
+            plot_name += f'{self.tracking_bundlesdf_id}.png'
             plt.savefig(op.join(pll_bsdf_asset_dir, plot_name))
             print(f'Saved plot to {op.join(pll_bsdf_asset_dir, plot_name)}.\n')
 
             # Also save the figure in the results inspection directory.
             dir, prefix = file_utils.inspection_trajectory_plots_dir_and_prefix(
-                dataset=self.dataset, bundlesdf_id=self.bundlesdf_id,
+                dataset=self.dataset,
+                tracking_bundlesdf_id=self.tracking_bundlesdf_id,
+                nerf_bundlesdf_id=self.nerf_bundlesdf_id,
                 cycle_iteration=self.iteration_num
             )
             plot_name = f'{prefix}.png' if full else \
@@ -962,8 +969,8 @@ class TrajectoryConverterBundleSDFToPLL:
             # Save full trajectory.
             full_bundlesdf_dir = file_utils.contactnets_input_dir_bundlesdf(
                 dataset=self.dataset, iteration=self.iteration_num,
-                bundlesdf_id=self.bundlesdf_id, full=True)
-            traj_filename = f'{self.bundlesdf_id}.pt'
+                bundlesdf_id=self.tracking_bundlesdf_id, full=True)
+            traj_filename = f'{self.tracking_bundlesdf_id}.pt'
             torch.save(
                 torch.tensor(self.bundlesdf_b_full_processed_states),
                 op.join(full_bundlesdf_dir, traj_filename))
@@ -972,7 +979,7 @@ class TrajectoryConverterBundleSDFToPLL:
             # Do toss trajectories.
             toss_bundlesdf_dir = file_utils.contactnets_input_dir_bundlesdf(
                 dataset=self.dataset, iteration=self.iteration_num,
-                bundlesdf_id=self.bundlesdf_id, full=False)
+                bundlesdf_id=self.tracking_bundlesdf_id, full=False)
             for i in range(len(toss_filenames)):
                 torch.save(
                     torch.tensor(self.bundlesdf_b_toss_processed_states[i]),
@@ -992,15 +999,17 @@ class GeometryConverterBundleSDFToPLL:
             code only grabs the NeRF results from the tracking experiment's
             associated NeRF run.
     """
-    def __init__(self,
-                 bundlesdf_id: str, start_toss: int,
-                 end_toss: int, object: str, cycle_iteration: int, plot: bool):
+    def __init__(self, tracking_bundlesdf_id: str, nerf_bundlesdf_id: str,
+                 start_toss: int, end_toss: int, object: str,
+                 cycle_iteration: int, plot: bool):
         # Get the BundleSDF results directory where we can find the meshes.
         vision_asset = f'{object}_{start_toss}'
         vision_asset += f'-{end_toss}' if start_toss != end_toss else ''
 
         # Set up directories.
-        self._set_up_directories(vision_asset, cycle_iteration, bundlesdf_id)
+        self._set_up_directories(
+            vision_asset, cycle_iteration, tracking_bundlesdf_id,
+            nerf_bundlesdf_id)
 
         # Load the BundleSDF results' mesh and compute its convex hull.  This
         # mesh is already represented in world units about the BundleSDF
@@ -1011,11 +1020,13 @@ class GeometryConverterBundleSDFToPLL:
         self.plot = plot
 
         self.vision_asset = vision_asset
-        self.bundlesdf_id = bundlesdf_id
+        self.tracking_bundlesdf_id = tracking_bundlesdf_id
+        self.nerf_bundlesdf_id = nerf_bundlesdf_id
         self.cycle_iteration = cycle_iteration
 
-    def _set_up_directories(self, vision_asset: str, cycle_iteration: int,
-                            bundlesdf_id: str) -> None:
+    def _set_up_directories(
+            self, vision_asset: str, cycle_iteration: int,
+            tracking_bundlesdf_id: str, nerf_bundlesdf_id: str) -> None:
         """Given the vision asset, cycle iteration, and BundleSDF ID, loads the
         following attributes:
             - self.nerf_results_dir
@@ -1023,10 +1034,11 @@ class GeometryConverterBundleSDFToPLL:
         """
         self.nerf_results_dir = file_utils.bundlesdf_nerf_results_dir(
             dataset=vision_asset, cycle_iteration=cycle_iteration,
-            bundlesdf_id=bundlesdf_id
+            tracking_bundlesdf_id=tracking_bundlesdf_id,
+            nerf_bundlesdf_id=nerf_bundlesdf_id
         )
         self.geometry_for_pll_dir = file_utils.contactnets_input_geometry_dir(
-            vision_asset, cycle_iteration, bundlesdf_id)
+            vision_asset, cycle_iteration, nerf_bundlesdf_id)
 
     def plot_mesh_and_hull_points(self):
         mesh = self.mesh_bsdf
@@ -1108,7 +1120,11 @@ class GeometryConverterBundleSDFToPLL:
         # inspection folder.
         original_mesh_path = op.join(self.nerf_results_dir, 'mesh_cleaned.obj')
         new_mesh_path = file_utils.inspection_mesh_filepath(
-            self.vision_asset, self.bundlesdf_id, self.cycle_iteration)
+            dataset=self.vision_asset,
+            tracking_bundlesdf_id=self.tracking_bundlesdf_id,
+            nerf_bundlesdf_id=self.nerf_bundlesdf_id,
+            cycle_iteration=self.cycle_iteration
+        )
         os.system(f'cp {original_mesh_path} {new_mesh_path}')
         print(f'Copied mesh from BundleSDF to {new_mesh_path}.\n')
 
@@ -1170,6 +1186,10 @@ class GeometryConverterBundleSDFToPLL:
               type=str,
               default=None,
               help="what BundleSDF run ID associated with pose outputs to use.")
+@click.option('--nerf-bundlesdf-id',
+              type=str,
+              default=None,
+              help="what BundleSDF run ID associated with NeRF outputs to use.")
 @click.option('--cycle-iteration',
               type=int,
               default=1,
@@ -1187,8 +1207,9 @@ class GeometryConverterBundleSDFToPLL:
               help="whether to show the plots.")
 
 
-def main_command(vision_asset: str, bundlesdf_id: str, cycle_iteration: int,
-                 make_overlay: bool, remote: bool, show: bool):
+def main_command(vision_asset: str, bundlesdf_id: str, nerf_bundlesdf_id: str,
+                 cycle_iteration: int, make_overlay: bool, remote: bool,
+                 show: bool):
     # First decode the system and start/end tosses from the provided asset
     # directory.
     assert cycle_iteration > 0, f'Invalid cycle iteration: {cycle_iteration}.'
@@ -1204,8 +1225,13 @@ def main_command(vision_asset: str, bundlesdf_id: str, cycle_iteration: int,
     # Decode the BundleSDF run ID.
     if bundlesdf_id[:13] != 'bundlesdf_id_':
         bundlesdf_id = f'bundlesdf_id_{bundlesdf_id}'
-    print(f'Processing toss {vision_asset} from BundleSDF run ID ' + \
-            f'{bundlesdf_id}.\n')
+    if nerf_bundlesdf_id is None:
+        nerf_bundlesdf_id = bundlesdf_id
+    elif nerf_bundlesdf_id[:13] != 'bundlesdf_id_':
+        nerf_bundlesdf_id = f'bundlesdf_id_{nerf_bundlesdf_id}'
+
+    print(f'Processing toss {vision_asset} from BundleSDF tracking run ID ' + \
+            f'{bundlesdf_id} and NeRF run ID {nerf_bundlesdf_id}.\n')
 
     # Get the camera extrinsics.
     cam_trans, cam_rot_axis_angle = file_utils.load_camera_extrinsics(object)
@@ -1237,14 +1263,16 @@ def main_command(vision_asset: str, bundlesdf_id: str, cycle_iteration: int,
 
     # Do the geometry conversion.
     geom_converter = GeometryConverterBundleSDFToPLL(
-        bundlesdf_id=bundlesdf_id, start_toss=start_toss, end_toss=end_toss,
-        object=object, cycle_iteration=cycle_iteration, plot=show
+        tracking_bundlesdf_id=bundlesdf_id, nerf_bundlesdf_id=nerf_bundlesdf_id,
+        start_toss=start_toss, end_toss=end_toss, object=object,
+        cycle_iteration=cycle_iteration, plot=show
     )
     geom_converter.process_and_save()
 
     # Do the trajectory conversion.
     traj_converter = TrajectoryConverterBundleSDFToPLL(
-        bundlesdf_id=bundlesdf_id, 
+        tracking_bundlesdf_id=bundlesdf_id,
+        nerf_bundlesdf_id=nerf_bundlesdf_id,
         relative_start_frames=relative_start_frames,
         relative_end_frames=relative_end_frames,
         start_ros_times=start_ros_times, start_toss=start_toss,
@@ -1260,7 +1288,10 @@ def main_command(vision_asset: str, bundlesdf_id: str, cycle_iteration: int,
     # Create an overlay video.
     if make_overlay:
         overlay_generator = OverlayVideoGenerator(
-            vision_asset, bundlesdf_id, cycle_iteration, remote)
+            vision_asset=vision_asset, tracking_bundlesdf_id=bundlesdf_id,
+            nerf_bundlesdf_id=nerf_bundlesdf_id,
+            cycle_iteration=cycle_iteration, remote=remote
+        )
         overlay_generator.make_overlay_video()
         overlay_generator.make_optimized_keyframe_overlay_images()
     else:
@@ -1268,7 +1299,9 @@ def main_command(vision_asset: str, bundlesdf_id: str, cycle_iteration: int,
 
     # Generate the SDF slice images.
     sdf_slice_generator = SDFSliceViewer(
-        vision_asset, bundlesdf_id, cycle_iteration)
+        vision_asset=vision_asset, tracking_bundlesdf_id=bundlesdf_id,
+        nerf_bundlesdf_id=nerf_bundlesdf_id, cycle_iteration=cycle_iteration
+    )
     sdf_slice_generator.visualization()
 
 
