@@ -196,11 +196,13 @@ class DatasetCreator:
 
         for i, bsdf_time in enumerate(bsdf_times):
             # Find the two TagSLAM times that sandwich the current BSDF time.
-            after_idx = np.where(tagslam_times > bsdf_time)[0][0]
+            try:
+                after_idx = np.where(tagslam_times > bsdf_time)[0][0]
+            except IndexError:
+                after_idx = len(tagslam_times) - 1
+                print(f'bsdf frame {i} is after the last TagSLAM pose.')
             try:
                 before_idx = np.where(tagslam_times < bsdf_time)[0][-1]
-                assert after_idx-before_idx == 1, f'Expected 1 between ' + \
-                    f'{before_idx=} and {after_idx=}.'
             except IndexError:
                 before_idx = 0
                 print(f'bsdf frame {i} is before the first TagSLAM pose.')
@@ -211,9 +213,13 @@ class DatasetCreator:
             p1 = tagslam_poses[before_idx]
             p2 = tagslam_poses[after_idx]
             if t1 == t2:
-                assert before_idx == 0 and after_idx == 0
+                assert (before_idx == 0 and after_idx == 0) or \
+                    (before_idx == len(tagslam_times)-1 and after_idx == len(tagslam_times)-1), \
+                    f'Expected {t1=} == {t2=} only at the beginning or end.'
                 interpolated_pose = p1
             else:
+                assert after_idx-before_idx == 1, f'Expected 1 between ' + \
+                    f'{before_idx=} and {after_idx=}.'
                 fraction = (bsdf_time - t1) / (t2 - t1)
                 interpolated_pose = p1 + fraction*(p2 - p1)
 

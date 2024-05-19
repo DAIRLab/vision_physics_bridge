@@ -568,7 +568,7 @@ tosses:
       end_time:
         secs: 1691457467
         nsecs: 891929
-      start_frame: 30
+      start_frame: 35
       end_frame: 115
 
     - toss: 3
@@ -578,8 +578,8 @@ tosses:
       end_time:
         secs: 1691457475
         nsecs: 286966
-      start_frame: 1
-      end_frame: 170
+      start_frame: 5
+      end_frame: 100
 
     - toss: 4
       start_time:
@@ -588,8 +588,8 @@ tosses:
       end_time:
         secs: 1691457481
         nsecs: 285988
-      start_frame: 22
-      end_frame: 110
+      start_frame: 25
+      end_frame: 80
 
     - toss: 5
       start_time:
@@ -599,7 +599,7 @@ tosses:
         secs: 1691457485
         nsecs: 982220
       start_frame: 7
-      end_frame: 60
+      end_frame: 50
 
     - toss: 6
       start_time:
@@ -629,7 +629,7 @@ tosses:
         secs: 1691457505
         nsecs: 705429
       start_frame: 28
-      end_frame: 250
+      end_frame: 200
 
     - toss: 9
       start_time:
@@ -638,8 +638,8 @@ tosses:
       end_time:
         secs: 1691457513
         nsecs: 538905
-      start_frame: 10
-      end_frame: 175
+      start_frame: 12
+      end_frame: 100
 
     - toss: 10
       start_time:
@@ -648,8 +648,8 @@ tosses:
       end_time:
         secs: 1691457518
         nsecs: 436350
-      start_frame: 28
-      end_frame: 85
+      start_frame: 29
+      end_frame: 80
 
   # cube_new:
   #   - toss: 1
@@ -756,8 +756,8 @@ tosses:
       end_time:
         secs: 1696015414
         nsecs: 129579
-      start_frame: 15
-      end_frame: 60
+      start_frame: 18
+      end_frame: 40
     
     - toss: 9
       start_time:
@@ -766,8 +766,8 @@ tosses:
       end_time:
         secs: 1696015421
         nsecs: 425617
-      start_frame: 26
-      end_frame: 140
+      start_frame: 27
+      end_frame: 80
 
     - toss: 10
       start_time:

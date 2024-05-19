@@ -153,7 +153,7 @@ class OverlayVideoGenerator:
         #             color=TAGSLAM_COLOR, reflectivity=0.0, transparent=0,
         #             opacity=.4)
         #     )
-        # vis["tagslam_triad"].set_object(g.triad(scale=0.1))
+        vis["tagslam_triad"].set_object(g.triad(scale=0.05))
         vis["bundlesdf_triad"].set_object(g.triad(scale=0.1))
         vis["bundlesdf_mesh"].set_object(
             g.ObjMeshGeometry.from_file(self.mesh_file),
@@ -173,6 +173,8 @@ class OverlayVideoGenerator:
             import subprocess
             self.xvfb_process = subprocess.Popen(['Xvfb', ':99', '-screen', '0',
                                                   '640x480x24'])
+            print(f"Changing display environment from {os.environ['DISPLAY']} variable to :99")
+            self.old_display = os.environ['DISPLAY']
             os.environ['DISPLAY'] = ':99'
 
         options = webdriver.ChromeOptions()
@@ -237,6 +239,7 @@ class OverlayVideoGenerator:
             # If not exited properly, orphan Xvfb processes will remain active.
             self.xvfb_process.terminate()
             self.xvfb_process.wait()
+            os.environ['DISPLAY'] = self.old_display
             print("Terminated Xvfb process")
 
     def _get_absolute_frames(self) -> None:
@@ -292,7 +295,7 @@ class OverlayVideoGenerator:
 
         # if 'cube' in self.vision_asset:
         #     self.vis["tagslam_cube"].set_transform(self.T_MW @ T_WA)
-        # self.vis["tagslam_triad"].set_transform(self.T_MW @ T_WA)
+        self.vis["tagslam_triad"].set_transform(self.T_MW @ T_WA)
         self.vis["bundlesdf_triad"].set_transform(self.T_MC @ T_CB)
         self.vis["bundlesdf_mesh"].set_transform(self.T_MC @ T_CB)
 
