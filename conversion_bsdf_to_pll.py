@@ -43,16 +43,6 @@ MEDIAN_FILTER_KERNEL_SIZE = 3
 YAML_PATH = file_utils.PROCESSING_YAML_FILE
 
 
-def rotvecfix(rv):
-    for i in range(rv.shape[0]-1):
-        rvi = rv[i,:]
-        rvip1 = rv[i+1,:]
-        theta = np.linalg.norm(rvip1)
-        if theta > 0.0:
-            rnew = rvip1*(1 - 2*math.pi/theta)
-            if np.linalg.norm(rvi - rnew) < np.linalg.norm(rvi - rvip1):
-                rv[i+1,:] = rnew
-    return rv
 
 def smooth_positions(positions, window_size=5):
     """
@@ -92,9 +82,10 @@ def smooth_quaternions_pyquat(quats, alpha=0.5):
 
 
 class TrajectoryConverterBundleSDFToPLL:
-    """Class for processing pose data from BundleSDF.  Can load corresponding
-    poses from TagSLAM, convert between BundleSDF and TagSLAM origins and
-    between camera and world frames.
+    """Class for processing pose data from BundleSDF.  Can detect if there are
+    corresponding TagSLAM poses, in which case these will be loaded.  Can
+    convert between BundleSDF and TagSLAM origins (if both) and between camera
+    and world frames.
 
     Since the ContactNets toss's start and end are defined based on indexing
     into the BundleSDF trajectories, the corresponding TagSLAM trajectories
@@ -446,11 +437,11 @@ class TrajectoryConverterBundleSDFToPLL:
         assert quat.shape[1] == 4, f'{quat.shape=} not of expected size (N, 4).'
         assert quat.ndim == 2, f'{quat.shape=} not of expected size (N, 4).'
 
-        quat /= np.linalg.norm(quat, axis=1).reshape(-1,1)
+        quat = self._make_quaternions_consistent(quat)
         rot_t = Rotation.from_quat(quat)
 
         # Fix and filter quaternions.
-        rvecs = rotvecfix(rot_t.as_rotvec())
+        rvecs = math_utils.rotvecfix(rot_t.as_rotvec())
         for i in range(3):
             # Always use medfilt no matter FILTER_TYPE.
             rvecs[:, i] = signal.medfilt(
@@ -464,14 +455,7 @@ class TrajectoryConverterBundleSDFToPLL:
         assert quat.shape[1] == 4, f'{quat.shape=} not of expected size (N, 4).'
         assert quat.ndim == 2, f'{quat.shape=} not of expected size (N, 4).'
 
-        quat /= np.linalg.norm(quat, axis=1).reshape(-1,1)
-        rot_t = Rotation.from_quat(quat)
-
-        # Fix and filter quaternions.
-        rvecs = rotvecfix(rot_t.as_rotvec())
-        rot_t = rot_t.from_rotvec(rvecs)
-
-        return rot_t.as_quat()
+        return math_utils.fix_quaternions(quat)
 
     def _process_poses(
             self, poses, times, filter_rot=FILTER_ORIENTATIONS,

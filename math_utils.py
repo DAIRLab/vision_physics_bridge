@@ -520,6 +520,31 @@ def xyzw2wxyz(quat_xyzw):
     return np.concatenate((w, xyz), axis=1).reshape(original_shape)
 
 
+def rotvecfix(rv):
+    for i in range(rv.shape[0]-1):
+        rvi = rv[i,:]
+        rvip1 = rv[i+1,:]
+        theta = np.linalg.norm(rvip1)
+        if theta > 0.0:
+            rnew = rvip1*(1 - 2*math.pi/theta)
+            if np.linalg.norm(rvi - rnew) < np.linalg.norm(rvi - rvip1):
+                rv[i+1,:] = rnew
+    return rv
+
+def fix_quaternions(quat_xyzw):
+    """Input quaternions must be in xyzw format.  Returns the fixed quaternions
+    in xyzw format.  Inputs can be (N, 4) or (4,)."""
+    assert quat_xyzw.shape == (4,) or quat_xyzw.shape[1] == 4, \
+        f'Invalid {quat_xyzw.shape=}.'
+    assert quat_xyzw.ndim <= 2, f'Invalid {quat_xyzw.shape=}.'
+    rot_t = R.from_quat(quat_xyzw)
+
+    # Fix and filter quaternions.
+    rvecs = rotvecfix(rot_t.as_rotvec())
+    rot_t = rot_t.from_rotvec(rvecs)
+
+    return rot_t.as_quat()
+
 def quaternion_error(quat1_wxyz, quat2_wxyz):
     """Input quaternions must be in wxyz format.  Returns the angular error in
     radians between the two quaternions over time.  Inputs can be (N, 4) or
@@ -531,8 +556,8 @@ def quaternion_error(quat1_wxyz, quat2_wxyz):
         quat1_wxyz = quat1_wxyz.reshape(1, 4)
         quat2_wxyz = quat2_wxyz.reshape(1, 4)
 
-    quat1_wxyz = torch.Tensor(quat1_wxyz)
-    quat2_wxyz = torch.Tensor(quat2_wxyz)
+    quat1_wxyz = torch.Tensor(xyzw2wxyz(fix_quaternions(wxyz2xyzw(quat1_wxyz))))
+    quat2_wxyz = torch.Tensor(xyzw2wxyz(fix_quaternions(wxyz2xyzw(quat2_wxyz))))
 
     quat_shift = quaternion.multiply(quaternion.inverse(quat1_wxyz), quat2_wxyz)
     rot = quaternion.log(quat_shift)

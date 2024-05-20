@@ -43,6 +43,10 @@ assert bsdf_file_utils.BUNDLENETS_REPO_DIR == REPO_DIR, f"Unexpected file " \
 
 REALSENSE_CAMERA_NAME = 'cam0'
 PROCESSING_YAML_FILE = op.join(DATA_GEN_DIR, 'assets', 'config.yaml')
+TAGLESS_OBJECTS = ['bakingbox', 'burger', 'cardboard', 'chocolate', 'cream',
+                   'croc', 'crushedcan', 'duck', 'gallon', 'greencan', 'hotdog',
+                   'icetray', 'mug', 'oatly', 'pinkcan', 'stapler', 'styrofoam',
+                   'toothpaste']
 
 
 """Directory utilities."""
@@ -391,6 +395,8 @@ def load_camera_extrinsics(object: str) -> Tuple[np.ndarray, np.ndarray]:
         camera_extrinsics_filename = 'realsense_pose_milk_prism.yaml'
     if object == 'cube_hand':
         camera_extrinsics_filename = 'realsense_pose_cube_hand_60_3.yaml'
+    if object in TAGLESS_OBJECTS:
+        camera_extrinsics_filename = 'realsense_pose_tagless.yaml'
     camera_extrinsics_file = op.join(DATA_GEN_DIR, 'assets',
                                      camera_extrinsics_filename)
 

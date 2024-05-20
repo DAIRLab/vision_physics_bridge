@@ -92,6 +92,7 @@ class DatasetCreator:
         # Make the directories that all require.
         self.cnets_data_gen_dir = file_utils.cnets_data_gen_dataset_dir(
             self.vision_asset, check_exists=False)
+        file_utils.assure_created(self.cnets_data_gen_dir)
 
         # Make the directories that BundleSDF alone requires.
         if not self.tagslam_only:
@@ -312,6 +313,13 @@ class DatasetCreator:
 
 def main_command(vision_asset: str, tagslam_only: bool, bsdf_only: bool,
                  clear_data: bool):
+    # Automatically detect if BundleSDF-only is necessary based on if the object
+    # is a tagless one.
+    object = vision_asset.split('_')[0]
+    if object in file_utils.TAGLESS_OBJECTS:
+        bsdf_only = True
+        print(f'Automatically setting {bsdf_only=} for tagless {object=}.')
+
     # Get the data and pose directories, checking if they already exist.
     data_dir = file_utils.bundlesdf_video_dir(vision_asset, check_exists=False)
     tagslam_dir = file_utils.tagslam_pose_dir(vision_asset, check_exists=False)
