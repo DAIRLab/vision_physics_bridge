@@ -1,7 +1,6 @@
 """This file performs output conversions from BundleSDF trajectories to input
 formats required by PLL."""
 
-# import argparse
 import click
 import os
 import os.path as op

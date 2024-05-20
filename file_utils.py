@@ -424,7 +424,6 @@ def get_camera_intrinsics_filepath(object: str) -> str:
         filename = 'cam_K_tagless.txt'
     return op.join(DATA_GEN_DIR, 'assets', filename)
 
-# TODO fix this too
 def load_camera_intrinsics(object: str, as_matrix: bool = False):
     """The camera intrinsics appear to be the same for every experiment.  They
     are stored in cnets-data-generation/cam_K.txt."""

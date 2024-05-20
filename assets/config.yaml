@@ -354,6 +354,7 @@ dataset: #toss_id:rosbag_id
 tosses:
   ### Create empty list for each object and let me fill the secs and nsecs
   bakingbox:
+    - toss: 0
     - toss: 1
       start_time:
         secs: 1716134386
@@ -446,6 +447,7 @@ tosses:
       end_frame: 
 
   burger:
+    - toss: 0
     - toss: 1
       start_time:
         secs: 1716135417
@@ -565,6 +567,7 @@ tosses:
       end_frame:
   
   cardboard:
+    - toss: 0
     - toss: 1
       start_time:
         secs: 1716134211
@@ -657,6 +660,7 @@ tosses:
       end_frame:
 
   chocolate:
+    - toss: 0
     - toss: 1
       start_time:
         secs: 1716135256
@@ -776,6 +780,7 @@ tosses:
       end_frame:
 
   cream:
+    - toss: 0
     - toss: 1
       start_time:
         secs: 1716135113
@@ -895,6 +900,7 @@ tosses:
       end_frame:
 
   croc:
+    - toss: 0
     - toss: 1
       start_time:
         secs: 1716135545
@@ -1005,6 +1011,7 @@ tosses:
       end_frame:
 
   crushedcan:
+    - toss: 0
     - toss: 1
       start_time:
         secs: 1716134813
@@ -1115,6 +1122,7 @@ tosses:
       end_frame:
 
   duck:
+    - toss: 0
     - toss: 1
       start_time:
         secs: 1716135318
@@ -1225,6 +1233,7 @@ tosses:
       end_frame:
 
   gallon:
+    - toss: 0
     - toss: 1
       start_time:
         secs: 1716133831
@@ -1326,6 +1335,7 @@ tosses:
       end_frame:
 
   greencan:
+    - toss: 0
     - toss: 1
       start_time:
         secs: 1716134601
@@ -1418,6 +1428,7 @@ tosses:
       end_frame: 
 
   hotdog:
+    - toss: 0
     - toss: 1
       start_time:
         secs: 1716135478
@@ -1528,6 +1539,7 @@ tosses:
       end_frame:
 
   icetray:
+    - toss: 0
     - toss: 1
       start_time:
         secs: 1716134302
@@ -1620,6 +1632,7 @@ tosses:
       end_frame: 
 
   mug:
+    - toss: 0
     - toss: 1
       start_time:
         secs: 1716135667
@@ -1748,6 +1761,7 @@ tosses:
       end_frame:
 
   oatly:
+    - toss: 0
     - toss: 1
       start_time:
         secs: 1716134022
@@ -1840,6 +1854,7 @@ tosses:
       end_frame:
   
   pinkcan:
+    - toss: 0
     - toss: 1
       start_time:
         secs: 1716134747
@@ -1950,6 +1965,7 @@ tosses:
       end_frame:
 
   stapler:
+    - toss: 0
     - toss: 1
       start_time:
         secs: 1716134890
@@ -2051,6 +2067,7 @@ tosses:
       end_frame:
 
   styrofoam:
+    - toss: 0
     - toss: 1
       start_time:
         secs: 1716134075
@@ -2143,6 +2160,7 @@ tosses:
       end_frame: 
 
   toothpaste:
+    - toss: 0
     - toss: 1
       start_time:
         secs: 1716134942
