@@ -84,7 +84,7 @@ def load_and_adjust_depth_readings_in_image(
     object = vision_asset.split('_')[0]
 
     # Get the camera intrinsics and extrinsics.
-    fx, fy, cx, cy = file_utils.load_camera_intrinsics()
+    fx, fy, cx, cy = file_utils.load_camera_intrinsics(object)
     cam_trans, cam_rot_axis_angle = file_utils.load_camera_extrinsics(object)
     cam_trans = cam_trans.squeeze()
     cam_rot_axis_angle = cam_rot_axis_angle.squeeze()
@@ -110,7 +110,7 @@ def load_depth_image_as_points(vision_asset: str, frame_num: int,
     object = vision_asset.split('_')[0]
 
     # Get the camera intrinsics and extrinsics.
-    fx, fy, cx, cy = file_utils.load_camera_intrinsics()
+    fx, fy, cx, cy = file_utils.load_camera_intrinsics(object)
     cam_trans, cam_rot_axis_angle = file_utils.load_camera_extrinsics(object)
 
     # Load the depth image.

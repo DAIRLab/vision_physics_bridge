@@ -109,6 +109,7 @@ class DepthPlaneViewer:
         self.vision_asset = vision_asset
         object = vision_asset.split('_')[:-1]
         object = object[0] if len(object) == 1 else f'{object[0]}_{object[1]}'
+        self.object = object
         
         # Locate all the related files and directories for the given vision
         # asset.
@@ -155,7 +156,7 @@ class DepthPlaneViewer:
     def convert_depth_image_to_point_cloud(self) -> None:
         """Given the depth images stored at self.raw_images, convert them to
         point clouds in meters in the world frame."""
-        fx, fy, cx, cy = file_utils.load_camera_intrinsics()
+        fx, fy, cx, cy = file_utils.load_camera_intrinsics(self.object)
 
         for depth_image in self.raw_images[:1]:
             # Get height and width of the depth image.

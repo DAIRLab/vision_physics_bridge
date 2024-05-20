@@ -417,14 +417,18 @@ def load_camera_extrinsics(object: str) -> Tuple[np.ndarray, np.ndarray]:
     
     return cam_trans, cam_rot_axis_angle
 
-def get_camera_intrinsics_filepath() -> str:
+def get_camera_intrinsics_filepath(object: str) -> str:
     """Get the filepath for the camera intrinsics file."""
-    return op.join(DATA_GEN_DIR, 'assets', 'cam_K.txt')
+    filename = 'cam_K.txt'
+    if object in TAGLESS_OBJECTS:
+        filename = 'cam_K_tagless.txt'
+    return op.join(DATA_GEN_DIR, 'assets', filename)
 
-def load_camera_intrinsics(as_matrix: bool = False):
+# TODO fix this too
+def load_camera_intrinsics(object: str, as_matrix: bool = False):
     """The camera intrinsics appear to be the same for every experiment.  They
     are stored in cnets-data-generation/cam_K.txt."""
-    cam_K_file = get_camera_intrinsics_filepath()
+    cam_K_file = get_camera_intrinsics_filepath(object=object)
     if as_matrix:
         return np.loadtxt(cam_K_file)
 

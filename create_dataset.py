@@ -141,8 +141,8 @@ class DatasetCreator:
 
         if not self.tagslam_only:
             # Copy the camera intrinsics.
-            os.system(f'cp {file_utils.get_camera_intrinsics_filepath()} ' + \
-                    f'{op.join(self.data_dir, "cam_K.txt")}')
+            cam_K = file_utils.get_camera_intrinsics_filepath(self.object)
+            os.system(f'cp {cam_K} {op.join(self.data_dir, "cam_K.txt")}')
 
             self._compute_table_offset()
 

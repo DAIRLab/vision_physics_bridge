@@ -2,7 +2,9 @@
 /rosbags
 *.tar.gz
 *.txt
-!requirements.txt 
+!requirements.txt
+!/assets/cam_K.txt
+!/assets/cam_K_tagless.txt
 /__pycache__
 /dataset
 *.gif
