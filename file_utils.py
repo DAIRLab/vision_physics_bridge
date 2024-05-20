@@ -141,11 +141,20 @@ def bundlesdf_video_dir(dataset: str, check_exists: bool = False) -> str:
     """BundleSDF's video directory for a particular experiment."""
     return bsdf_file_utils.video_dir(dataset, check_exists=check_exists)
 
+def cnets_data_gen_dataset_dir(dataset: str, check_exists: bool = False) -> str:
+    """Directory for a particular dataset's data generation."""
+    path = op.join(DATA_GEN_DIR, 'dataset', dataset)
+    if check_exists:
+        assert op.exists(path), f'Requires {path} to exist but not found.'
+    return path
+
 def tagslam_pose_dir(dataset: str, check_exists: bool = False) -> str:
     """TagSLAM's pose directory for a particular dataset.  Contains tagslam.txt
     file and XXXX.txt files for every timestamp corresponding to the times in
     the first column of tagslam.txt."""
-    path = op.join(DATA_GEN_DIR, 'dataset', dataset, 'tagslam_poses')
+    dataset_dir = cnets_data_gen_dataset_dir(
+        dataset=dataset, check_exists=check_exists)
+    path = op.join(dataset_dir, 'tagslam_poses')
     if check_exists:
         assert op.exists(path), f'Requires {path} to exist but not found.'
     return path

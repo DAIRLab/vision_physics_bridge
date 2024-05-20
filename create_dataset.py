@@ -56,7 +56,8 @@ import rosbag_processor
 
 class DatasetCreator:
     """Class to assist with dataset creation for a given vision asset."""
-    def __init__(self, vision_asset: str, tagslam_only: bool = False, bsdf_only: bool = False):
+    def __init__(self, vision_asset: str, tagslam_only: bool = False,
+                 bsdf_only: bool = False):
         self.vision_asset = vision_asset
         self.tagslam_only = tagslam_only
         self.bsdf_only = bsdf_only
@@ -88,6 +89,11 @@ class DatasetCreator:
             file_utils.load_camera_extrinsics(self.object)
 
     def _set_up_directories(self):
+        # Make the directories that all require.
+        self.cnets_data_gen_dir = file_utils.cnets_data_gen_dataset_dir(
+            self.vision_asset, check_exists=False)
+
+        # Make the directories that BundleSDF alone requires.
         if not self.tagslam_only:
             # Get the RGB and depth directories.
             self.rgb_dir = file_utils.bundlesdf_video_rgb_dir(
@@ -98,18 +104,23 @@ class DatasetCreator:
                 self.vision_asset, check_exists=False)
             file_utils.assure_created(self.data_dir)
 
-        if not self.bsdf_only:
-            self.annotated_poses_dir = file_utils.bundlesdf_annotated_poses_dir(
-                self.vision_asset, create=True)
+        # If doing TagSLAM only, this requires having the RGB images already.
+        else:
+            self.rgb_dir = file_utils.bundlesdf_video_rgb_dir(
+                self.vision_asset, check_exists=True)
 
+        # Make the directories that TagSLAM alone requires.
+        if not self.bsdf_only:
             self.tagslam_dir = file_utils.tagslam_pose_dir(
                 self.vision_asset, check_exists=False)
             file_utils.assure_created(self.tagslam_dir)
+            
+            self.annotated_poses_dir = file_utils.bundlesdf_annotated_poses_dir(
+                self.vision_asset, create=True)
 
             self.synced_tagslam_dir = file_utils.synchronized_tagslam_pose_dir(
                 self.vision_asset, check_exists=False)
             file_utils.assure_created(self.synced_tagslam_dir)
-
 
     def create(self):
         # Get the ROS bag, ensuring the start toss and end tosses are in the
@@ -142,9 +153,10 @@ class DatasetCreator:
     def _create_images(self):
         depth_bag_file = file_utils.get_depth_bag_filename(self.rosbag_number)
 
-        # Get the depth offset.
-        self.depth_offset_mm = -12
-        print(f'NOTE: Using hardcoded {self.depth_offset_mm=} mm.\n')
+        # Get the depth offset -- if doing BundleSDF only, no need to subtract
+        # anything out.
+        self.depth_offset_mm = 0 if self.bsdf_only else -12
+        print(f'NOTE: Using {self.depth_offset_mm=} mm.\n')
 
         # Extract the synchronized RGB and depth images, writing them to
         # bundlenets/data/{vision_asset}/.
@@ -152,7 +164,7 @@ class DatasetCreator:
             start_time=self.start_time, end_time=self.end_time,
             bag_file=depth_bag_file, rgb_output_dir=self.rgb_dir,
             depth_output_dir=self.depth_dir,
-            dataset_dir=op.dirname(self.tagslam_dir),
+            dataset_dir=self.cnets_data_gen_dir,
             depth_offset_mm=self.depth_offset_mm
         )
 
@@ -262,7 +274,7 @@ class DatasetCreator:
     def _compute_table_offset(self):
         # Visualize the depth offset with the ability to make adjustments for
         # future calls to create_dataset.
-        if 'cube' in self.vision_asset:
+        if 'cube' in self.vision_asset and not self.bsdf_only:
             print(f'Skip visualizing the results of {self.depth_offset_mm=} for ' + \
                 f'{self.vision_asset}.')
             # import inspect_camera_alignments
@@ -273,10 +285,12 @@ class DatasetCreator:
                   f'cannot visualize the results of the depth offset.')
 
         # Lastly, compute the table offset for the experiment.
-        os.system('python ' + \
-                op.join(file_utils.DATA_GEN_DIR, 'compute_table_offsets.py') + \
-                f' single --vision-asset={self.vision_asset} --overwrite ' + \
-                f'--redirect-output  --no-visualize')
+        table_offset_cmd = f'python ' + \
+            op.join(file_utils.DATA_GEN_DIR, 'compute_table_offsets.py') + \
+            f' single --vision-asset={self.vision_asset} --overwrite ' + \
+            f'--redirect-output --no-visualize'
+        table_offset_cmd += ' --bsdf-only' if self.bsdf_only else ''
+        os.system(table_offset_cmd)
 
 
 
@@ -291,12 +305,13 @@ class DatasetCreator:
               help="whether to generate just TagSLAM-related data.")
 @click.option('--bsdf-only',
               is_flag=True,
-              help="whether to generate just Bundlesdf-related data.")
+              help="whether to generate just BundleSDF-related data.")
 @click.option('--clear-data/--keep-data',
               default=False,
               help="whether to clear data folder before regenerating.")
 
-def main_command(vision_asset: str, tagslam_only: bool, bsdf_only: bool, clear_data: bool):
+def main_command(vision_asset: str, tagslam_only: bool, bsdf_only: bool,
+                 clear_data: bool):
     # Get the data and pose directories, checking if they already exist.
     data_dir = file_utils.bundlesdf_video_dir(vision_asset, check_exists=False)
     tagslam_dir = file_utils.tagslam_pose_dir(vision_asset, check_exists=False)
@@ -305,8 +320,8 @@ def main_command(vision_asset: str, tagslam_only: bool, bsdf_only: bool, clear_d
             print(f'Overwriting existing video data at {data_dir}.')
             os.system(f'rm -r {data_dir}')
         else:
-            print(f'Exiting:  Video data already exists at {data_dir} -- use ' + \
-                '--clear-data next time.')
+            print(f'Exiting:  Video data already exists at {data_dir} -- ' + \
+                  f'use --clear-data next time.')
             exit()
 
     if not bsdf_only and op.exists(tagslam_dir):

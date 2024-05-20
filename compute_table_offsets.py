@@ -105,7 +105,7 @@ def get_table_height_from_log(log_file: str) -> float:
 class DepthPlaneViewer:
     """Compute the table height for a single toss from the stored depth images
     in the BundleSDF dataset."""
-    def __init__(self, vision_asset: str) -> None:
+    def __init__(self, vision_asset: str, bsdf_only: bool = False) -> None:
         self.vision_asset = vision_asset
         object = vision_asset.split('_')[:-1]
         object = object[0] if len(object) == 1 else f'{object[0]}_{object[1]}'
@@ -137,7 +137,7 @@ class DepthPlaneViewer:
         self.success = True
 
         # If this is a cube example, plot the corners of the cube.
-        if 'cube' in vision_asset:
+        if 'cube' in vision_asset and not bsdf_only:
             self.compute_cube_corners()
 
     def compute_cube_corners(self) -> None:
@@ -394,7 +394,7 @@ class DepthPlaneViewer:
         ax.set_xlim(X_LIMS)
         ax.set_ylim(Y_LIMS)
         ax.set_zlim(Z_LIMS)
-        if 'cube' in self.vision_asset:
+        if hasattr(self, 'cube_center'):
             ax.scatter(self.cube_center[0], self.cube_center[1],
                        self.cube_center[2], s=10, color='g',
                        label='Cube center')
@@ -417,7 +417,7 @@ class DepthPlaneViewer:
         ax.set_xlim(TIGHT_X_LIMS)
         ax.set_ylim(TIGHT_Y_LIMS)
         ax.set_zlim(TIGHT_Z_LIMS)
-        if 'cube' in self.vision_asset:
+        if hasattr(self, 'cube_center'):
             ax.scatter(self.cube_center[0], self.cube_center[1],
                        self.cube_center[2], s=10, color='g',
                        label='Cube center')
@@ -482,7 +482,7 @@ class DepthPlaneViewer:
 class ROSBagDepthPlaneViewer(DepthPlaneViewer):
     """Compute the table height for a single toss from the depth messages in a
     ROS bag."""
-    def __init__(self, vision_asset: str) -> None:
+    def __init__(self, vision_asset: str, bsdf_only: bool = False) -> None:
         self.vision_asset = vision_asset
         object = vision_asset.split('_')[:-1]
         object = object[0] if len(object) == 1 else f'{object[0]}_{object[1]}'
@@ -530,17 +530,18 @@ class ROSBagDepthPlaneViewer(DepthPlaneViewer):
         self.success = True
 
         # If this is a cube example, plot the corners of the cube.
-        if 'cube' in vision_asset:
+        if 'cube' in vision_asset and not bsdf_only:
             self.compute_cube_corners()
 
 
 #######################################################################
-def process_single(asset_name: str, visualize: bool):
-    depth_plane_viewer = DepthPlaneViewer(asset_name)
+def process_single(asset_name: str, visualize: bool, bsdf_only: bool = False):
+    depth_plane_viewer = DepthPlaneViewer(asset_name, bsdf_only=bsdf_only)
     if not depth_plane_viewer.success:
         print(f'Failed to find existing {asset_name} dataset; ' + \
                 f'resorting to ROS bag.')
-        depth_plane_viewer = ROSBagDepthPlaneViewer(asset_name)
+        depth_plane_viewer = ROSBagDepthPlaneViewer(
+            asset_name, bsdf_only=bsdf_only)
     if depth_plane_viewer.success:
         depth_plane_viewer.convert_depth_image_to_point_cloud()
         depth_plane_viewer.compute_epsilon_and_table_offset(
@@ -569,6 +570,9 @@ def cli():
               type=bool,
               default=True,
               help="whether to visualize the point cloud processing.")
+@click.option('--bsdf-only',
+              is_flag=True,
+              help="whether to generate just BundleSDF-related data.")
 @click.option('--overwrite/--keep-data',
               type=bool,
               default=False,
@@ -577,7 +581,7 @@ def cli():
               type=bool,
               default=False,
               help="whether to redirect output to a log file.")
-def process_single_command(vision_asset: str, visualize: bool,
+def process_single_command(vision_asset: str, visualize: bool, bsdf_only: bool,
                            overwrite: bool, redirect_output: bool):
     assert '_' in vision_asset, f'Invalid asset directory: {vision_asset}.'
 
@@ -604,10 +608,10 @@ def process_single_command(vision_asset: str, visualize: bool,
         if redirect_output:
             with open(log_file, 'w') as f:
                 sys.stdout = f
-                process_single(single_asset, visualize)
+                process_single(single_asset, visualize, bsdf_only=bsdf_only)
             sys.stdout = sys.__stdout__
         else:
-            process_single()
+            process_single(single_asset, visualize, bsdf_only=bsdf_only)
 
 
 # Use 'all' command to process all tosses found in config.yaml.
