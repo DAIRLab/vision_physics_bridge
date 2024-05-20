@@ -1,3 +1,202 @@
+bakingbox:
+  1: null
+  2: null
+  3: null
+  4: null
+  5: null
+  6: null
+  7: null
+  8: null
+  9: null
+  10: null
+burger:
+  1: null
+  2: null
+  3: null
+  4: null
+  5: null
+  6: null
+  7: null
+  8: null
+  9: null
+  10: null
+cardboard:
+  1: null
+  2: null
+  3: null
+  4: null
+  5: null
+  6: null
+  7: null
+  8: null
+  9: null
+  10: null
+chocolate:
+  1: null
+  2: null
+  3: null
+  4: null
+  5: null
+  6: null
+  7: null
+  8: null
+  9: null
+  10: null
+cream:
+  1: null
+  2: null
+  3: null
+  4: null
+  5: null
+  6: null
+  7: null
+  8: null
+  9: null
+  10: null
+croc:
+  1: null
+  2: null
+  3: null
+  4: null
+  5: null
+  6: null
+  7: null
+  8: null
+  9: null
+  10: null
+crushedcan:
+  1: null
+  2: null
+  3: null
+  4: null
+  5: null
+  6: null
+  7: null
+  8: null
+  9: null
+  10: null
+duck:
+  1: null
+  2: null
+  3: null
+  4: null
+  5: null
+  6: null
+  7: null
+  8: null
+  9: null
+  10: null
+gallon:
+  1: null
+  2: null
+  3: null
+  4: null
+  5: null
+  6: null
+  7: null
+  8: null
+  9: null
+  10: null
+greencan:
+  1: null
+  2: null
+  3: null
+  4: null
+  5: null
+  6: null
+  7: null
+  8: null
+  9: null
+  10: null
+hotdog:
+  1: null
+  2: null
+  3: null
+  4: null
+  5: null
+  6: null
+  7: null
+  8: null
+  9: null
+  10: null
+icetray:
+  1: null
+  2: null
+  3: null
+  4: null
+  5: null
+  6: null
+  7: null
+  8: null
+  9: null
+  10: null
+mug:
+  1: null
+  2: null
+  3: null
+  4: null
+  5: null
+  6: null
+  7: null
+  8: null
+  9: null
+  10: null
+oatly:
+  1: null
+  2: null
+  3: null
+  4: null
+  5: null
+  6: null
+  7: null
+  8: null
+  9: null
+  10: null
+pinkcan:
+  1: null
+  2: null
+  3: null
+  4: null
+  5: null
+  6: null
+  7: null
+  8: null
+  9: null
+  10: null
+stapler:
+  1: null
+  2: null
+  3: null
+  4: null
+  5: null
+  6: null
+  7: null
+  8: null
+  9: null
+  10: null
+styrofoam:
+  1: null
+  2: null
+  3: null
+  4: null
+  5: null
+  6: null
+  7: null
+  8: null
+  9: null
+  10: null
+toothpaste:
+  1: null
+  2: null
+  3: null
+  4: null
+  5: null
+  6: null
+  7: null
+  8: null
+  9: null
+  10: null
+
 bottle:
   0: -0.03807
   1: -0.03807
