@@ -56,9 +56,10 @@ import rosbag_processor
 
 class DatasetCreator:
     """Class to assist with dataset creation for a given vision asset."""
-    def __init__(self, vision_asset: str, tagslam_only: bool = False):
+    def __init__(self, vision_asset: str, tagslam_only: bool = False, bsdf_only: bool = False):
         self.vision_asset = vision_asset
         self.tagslam_only = tagslam_only
+        self.bsdf_only = bsdf_only
 
         # Parse the system and start/end tosses from the provided asset name.
         assert '_' in vision_asset, f'Invalid asset directory: {vision_asset}.'
@@ -87,25 +88,28 @@ class DatasetCreator:
             file_utils.load_camera_extrinsics(self.object)
 
     def _set_up_directories(self):
-        self.rgb_dir = file_utils.bundlesdf_video_rgb_dir(
-            self.vision_asset, check_exists=False)
-        self.depth_dir = file_utils.bundlesdf_video_depth_dir(
-            self.vision_asset, check_exists=False)
+        if not self.tagslam_only:
+            # Get the RGB and depth directories.
+            self.rgb_dir = file_utils.bundlesdf_video_rgb_dir(
+                self.vision_asset, check_exists=False)
+            self.depth_dir = file_utils.bundlesdf_video_depth_dir(
+                self.vision_asset, check_exists=False)
+            self.data_dir = file_utils.bundlesdf_video_dir(
+                self.vision_asset, check_exists=False)
+            file_utils.assure_created(self.data_dir)
 
-        self.annotated_poses_dir = file_utils.bundlesdf_annotated_poses_dir(
-            self.vision_asset, create=True)
+        if not self.bsdf_only:
+            self.annotated_poses_dir = file_utils.bundlesdf_annotated_poses_dir(
+                self.vision_asset, create=True)
 
-        self.tagslam_dir = file_utils.tagslam_pose_dir(
-            self.vision_asset, check_exists=False)
-        file_utils.assure_created(self.tagslam_dir)
+            self.tagslam_dir = file_utils.tagslam_pose_dir(
+                self.vision_asset, check_exists=False)
+            file_utils.assure_created(self.tagslam_dir)
 
-        self.synced_tagslam_dir = file_utils.synchronized_tagslam_pose_dir(
-            self.vision_asset, check_exists=False)
-        file_utils.assure_created(self.synced_tagslam_dir)
+            self.synced_tagslam_dir = file_utils.synchronized_tagslam_pose_dir(
+                self.vision_asset, check_exists=False)
+            file_utils.assure_created(self.synced_tagslam_dir)
 
-        self.data_dir = file_utils.bundlesdf_video_dir(
-            self.vision_asset, check_exists=False)
-        file_utils.assure_created(self.data_dir)
 
     def create(self):
         # Get the ROS bag, ensuring the start toss and end tosses are in the
@@ -118,9 +122,10 @@ class DatasetCreator:
 
         if not self.tagslam_only:
             self._create_images()
-        self._create_tagslam_poses()
-        self._create_synchronized_tagslam_poses()
-        self._create_annotated_poses()
+        if not self.bsdf_only:
+            self._create_tagslam_poses()
+            self._create_synchronized_tagslam_poses()
+            self._create_annotated_poses()
 
         if not self.tagslam_only:
             # Copy the camera intrinsics.
@@ -281,45 +286,40 @@ class DatasetCreator:
               default=None,
               help="directory of the asset folder e.g. cube_2-3; encodes " + \
                    "system and tosses.")
-@click.option('--all/--tagslam-only',
-              type=bool,
-              default=True,
-              help="whether to generate all data or just TagSLAM-related data.")
+@click.option('--tagslam-only',
+              is_flag=True,
+              help="whether to generate just TagSLAM-related data.")
+@click.option('--bsdf-only',
+              is_flag=True,
+              help="whether to generate just Bundlesdf-related data.")
 @click.option('--clear-data/--keep-data',
               default=False,
               help="whether to clear data folder before regenerating.")
 
-def main_command(vision_asset: str, all: bool, clear_data: bool):
+def main_command(vision_asset: str, tagslam_only: bool, bsdf_only: bool, clear_data: bool):
     # Get the data and pose directories, checking if they already exist.
     data_dir = file_utils.bundlesdf_video_dir(vision_asset, check_exists=False)
     tagslam_dir = file_utils.tagslam_pose_dir(vision_asset, check_exists=False)
-    if all and (op.exists(data_dir) or op.exists(tagslam_dir)):
+    if not tagslam_only and op.exists(data_dir):
         if clear_data:
-            print(f'Overwriting existing data at {data_dir} and/or ' + \
-                  f'{tagslam_dir}.')
-            if op.exists(data_dir):  os.system(f'rm -r {data_dir}')
-            if op.exists(tagslam_dir):  os.system(f'rm -r {tagslam_dir}')
+            print(f'Overwriting existing video data at {data_dir}.')
+            os.system(f'rm -r {data_dir}')
         else:
-            print(f'Exiting:  Data already exists at {data_dir} and/or ' + \
-                  f'{tagslam_dir} -- use --clear-data next time.')
+            print(f'Exiting:  Video data already exists at {data_dir} -- use ' + \
+                '--clear-data next time.')
             exit()
 
-    elif op.exists(tagslam_dir):
+    if not bsdf_only and op.exists(tagslam_dir):
         if clear_data:
             print(f'Overwriting existing TagSLAM data at {tagslam_dir}.')
-            synced_dir = file_utils.synchronized_tagslam_pose_dir(
-                vision_asset, check_exists=False)
-            assert op.exists(data_dir), f'Expected {data_dir=} to exist to ' + \
-                f'be able to overwrite TagSLAM data only, but it does not.'
-            if op.exists(synced_dir):  os.system(f'rm -r {synced_dir}')
-            if op.exists(tagslam_dir):  os.system(f'rm -r {tagslam_dir}')
+            os.system(f'rm -r {tagslam_dir}')
         else:
             print(f'Exiting:  TagSLAM data already exists at {tagslam_dir} ' + \
-                  f' -- use --clear-data next time.')
+                f' -- use --clear-data next time.')
             exit()
 
     # Create the dataset.
-    dataset_creator = DatasetCreator(vision_asset, tagslam_only = not all)
+    dataset_creator = DatasetCreator(vision_asset, tagslam_only, bsdf_only)
     dataset_creator.create()
 
 

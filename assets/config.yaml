@@ -1,4 +1,202 @@
 dataset: #toss_id:rosbag_id
+  bakingbox: 
+    1: 100
+    2: 100
+    3: 100
+    4: 100
+    5: 100
+    6: 100
+    7: 100
+    8: 100
+    9: 100
+    10: 100
+  burger: 
+    1: 101
+    2: 101
+    3: 101
+    4: 101
+    5: 101
+    6: 101
+    7: 101
+    8: 101
+    9: 101
+    10: 101
+  cardboard: 
+    1: 102
+    2: 102
+    3: 102
+    4: 102
+    5: 102
+    6: 102
+    7: 102
+    8: 102
+    9: 102
+    10: 102
+  chocolate: 
+    1: 103
+    2: 103
+    3: 103
+    4: 103
+    5: 103
+    6: 103
+    7: 103
+    8: 103
+    9: 103
+    10: 103
+  cream: 
+    1: 104
+    2: 104
+    3: 104
+    4: 104
+    5: 104
+    6: 104
+    7: 104
+    8: 104
+    9: 104
+    10: 104
+  croc: 
+    1: 105
+    2: 105
+    3: 105
+    4: 105
+    5: 105
+    6: 105
+    7: 105
+    8: 105
+    9: 105
+    10: 105
+  crushedcan: 
+    1: 106
+    2: 106
+    3: 106
+    4: 106
+    5: 106
+    6: 106
+    7: 106
+    8: 106
+    9: 106
+    10: 106
+  duck: 
+    1: 107
+    2: 107
+    3: 107
+    4: 107
+    5: 107
+    6: 107
+    7: 107
+    8: 107
+    9: 107
+    10: 107
+  gallon: 
+    1: 108
+    2: 108
+    3: 108
+    4: 108
+    5: 108
+    6: 108
+    7: 108
+    8: 108
+    9: 108
+    10: 108
+  greencan: 
+    1: 109
+    2: 109
+    3: 109
+    4: 109
+    5: 109
+    6: 109
+    7: 109
+    8: 109
+    9: 109
+    10: 109
+  hotdog: 
+    1: 110
+    2: 110
+    3: 110
+    4: 110
+    5: 110
+    6: 110
+    7: 110
+    8: 110
+    9: 110
+    10: 110
+  icetray: 
+    1: 111
+    2: 111
+    3: 111
+    4: 111
+    5: 111
+    6: 111
+    7: 111
+    8: 111
+    9: 111
+    10: 111
+  mug: 
+    1: 112
+    2: 112
+    3: 112
+    4: 112
+    5: 112
+    6: 112
+    7: 112
+    8: 112
+    9: 112
+    10: 112
+  oatly: 
+    1: 113
+    2: 113
+    3: 113
+    4: 113
+    5: 113
+    6: 113
+    7: 113
+    8: 113
+    9: 113
+    10: 113
+  pinkcan: 
+    1: 114
+    2: 114
+    3: 114
+    4: 114
+    5: 114
+    6: 114
+    7: 114
+    8: 114
+    9: 114
+    10: 114
+  stapler: 
+    1: 115
+    2: 115
+    3: 115
+    4: 115
+    5: 115
+    6: 115
+    7: 115
+    8: 115
+    9: 115
+    10: 115
+  styrofoam:
+    1: 116
+    2: 116
+    3: 116
+    4: 116
+    5: 116
+    6: 116
+    7: 116
+    8: 116
+    9: 116
+    10: 116
+  toothpaste:
+    1: 117
+    2: 117
+    3: 117
+    4: 117
+    5: 117
+    6: 117
+    7: 117
+    8: 117
+    9: 117
+    10: 117
   cube: 
     0: 10
     1: 10
@@ -153,6 +351,1906 @@ dataset: #toss_id:rosbag_id
     10: 50
 
 tosses:
+  ### Create empty list for each object and let me fill the secs and nsecs
+  bakingbox:
+    - toss: 1
+      start_time:
+        secs: 1716134386
+        nsecs: 085243
+      end_time:
+        secs: 1716134388
+        nsecs: 063486
+      start_frame: 
+      end_frame: 
+    - toss: 2
+      start_time:
+        secs: 1716134388
+        nsecs: 063486
+      end_time:
+        secs: 1716134392
+        nsecs: 533757
+      start_frame: 
+      end_frame: 
+    - toss: 3
+      start_time:
+        secs: 1716134392
+        nsecs: 533757
+      end_time:
+        secs: 1716134396
+        nsecs: 234304
+      start_frame: 
+      end_frame: 
+    - toss: 4
+      start_time:
+        secs: 1716134396
+        nsecs: 234304
+      end_time:
+        secs: 1716134400
+        nsecs: 336383
+      start_frame: 
+      end_frame: 
+    - toss: 5
+      start_time:
+        secs: 1716134400
+        nsecs: 336383
+      end_time:
+        secs: 1716134404
+        nsecs: 539564
+      start_frame: 
+      end_frame: 
+    - toss: 6
+      start_time:
+        secs: 1716134404
+        nsecs: 539564
+      end_time:
+        secs: 1716134408
+        nsecs: 911617
+      start_frame: 
+      end_frame: 
+    - toss: 7
+      start_time:
+        secs: 1716134408
+        nsecs: 911617
+      end_time:
+        secs: 1716134413
+        nsecs: 543191
+      start_frame: 
+      end_frame: 
+    - toss: 8
+      start_time:
+        secs: 1716134413
+        nsecs: 543191
+      end_time:
+        secs: 1716134418
+        nsecs: 231822
+      start_frame: 
+      end_frame: 
+    - toss: 9
+      start_time:
+        secs: 1716134418
+        nsecs: 231822
+      end_time:
+        secs: 1716134422
+        nsecs: 480327
+      start_frame: 
+      end_frame: 
+    - toss: 10
+      start_time:
+        secs: 1716134422
+        nsecs: 480327
+      end_time:
+        secs: 1716134425
+        nsecs: 367102
+      start_frame: 
+      end_frame: 
+
+  burger:
+    - toss: 1
+      start_time:
+        secs: 1716135417
+        nsecs: 219727
+      end_time:
+        secs: 1716135419
+        nsecs: 743793
+      start_frame: 
+      end_frame: 
+    - toss: 2
+      start_time:
+        secs: 1716135419
+        nsecs: 743793
+      end_time:
+        secs: 1716135422
+        nsecs: 410534
+      start_frame: 
+      end_frame: 
+    - toss: 3
+      start_time:
+        secs: 1716135422
+        nsecs: 410534
+      end_time:
+        secs: 1716135426
+        nsecs: 022699
+      start_frame: 
+      end_frame: 
+    - toss: 4
+      start_time:
+        secs: 1716135426
+        nsecs: 022699
+      end_time:
+        secs: 1716135430
+        nsecs: 023868
+      start_frame: 
+      end_frame: 
+    - toss: 5
+      start_time:
+        secs: 1716135430
+        nsecs: 023868
+      end_time:
+        secs: 1716135433
+        nsecs: 314138
+      start_frame: 
+      end_frame: 
+    - toss: 6
+      start_time:
+        secs: 1716135433
+        nsecs: 314138
+      end_time:
+        secs: 1716135436
+        nsecs: 471623
+      start_frame: 
+      end_frame: 
+    - toss: 7
+      start_time:
+        secs: 716135436
+        nsecs: 471623
+      end_time:
+        secs: 1716135441
+        nsecs: 150199
+      start_frame: 
+      end_frame: 
+    - toss: 8
+      start_time:
+        secs: 1716135441
+        nsecs: 150199
+      end_time:
+        secs: 1716135444
+        nsecs: 026155
+      start_frame: 
+      end_frame: 
+    - toss: 9
+      start_time:
+        secs: 1716135444
+        nsecs: 026155
+      end_time:
+        secs: 1716135448
+        nsecs: 868955
+      start_frame: 
+      end_frame: 
+    - toss: 10
+      start_time:
+        secs: 1716135448
+        nsecs: 868955
+      end_time:
+        secs: 1716135453
+        nsecs: 120983
+      start_frame: 
+      end_frame: 
+    - toss: 11
+      start_time:
+        secs: 1716135453
+        nsecs: 120983
+      end_time:
+        secs: 1716135455
+        nsecs: 422613
+      start_frame: 
+      end_frame:
+    - toss: 12
+      start_time:
+        secs: 1716135455
+        nsecs: 422613
+      end_time:
+        secs: 1716135461
+        nsecs: 431662
+      start_frame: 
+      end_frame:
+    - toss: 13
+      start_time:
+        secs: 1716135461
+        nsecs: 431662
+      end_time:
+        secs: 1716135465
+        nsecs: 151741
+      start_frame: 
+      end_frame:
+  
+  cardboard:
+    - toss: 1
+      start_time:
+        secs: 1716134211
+        nsecs: 122612
+      end_time:
+        secs: 1716134212
+        nsecs: 575447
+      start_frame: 
+      end_frame: 
+    - toss: 2
+      start_time:
+        secs: 1716134212
+        nsecs: 575447
+      end_time:
+        secs: 1716134216
+        nsecs: 325205
+      start_frame: 
+      end_frame: 
+    - toss: 3
+      start_time:
+        secs: 1716134216
+        nsecs: 325205
+      end_time:
+        secs: 1716134220
+        nsecs: 696999
+      start_frame: 
+      end_frame: 
+    - toss: 4
+      start_time:
+        secs: 1716134220
+        nsecs: 696999
+      end_time:
+        secs: 1716134224
+        nsecs: 258868
+      start_frame: 
+      end_frame: 
+    - toss: 5
+      start_time:
+        secs: 1716134224
+        nsecs: 258868
+      end_time:
+        secs: 1716134228
+        nsecs: 314347
+      start_frame: 
+      end_frame: 
+    - toss: 6
+      start_time:
+        secs: 1716134228
+        nsecs: 314347
+      end_time:
+        secs: 1716134231
+        nsecs: 650179
+      start_frame: 
+      end_frame: 
+    - toss: 7
+      start_time:
+        secs: 1716134231
+        nsecs: 650179
+      end_time:
+        secs: 1716134235
+        nsecs: 296040
+      start_frame: 
+      end_frame: 
+    - toss: 8
+      start_time:
+        secs: 1716134235
+        nsecs: 296040
+      end_time:
+        secs: 1716134238
+        nsecs: 918103
+      start_frame: 
+      end_frame: 
+    - toss: 9
+      start_time:
+        secs: 1716134238
+        nsecs: 918103
+      end_time:
+        secs: 1716134243
+        nsecs: 133047
+      start_frame: 
+      end_frame: 
+    - toss: 10
+      start_time:
+        secs: 1716134243
+        nsecs: 133047
+      end_time:
+        secs: 1716134247
+        nsecs: 458064
+      start_frame: 
+      end_frame:
+
+  chocolate:
+    - toss: 1
+      start_time:
+        secs: 1716135256
+        nsecs: 246969
+      end_time:
+        secs: 1716135257
+        nsecs: 782576
+      start_frame: 
+      end_frame: 
+    - toss: 2
+      start_time:
+        secs: 1716135257
+        nsecs: 782576
+      end_time:
+        secs: 1716135261
+        nsecs: 249063
+      start_frame: 
+      end_frame: 
+    - toss: 3
+      start_time:
+        secs: 1716135261
+        nsecs: 249063
+      end_time:
+        secs: 1716135265
+        nsecs: 441055
+      start_frame: 
+      end_frame: 
+    - toss: 4
+      start_time:
+        secs: 1716135265
+        nsecs: 441055
+      end_time:
+        secs: 1716135268
+        nsecs: 603604
+      start_frame: 
+      end_frame: 
+    - toss: 5
+      start_time:
+        secs: 1716135268
+        nsecs: 603604
+      end_time:
+        secs: 1716135272
+        nsecs: 287798
+      start_frame: 
+      end_frame: 
+    - toss: 6
+      start_time:
+        secs: 1716135272
+        nsecs: 287798
+      end_time:
+        secs: 1716135275
+        nsecs: 220476
+      start_frame: 
+      end_frame: 
+    - toss: 7
+      start_time:
+        secs: 1716135275
+        nsecs: 220476
+      end_time:
+        secs: 1716135278
+        nsecs: 156858
+      start_frame: 
+      end_frame: 
+    - toss: 8
+      start_time:
+        secs: 1716135278
+        nsecs: 156858
+      end_time:
+        secs: 1716135282
+        nsecs: 014181
+      start_frame: 
+      end_frame: 
+    - toss: 9
+      start_time:
+        secs: 1716135282
+        nsecs: 014181
+      end_time:
+        secs: 1716135285
+        nsecs: 047284
+      start_frame: 
+      end_frame: 
+    - toss: 10
+      start_time:
+        secs: 1716135285
+        nsecs: 047284
+      end_time:
+        secs: 1716135289
+        nsecs: 292192
+      start_frame: 
+      end_frame: 
+    - toss: 11
+      start_time:
+        secs: 1716135289
+        nsecs: 292192
+      end_time:
+        secs: 1716135292
+        nsecs: 685821
+      start_frame: 
+      end_frame:
+    - toss: 12
+      start_time:
+        secs: 1716135292
+        nsecs: 685821
+      end_time:
+        secs: 1716135296
+        nsecs: 151989
+      start_frame: 
+      end_frame:
+    - toss: 13
+      start_time:
+        secs: 1716135296
+        nsecs: 151989
+      end_time:
+        secs: 1716135300
+        nsecs: 233506
+      start_frame: 
+      end_frame:
+
+  cream:
+    - toss: 1
+      start_time:
+        secs: 1716135113
+        nsecs: 373705
+      end_time:
+        secs: 1716135115
+        nsecs: 343523
+      start_frame: 
+      end_frame: 
+    - toss: 2
+      start_time:
+        secs: 1716135115
+        nsecs: 343523
+      end_time:
+        secs: 1716135118
+        nsecs: 673541
+      start_frame: 
+      end_frame: 
+    - toss: 3
+      start_time:
+        secs: 1716135118
+        nsecs: 673541
+      end_time:
+        secs: 1716135124
+        nsecs: 922580
+      start_frame: 
+      end_frame: 
+    - toss: 4
+      start_time:
+        secs: 1716135124
+        nsecs: 922580
+      end_time:
+        secs: 1716135129
+        nsecs: 035627
+      start_frame: 
+      end_frame: 
+    - toss: 5
+      start_time:
+        secs: 1716135129
+        nsecs: 035627
+      end_time:
+        secs: 1716135135
+        nsecs: 294329
+      start_frame: 
+      end_frame: 
+    - toss: 6
+      start_time:
+        secs: 1716135135
+        nsecs: 294329
+      end_time:
+        secs: 1716135139
+        nsecs: 735605
+      start_frame: 
+      end_frame: 
+    - toss: 7
+      start_time:
+        secs: 1716135139
+        nsecs: 735605
+      end_time:
+        secs: 1716135143
+        nsecs: 707678
+      start_frame: 
+      end_frame: 
+    - toss: 8
+      start_time:
+        secs: 1716135143
+        nsecs: 707678
+      end_time:
+        secs: 1716135146
+        nsecs: 653947
+      start_frame: 
+      end_frame: 
+    - toss: 9
+      start_time:
+        secs: 1716135146
+        nsecs: 653947
+      end_time:
+        secs: 1716135151
+        nsecs: 068926
+      start_frame: 
+      end_frame: 
+    - toss: 10
+      start_time:
+        secs: 1716135151
+        nsecs: 068926
+      end_time:
+        secs: 1716135153
+        nsecs: 701807
+      start_frame: 
+      end_frame: 
+    - toss: 11
+      start_time:
+        secs: 1716135153
+        nsecs: 701807
+      end_time:
+        secs: 1716135157
+        nsecs: 670406
+      start_frame: 
+      end_frame:
+    - toss: 12
+      start_time:
+        secs: 1716135157
+        nsecs: 670406
+      end_time:
+        secs: 1716135162
+        nsecs: 083590
+      start_frame:
+      end_frame:
+    - toss: 13
+      start_time:
+        secs: 1716135162
+        nsecs: 083590
+      end_time:
+        secs: 1716135167
+        nsecs: 396901
+      start_frame:
+      end_frame:
+
+  croc:
+    - toss: 1
+      start_time:
+        secs: 1716135545
+        nsecs: 965162
+      end_time:
+        secs: 1716135547
+        nsecs: 311713
+      start_frame: 
+      end_frame: 
+    - toss: 2
+      start_time:
+        secs: 1716135547
+        nsecs: 311713
+      end_time:
+        secs: 1716135550
+        nsecs: 965921
+      start_frame: 
+      end_frame: 
+    - toss: 3
+      start_time:
+        secs: 1716135550
+        nsecs: 965921
+      end_time:
+        secs: 1716135555
+        nsecs: 915202
+      start_frame: 
+      end_frame: 
+    - toss: 4
+      start_time:
+        secs: 1716135555
+        nsecs: 915202
+      end_time:
+        secs: 1716135559
+        nsecs: 628119
+      start_frame: 
+      end_frame: 
+    - toss: 5
+      start_time:
+        secs: 1716135559
+        nsecs: 628119
+      end_time:
+        secs: 1716135563
+        nsecs: 427522
+      start_frame: 
+      end_frame: 
+    - toss: 6
+      start_time:
+        secs: 1716135563
+        nsecs: 427522
+      end_time:
+        secs: 1716135568
+        nsecs: 872779
+      start_frame: 
+      end_frame: 
+    - toss: 7
+      start_time:
+        secs: 1716135568
+        nsecs: 872779
+      end_time:
+        secs: 1716135573
+        nsecs: 975865
+      start_frame: 
+      end_frame: 
+    - toss: 8
+      start_time:
+        secs: 1716135573
+        nsecs: 975865
+      end_time:
+        secs: 1716135577
+        nsecs: 778808
+      start_frame: 
+      end_frame: 
+    - toss: 9
+      start_time:
+        secs: 1716135577
+        nsecs: 778808
+      end_time:
+        secs: 1716135581
+        nsecs: 780648
+      start_frame: 
+      end_frame: 
+    - toss: 10
+      start_time:
+        secs: 1716135581
+        nsecs: 780648
+      end_time:
+        secs: 1716135586
+        nsecs: 167695
+      start_frame: 
+      end_frame: 
+    - toss: 11
+      start_time:
+        secs: 1716135586
+        nsecs: 167695
+      end_time:
+        secs: 1716135589
+        nsecs: 294332
+      start_frame: 
+      end_frame:
+    - toss: 12
+      start_time:
+        secs: 1716135589
+        nsecs: 294332
+      end_time:
+        secs: 1716135594
+        nsecs: 417347
+      start_frame:
+      end_frame:
+
+  crushedcan:
+    - toss: 1
+      start_time:
+        secs: 1716134813
+        nsecs: 787610
+      end_time:
+        secs: 1716134817
+        nsecs: 539759
+      start_frame: 
+      end_frame: 
+    - toss: 2
+      start_time:
+        secs: 1716134817
+        nsecs: 539759
+      end_time:
+        secs: 1716134822
+        nsecs: 356410
+      start_frame: 
+      end_frame: 
+    - toss: 3
+      start_time:
+        secs: 1716134822
+        nsecs: 356410
+      end_time:
+        secs: 1716134825
+        nsecs: 879135
+      start_frame: 
+      end_frame: 
+    - toss: 4
+      start_time:
+        secs: 1716134825
+        nsecs: 879135
+      end_time:
+        secs: 1716134829
+        nsecs: 759629
+      start_frame: 
+      end_frame: 
+    - toss: 5
+      start_time:
+        secs: 1716134829
+        nsecs: 759629
+      end_time:
+        secs: 1716134833
+        nsecs: 594229
+      start_frame: 
+      end_frame: 
+    - toss: 6
+      start_time:
+        secs: 1716134833
+        nsecs: 594229
+      end_time:
+        secs: 1716134837
+        nsecs: 771545
+      start_frame: 
+      end_frame: 
+    - toss: 7
+      start_time:
+        secs: 1716134837
+        nsecs: 771545
+      end_time:
+        secs: 1716134841
+        nsecs: 552500
+      start_frame: 
+      end_frame: 
+    - toss: 8
+      start_time:
+        secs: 1716134841
+        nsecs: 552500
+      end_time:
+        secs: 1716134844
+        nsecs: 931972
+      start_frame: 
+      end_frame: 
+    - toss: 9
+      start_time:
+        secs: 1716134844
+        nsecs: 931972
+      end_time:
+        secs: 1716134849
+        nsecs: 239902
+      start_frame: 
+      end_frame: 
+    - toss: 10
+      start_time:
+        secs: 1716134849
+        nsecs: 239902
+      end_time:
+        secs: 1716134853
+        nsecs: 170164
+      start_frame: 
+      end_frame: 
+    - toss: 11
+      start_time:
+        secs: 1716134853
+        nsecs: 170164
+      end_time:
+        secs: 1716134857
+        nsecs: 673662
+      start_frame: 
+      end_frame:
+    - toss: 12
+      start_time:
+        secs: 1716134857
+        nsecs: 673662
+      end_time:
+        secs: 1716134861
+        nsecs: 863616
+      start_frame:
+      end_frame:
+
+  duck:
+    - toss: 1
+      start_time:
+        secs: 1716135318
+        nsecs: 874543
+      end_time:
+        secs: 1716135320
+        nsecs: 997672
+      start_frame: 
+      end_frame: 
+    - toss: 2
+      start_time:
+        secs: 1716135320
+        nsecs: 997672
+      end_time:
+        secs: 1716135325
+        nsecs: 532957
+      start_frame: 
+      end_frame: 
+    - toss: 3
+      start_time:
+        secs: 1716135325
+        nsecs: 532957
+      end_time:
+        secs: 1716135330
+        nsecs: 002117
+      start_frame: 
+      end_frame: 
+    - toss: 4
+      start_time:
+        secs: 1716135330
+        nsecs: 002117
+      end_time:
+        secs: 1716135333
+        nsecs: 569834
+      start_frame: 
+      end_frame: 
+    - toss: 5
+      start_time:
+        secs: 1716135333
+        nsecs: 569834
+      end_time:
+        secs: 1716135337
+        nsecs: 638144
+      start_frame: 
+      end_frame: 
+    - toss: 6
+      start_time:
+        secs: 1716135337
+        nsecs: 638144
+      end_time:
+        secs: 1716135340
+        nsecs: 752637
+      start_frame: 
+      end_frame: 
+    - toss: 7
+      start_time:
+        secs: 1716135340
+        nsecs: 752637
+      end_time:
+        secs: 1716135344
+        nsecs: 539941
+      start_frame: 
+      end_frame: 
+    - toss: 8
+      start_time:
+        secs: 1716135344
+        nsecs: 539941
+      end_time:
+        secs: 1716135347
+        nsecs: 342743
+      start_frame: 
+      end_frame: 
+    - toss: 9
+      start_time:
+        secs: 1716135347
+        nsecs: 342743
+      end_time:
+        secs: 1716135350
+        nsecs: 611086
+      start_frame: 
+      end_frame: 
+    - toss: 10
+      start_time:
+        secs: 1716135350
+        nsecs: 611086
+      end_time:
+        secs: 1716135354
+        nsecs: 779439
+      start_frame: 
+      end_frame: 
+    - toss: 11
+      start_time:
+        secs: 1716135354
+        nsecs: 779439
+      end_time:
+        secs: 1716135357
+        nsecs: 967742
+      start_frame: 
+      end_frame:
+    - toss: 12
+      start_time:
+        secs: 1716135357
+        nsecs: 967742
+      end_time:
+        secs: 1716135361
+        nsecs: 126416
+      start_frame:
+      end_frame:
+
+  gallon:
+    - toss: 1
+      start_time:
+        secs: 1716133831
+        nsecs: 539507
+      end_time:
+        secs: 1716133833
+        nsecs: 994505
+      start_frame: 
+      end_frame: 
+    - toss: 2
+      start_time:
+        secs: 1716133833
+        nsecs: 994505
+      end_time:
+        secs: 1716133837
+        nsecs: 411520
+      start_frame: 
+      end_frame: 
+    - toss: 3
+      start_time:
+        secs: 1716133837
+        nsecs: 411520
+      end_time:
+        secs: 1716133841
+        nsecs: 576102
+      start_frame: 
+      end_frame: 
+    - toss: 4
+      start_time:
+        secs: 1716133841
+        nsecs: 576102
+      end_time:
+        secs: 1716133845
+        nsecs: 377807
+      start_frame: 
+      end_frame: 
+    - toss: 5
+      start_time:
+        secs: 1716133845
+        nsecs: 377807
+      end_time:
+        secs: 1716133849
+        nsecs: 266952
+      start_frame: 
+      end_frame: 
+    - toss: 6
+      start_time:
+        secs: 1716133849
+        nsecs: 266952
+      end_time:
+        secs: 1716133853
+        nsecs: 611921
+      start_frame: 
+      end_frame: 
+    - toss: 7
+      start_time:
+        secs: 1716133853
+        nsecs: 611921
+      end_time:
+        secs: 1716133857
+        nsecs: 023684
+      start_frame: 
+      end_frame: 
+    - toss: 8
+      start_time:
+        secs: 1716133857 #1716133858
+        nsecs: 023684 #811643
+      end_time:
+        secs: 1716133861
+        nsecs: 673292
+      start_frame: 
+      end_frame: 
+    - toss: 9
+      start_time:
+        secs: 1716133861
+        nsecs: 673292
+      end_time:
+        secs: 1716133866
+        nsecs: 154037
+      start_frame: 
+      end_frame: 
+    - toss: 10
+      start_time:
+        secs: 1716133866
+        nsecs: 154037
+      end_time:
+        secs: 1716133870
+        nsecs: 076079
+      start_frame: 
+      end_frame: 
+    - toss: 11
+      start_time:
+        secs: 1716133870
+        nsecs: 076079
+      end_time:
+        secs: 1716133874
+        nsecs: 244603
+      start_frame: 
+      end_frame:
+
+  greencan:
+    - toss: 1
+      start_time:
+        secs: 1716134601
+        nsecs: 912151
+      end_time:
+        secs: 1716134605
+        nsecs: 383586
+      start_frame: 
+      end_frame: 
+    - toss: 2
+      start_time:
+        secs: 1716134605
+        nsecs: 383586
+      end_time:
+        secs: 1716134608
+        nsecs: 650625
+      start_frame: 
+      end_frame: 
+    - toss: 3
+      start_time:
+        secs: 1716134608
+        nsecs: 650625
+      end_time:
+        secs: 1716134613
+        nsecs: 230247
+      start_frame: 
+      end_frame: 
+    - toss: 4
+      start_time:
+        secs: 1716134613
+        nsecs: 230247
+      end_time:
+        secs: 1716134619
+        nsecs: 298714
+      start_frame: 
+      end_frame: 
+    - toss: 5
+      start_time:
+        secs: 1716134619
+        nsecs: 298714
+      end_time:
+        secs: 1716134625
+        nsecs: 235642
+      start_frame: 
+      end_frame: 
+    - toss: 6
+      start_time:
+        secs: 1716134625
+        nsecs: 235642
+      end_time:
+        secs: 1716134630
+        nsecs: 692778
+      start_frame: 
+      end_frame: 
+    - toss: 7
+      start_time:
+        secs: 1716134630
+        nsecs: 692778
+      end_time:
+        secs: 1716134635
+        nsecs: 107034
+      start_frame: 
+      end_frame: 
+    - toss: 8
+      start_time:
+        secs: 1716134635
+        nsecs: 107034
+      end_time:
+        secs: 1716134639
+        nsecs: 641642
+      start_frame: 
+      end_frame: 
+    - toss: 9
+      start_time:
+        secs: 1716134639
+        nsecs: 641642
+      end_time:
+        secs: 1716134644
+        nsecs: 307535
+      start_frame: 
+      end_frame: 
+    - toss: 10
+      start_time:
+        secs: 1716134644
+        nsecs: 307535
+      end_time:
+        secs: 1716134649
+        nsecs: 675894
+      start_frame: 
+      end_frame: 
+
+  hotdog:
+    - toss: 1
+      start_time:
+        secs: 1716135478
+        nsecs: 067024
+      end_time:
+        secs: 1716135480
+        nsecs: 246378
+      start_frame: 
+      end_frame: 
+    - toss: 2
+      start_time:
+        secs: 1716135480
+        nsecs: 246378
+      end_time:
+        secs: 1716135484
+        nsecs: 323768
+      start_frame: 
+      end_frame: 
+    - toss: 3
+      start_time:
+        secs: 1716135484
+        nsecs: 323768
+      end_time:
+        secs: 1716135487
+        nsecs: 936804
+      start_frame: 
+      end_frame: 
+    - toss: 4
+      start_time:
+        secs: 1716135487
+        nsecs: 936804
+      end_time:
+        secs: 1716135491
+        nsecs: 755659
+      start_frame: 
+      end_frame: 
+    - toss: 5
+      start_time:
+        secs: 1716135491
+        nsecs: 755659
+      end_time:
+        secs: 1716135494
+        nsecs: 976197
+      start_frame: 
+      end_frame: 
+    - toss: 6
+      start_time:
+        secs: 1716135494
+        nsecs: 976197
+      end_time:
+        secs: 1716135498
+        nsecs: 155814
+      start_frame: 
+      end_frame: 
+    - toss: 7
+      start_time:
+        secs: 1716135498
+        nsecs: 155814
+      end_time:
+        secs: 1716135502
+        nsecs: 243986
+      start_frame: 
+      end_frame: 
+    - toss: 8
+      start_time:
+        secs: 1716135502
+        nsecs: 243986
+      end_time:
+        secs: 1716135505
+        nsecs: 311256
+      start_frame: 
+      end_frame: 
+    - toss: 9
+      start_time:
+        secs: 1716135505
+        nsecs: 311256
+      end_time:
+        secs: 1716135508
+        nsecs: 057539
+      start_frame: 
+      end_frame: 
+    - toss: 10
+      start_time:
+        secs: 1716135508
+        nsecs: 057539
+      end_time:
+        secs: 1716135511
+        nsecs: 383581
+      start_frame: 
+      end_frame: 
+    - toss: 11
+      start_time:
+        secs: 1716135511
+        nsecs: 383581
+      end_time:
+        secs: 1716135514
+        nsecs: 783123
+      start_frame: 
+      end_frame: 
+    - toss: 12
+      start_time:
+        secs: 1716135514
+        nsecs: 783123
+      end_time:
+        secs: 1716135518
+        nsecs: 384416
+      start_frame: 
+      end_frame:
+
+  icetray:
+    - toss: 1
+      start_time:
+        secs: 1716134302
+        nsecs: 248196
+      end_time:
+        secs: 1716134304
+        nsecs: 395922
+      start_frame: 
+      end_frame: 
+    - toss: 2
+      start_time:
+        secs: 1716134304
+        nsecs: 395922
+      end_time:
+        secs: 1716134307
+        nsecs: 616345
+      start_frame: 
+      end_frame: 
+    - toss: 3
+      start_time:
+        secs: 1716134307
+        nsecs: 616345
+      end_time:
+        secs: 1716134312
+        nsecs: 239625
+      start_frame: 
+      end_frame: 
+    - toss: 4
+      start_time:
+        secs: 1716134312
+        nsecs: 239625
+      end_time:
+        secs: 1716134316
+        nsecs: 187437
+      start_frame: 
+      end_frame: 
+    - toss: 5
+      start_time:
+        secs: 1716134316
+        nsecs: 187437
+      end_time:
+        secs: 1716134320
+        nsecs: 689317
+      start_frame: 
+      end_frame: 
+    - toss: 6
+      start_time:
+        secs: 1716134320
+        nsecs: 689317
+      end_time:
+        secs: 1716134323
+        nsecs: 728058
+      start_frame: 
+      end_frame: 
+    - toss: 7
+      start_time:
+        secs: 1716134323
+        nsecs: 728058
+      end_time:
+        secs: 1716134329
+        nsecs: 365217
+      start_frame: 
+      end_frame: 
+    - toss: 8
+      start_time:
+        secs: 1716134329
+        nsecs: 365217
+      end_time:
+        secs: 1716134334
+        nsecs: 475889
+      start_frame: 
+      end_frame: 
+    - toss: 9
+      start_time:
+        secs: 1716134334
+        nsecs: 475889
+      end_time:
+        secs: 1716134339
+        nsecs: 565319
+      start_frame: 
+      end_frame: 
+    - toss: 10
+      start_time:
+        secs: 1716134339
+        nsecs: 565319
+      end_time:
+        secs: 1716134344
+        nsecs: 366171
+      start_frame: 
+      end_frame: 
+
+  mug:
+    - toss: 1
+      start_time:
+        secs: 1716135667
+        nsecs: 204112
+      end_time:
+        secs: 1716135669
+        nsecs: 796746
+      start_frame: 
+      end_frame: 
+    - toss: 2
+      start_time:
+        secs: 1716135669
+        nsecs: 796746
+      end_time:
+        secs: 1716135674
+        nsecs: 371738
+      start_frame: 
+      end_frame: 
+    - toss: 3
+      start_time:
+        secs: 1716135674
+        nsecs: 371738
+      end_time:
+        secs: 1716135678
+        nsecs: 440723
+      start_frame: 
+      end_frame: 
+    - toss: 4
+      start_time:
+        secs: 1716135678
+        nsecs: 440723
+      end_time:
+        secs: 1716135682
+        nsecs: 008255
+      start_frame: 
+      end_frame: 
+    - toss: 5
+      start_time:
+        secs: 1716135682
+        nsecs: 008255
+      end_time:
+        secs: 1716135686
+        nsecs: 148067
+      start_frame: 
+      end_frame: 
+    - toss: 6
+      start_time:
+        secs: 1716135686
+        nsecs: 148067
+      end_time:
+        secs: 1716135689
+        nsecs: 694085
+      start_frame: 
+      end_frame: 
+    - toss: 7
+      start_time:
+        secs: 1716135689
+        nsecs: 694085
+      end_time:
+        secs: 1716135695
+        nsecs: 147828
+      start_frame: 
+      end_frame: 
+    - toss: 8
+      start_time:
+        secs: 1716135695
+        nsecs: 147828
+      end_time:
+        secs: 1716135699
+        nsecs: 011692
+      start_frame: 
+      end_frame: 
+    - toss: 9
+      start_time:
+        secs: 1716135699
+        nsecs: 011692
+      end_time:
+        secs: 1716135702
+        nsecs: 611995
+      start_frame: 
+      end_frame: 
+    - toss: 10
+      start_time:
+        secs: 1716135702
+        nsecs: 611995
+      end_time:
+        secs: 1716135706
+        nsecs: 701743
+      start_frame: 
+      end_frame:
+    - toss: 11
+      start_time:
+        secs: 1716135706
+        nsecs: 701743
+      end_time:
+        secs: 1716135710
+        nsecs: 336346
+      start_frame: 
+      end_frame:
+    - toss: 12
+      start_time:
+        secs: 1716135710
+        nsecs: 336346
+      end_time:
+        secs: 1716135714
+        nsecs: 696155
+      start_frame: 
+      end_frame:
+    - toss: 13
+      start_time:
+        secs: 1716135714
+        nsecs: 696155
+      end_time:
+        secs: 1716135717
+        nsecs: 956317
+      start_frame: 
+      end_frame:
+    - toss: 14
+      start_time:
+        secs: 1716135717
+        nsecs: 956317
+      end_time:
+        secs: 1716135721
+        nsecs: 821180
+      start_frame: 
+      end_frame:
+
+  oatly:
+    - toss: 1
+      start_time:
+        secs: 1716134022
+        nsecs: 188356
+      end_time:
+        secs: 1716134024
+        nsecs: 399684
+      start_frame: 
+      end_frame: 
+    - toss: 2
+      start_time:
+        secs: 1716134024
+        nsecs: 399684
+      end_time:
+        secs: 1716134027
+        nsecs: 537804
+      start_frame: 
+      end_frame: 
+    - toss: 3
+      start_time:
+        secs: 1716134027
+        nsecs: 537804
+      end_time:
+        secs: 1716134031
+        nsecs: 072851
+      start_frame: 
+      end_frame: 
+    - toss: 4
+      start_time:
+        secs: 1716134031
+        nsecs: 072851
+      end_time:
+        secs: 1716134034
+        nsecs: 028280
+      start_frame: 
+      end_frame: 
+    - toss: 5
+      start_time:
+        secs: 1716134034
+        nsecs: 028280
+      end_time:
+        secs: 1716134037
+        nsecs: 530684
+      start_frame: 
+      end_frame: 
+    - toss: 6
+      start_time:
+        secs: 1716134037
+        nsecs: 530684
+      end_time:
+        secs: 1716134040
+        nsecs: 677289
+      start_frame: 
+      end_frame: 
+    - toss: 7
+      start_time:
+        secs: 1716134040
+        nsecs: 677289
+      end_time:
+        secs: 1716134044
+        nsecs: 066313
+      start_frame: 
+      end_frame: 
+    - toss: 8
+      start_time:
+        secs: 1716134044
+        nsecs: 066313
+      end_time:
+        secs: 1716134047
+        nsecs: 168341
+      start_frame: 
+      end_frame: 
+    - toss: 9
+      start_time:
+        secs: 1716134047
+        nsecs: 168341
+      end_time:
+        secs: 1716134051
+        nsecs: 147812
+      start_frame: 
+      end_frame: 
+    - toss: 10
+      start_time:
+        secs: 1716134051
+        nsecs: 147812
+      end_time:
+        secs: 1716134056
+        nsecs: 049743
+      start_frame: 
+      end_frame:
+  
+  pinkcan:
+    - toss: 1
+      start_time:
+        secs: 1716134747
+        nsecs: 391251
+      end_time:
+        secs: 1716134750
+        nsecs: 691240
+      start_frame: 
+      end_frame: 
+    - toss: 2
+      start_time:
+        secs: 1716134750
+        nsecs: 691240
+      end_time:
+        secs: 1716134753
+        nsecs: 567758
+      start_frame: 
+      end_frame: 
+    - toss: 3
+      start_time:
+        secs: 1716134753
+        nsecs: 567758
+      end_time:
+        secs: 1716134757
+        nsecs: 860622
+      start_frame: 
+      end_frame: 
+    - toss: 4
+      start_time:
+        secs: 1716134757
+        nsecs: 860622
+      end_time:
+        secs: 1716134761
+        nsecs: 417616
+      start_frame: 
+      end_frame: 
+    - toss: 5
+      start_time:
+        secs: 1716134761
+        nsecs: 417616
+      end_time:
+        secs: 1716134765
+        nsecs: 186151
+      start_frame: 
+      end_frame: 
+    - toss: 6
+      start_time:
+        secs: 1716134765
+        nsecs: 186151
+      end_time:
+        secs: 1716134769
+        nsecs: 855553
+      start_frame: 
+      end_frame: 
+    - toss: 7
+      start_time:
+        secs: 1716134769
+        nsecs: 855553
+      end_time:
+        secs: 1716134773
+        nsecs: 039698
+      start_frame: 
+      end_frame: 
+    - toss: 8
+      start_time:
+        secs: 1716134773
+        nsecs: 039698
+      end_time:
+        secs: 1716134776
+        nsecs: 991803
+      start_frame: 
+      end_frame: 
+    - toss: 9
+      start_time:
+        secs: 1716134776
+        nsecs: 991803
+      end_time:
+        secs: 1716134781
+        nsecs: 239855
+      start_frame: 
+      end_frame: 
+    - toss: 10
+      start_time:
+        secs: 1716134781
+        nsecs: 239855
+      end_time:
+        secs: 1716134784
+        nsecs: 947938
+      start_frame: 
+      end_frame: 
+    - toss: 11
+      start_time:
+        secs: 1716134784
+        nsecs: 947938
+      end_time:
+        secs: 1716134789
+        nsecs: 715667
+      start_frame: 
+      end_frame:
+    - toss: 12
+      start_time:
+        secs: 1716134789
+        nsecs: 715667
+      end_time:
+        secs: 1716134794
+        nsecs: 443063
+      start_frame:
+      end_frame:
+
+  stapler:
+    - toss: 1
+      start_time:
+        secs: 1716134890
+        nsecs: 080216
+      end_time:
+        secs: 1716134891
+        nsecs: 779543
+      start_frame: 
+      end_frame: 
+    - toss: 2
+      start_time:
+        secs: 1716134891
+        nsecs: 779543
+      end_time:
+        secs: 1716134895
+        nsecs: 955229
+      start_frame: 
+      end_frame: 
+    - toss: 3
+      start_time:
+        secs: 1716134895
+        nsecs: 955229
+      end_time:
+        secs: 1716134898
+        nsecs: 889406
+      start_frame: 
+      end_frame: 
+    - toss: 4
+      start_time:
+        secs: 1716134898
+        nsecs: 889406
+      end_time:
+        secs: 1716134902
+        nsecs: 579509
+      start_frame: 
+      end_frame: 
+    - toss: 5
+      start_time:
+        secs: 1716134902
+        nsecs: 579509
+      end_time:
+        secs: 1716134907
+        nsecs: 226505
+      start_frame: 
+      end_frame: 
+    - toss: 6
+      start_time:
+        secs: 1716134907
+        nsecs: 226505
+      end_time:
+        secs: 1716134910
+        nsecs: 803776
+      start_frame: 
+      end_frame: 
+    - toss: 7
+      start_time:
+        secs: 1716134910
+        nsecs: 803776
+      end_time:
+        secs: 1716134914
+        nsecs: 552339
+      start_frame: 
+      end_frame: 
+    - toss: 8
+      start_time:
+        secs: 1716134914
+        nsecs: 552339
+      end_time:
+        secs: 1716134917
+        nsecs: 518030
+      start_frame: 
+      end_frame: 
+    - toss: 9
+      start_time:
+        secs: 1716134917
+        nsecs: 518030
+      end_time:
+        secs: 1716134921
+        nsecs: 066449
+      start_frame: 
+      end_frame: 
+    - toss: 10
+      start_time:
+        secs: 1716134921
+        nsecs: 066449
+      end_time:
+        secs: 1716134924
+        nsecs: 889161
+      start_frame: 
+      end_frame: 
+    - toss: 11
+      start_time:
+        secs: 1716134924
+        nsecs: 889161
+      end_time:
+        secs: 1716134928
+        nsecs: 335287
+      start_frame: 
+      end_frame:
+
+  styrofoam:
+    - toss: 1
+      start_time:
+        secs: 1716134075
+        nsecs: 947437
+      end_time:
+        secs: 1716134078
+        nsecs: 179613
+      start_frame: 
+      end_frame: 
+    - toss: 2
+      start_time:
+        secs: 1716134078
+        nsecs: 179613
+      end_time:
+        secs: 1716134080
+        nsecs: 935962
+      start_frame: 
+      end_frame: 
+    - toss: 3
+      start_time:
+        secs: 1716134080
+        nsecs: 935962
+      end_time:
+        secs: 1716134084
+        nsecs: 535948
+      start_frame: 
+      end_frame: 
+    - toss: 4
+      start_time:
+        secs: 1716134084
+        nsecs: 535948
+      end_time:
+        secs: 1716134087
+        nsecs: 330238
+      start_frame: 
+      end_frame: 
+    - toss: 5
+      start_time:
+        secs: 1716134087
+        nsecs: 330238
+      end_time:
+        secs: 1716134090
+        nsecs: 966451
+      start_frame: 
+      end_frame: 
+    - toss: 6
+      start_time:
+        secs: 1716134090
+        nsecs: 966451
+      end_time:
+        secs: 1716134094
+        nsecs: 295596
+      start_frame: 
+      end_frame: 
+    - toss: 7
+      start_time:
+        secs: 1716134094
+        nsecs: 295596
+      end_time:
+        secs: 1716134097
+        nsecs: 569435
+      start_frame: 
+      end_frame: 
+    - toss: 8
+      start_time:
+        secs: 1716134097
+        nsecs: 569435
+      end_time:
+        secs: 1716134103
+        nsecs: 705873
+      start_frame: 
+      end_frame: 
+    - toss: 9
+      start_time:
+        secs: 1716134103
+        nsecs: 705873
+      end_time:
+        secs: 1716134106
+        nsecs: 729589
+      start_frame: 
+      end_frame: 
+    - toss: 10
+      start_time:
+        secs: 1716134106
+        nsecs: 729589
+      end_time:
+        secs: 1716134109
+        nsecs: 741170
+      start_frame: 
+      end_frame: 
+
+  toothpaste:
+    - toss: 1
+      start_time:
+        secs: 1716134942
+        nsecs: 010948
+      end_time:
+        secs: 1716134945
+        nsecs: 165666
+      start_frame: 
+      end_frame: 
+    - toss: 2
+      start_time:
+        secs: 1716134945
+        nsecs: 165666
+      end_time:
+        secs: 1716134948
+        nsecs: 747868
+      start_frame: 
+      end_frame: 
+    - toss: 3
+      start_time:
+        secs: 1716134948
+        nsecs: 747868
+      end_time:
+        secs: 1716134952
+        nsecs: 679626
+      start_frame: 
+      end_frame: 
+    - toss: 4
+      start_time:
+        secs: 1716134952
+        nsecs: 679626
+      end_time:
+        secs: 1716134957
+        nsecs: 270990
+      start_frame: 
+      end_frame: 
+    - toss: 5
+      start_time:
+        secs: 1716134957
+        nsecs: 270990
+      end_time:
+        secs: 1716134959
+        nsecs: 471815
+      start_frame: 
+      end_frame: 
+    - toss: 6
+      start_time:
+        secs: 1716134959
+        nsecs: 471815
+      end_time:
+        secs: 1716134963
+        nsecs: 938582
+      start_frame: 
+      end_frame: 
+    - toss: 7
+      start_time:
+        secs: 1716134963
+        nsecs: 938582
+      end_time:
+        secs: 1716134967
+        nsecs: 308671
+      start_frame: 
+      end_frame: 
+    - toss: 8
+      start_time:
+        secs: 1716134967
+        nsecs: 308671
+      end_time:
+        secs: 1716134971
+        nsecs: 359555
+      start_frame: 
+      end_frame: 
+    - toss: 9
+      start_time:
+        secs: 1716134971
+        nsecs: 359555
+      end_time:
+        secs: 1716134975
+        nsecs: 524558
+      start_frame: 
+      end_frame: 
+    - toss: 10
+      start_time:
+        secs: 1716134975
+        nsecs: 524558
+      end_time:
+        secs: 1716134978
+        nsecs: 382558
+      start_frame: 
+      end_frame: 
+    - toss: 11
+      start_time:
+        secs: 1716134978
+        nsecs: 382558
+      end_time:
+        secs: 1716134981
+        nsecs: 068570
+      start_frame: 
+      end_frame:
+    - toss: 12
+      start_time:
+        secs: 1716134981
+        nsecs: 068570
+      end_time:
+        secs: 1716134984
+        nsecs: 230947
+      start_frame: 
+      end_frame:
+
   cube_hand:
     - toss: 0 # toss 1-10
       start_time: 
