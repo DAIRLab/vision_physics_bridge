@@ -1,9 +1,5 @@
 """This file performs output conversions from BundleSDF trajectories to input
-formats required by PLL.
-
-TODO:  This functionality has only been checked for single toss datasets, e.g.
-cube_2.  Still to be tested on multi-toss experiments.
-"""
+formats required by PLL."""
 
 # import argparse
 import click
@@ -14,12 +10,10 @@ import pdb
 import torch
 from scipy import signal
 from scipy.spatial.transform import Rotation
-from pyquaternion import Quaternion
 import matplotlib
 matplotlib.use('TkAgg')
 import matplotlib.pyplot as plt
 import pdb
-import math
 import trimesh
 from typing import Tuple
 
@@ -40,45 +34,6 @@ SAVGOL_FILTER_WINDOW_LENGTH = 15
 SAVGOL_FILTER_POLYORDER = 3
 MEDIAN_FILTER_KERNEL_SIZE = 3
 
-YAML_PATH = file_utils.PROCESSING_YAML_FILE
-
-
-
-def smooth_positions(positions, window_size=5):
-    """
-    Smooths positions using a moving average.
-    :param positions: Nx3 array of positions.
-    :param window_size: Size of the moving average window.
-    :return: Smoothed Nx3 array of positions.
-    """
-    smoothed_positions = np.zeros_like(positions)
-    half_window = window_size // 2
-
-    for i in range(positions.shape[0]):
-        start_idx = max(0, i - half_window)
-        end_idx = min(positions.shape[0], i + half_window)
-        smoothed_positions[i] = np.mean(positions[start_idx:end_idx], axis=0)
-
-    return smoothed_positions
-
-def smooth_quaternions_pyquat(quats, alpha=0.5):
-    """
-    Smooth quaternions using Slerp with pyquaternion.
-    :param quats: Nx4 array of quaternions, xyzw
-    :param alpha: Interpolation factor (0.0 <= alpha <= 1.0).
-    :return: Smoothed Nx4 array of quaternions.
-    """
-    quats = math_utils.xyzw2wxyz(quats)
-    smoothed_quats = np.zeros_like(quats)
-    smoothed_quats[0] = quats[0]
-
-    for i in range(1, len(quats)):
-        q0 = Quaternion(quats[i-1])
-        q1 = Quaternion(quats[i])
-        smoothed = Quaternion.slerp(q0, q1, alpha)
-        smoothed_quats[i] = [smoothed.w, smoothed.x, smoothed.y, smoothed.z]
-    smoothed_quats = math_utils.wxyz2xyzw(smoothed_quats)
-    return smoothed_quats #xyzw
 
 
 class TrajectoryConverterBundleSDFToPLL:
