@@ -567,25 +567,29 @@ class TrajectoryConverterBundleSDFToPLL:
 
         # Print information about the trimmed trajectories.
         for i in range(len(self.start_frames)):
-            print(f'\n=================== TOSS {i} ===================')
+            toss_i = i + self.start_toss
+            print(f'\n=================== TOSS {toss_i} ===================')
             if not self.bsdf_only:
                 tagslam_toss_dts = np.mean(self.tagslam_toss_times[i][1:] - \
                                         self.tagslam_toss_times[i][:-1])
-                print(f'TagSLAM toss {i} trajectory information:' + \
+                print(f'TagSLAM toss {toss_i} trajectory information:' + \
                     f'\n\t{self.tagslam_toss_processed_states[i].shape=}' + \
                     f'\n\t{self.tagslam_toss_times[i][0]=}' + \
                     f'\n\tAverage frame rate (toss): {1/tagslam_toss_dts}\n')
 
             bsdf_toss_dts = np.mean(self.bundlesdf_toss_times[i][1:] - \
                                     self.bundlesdf_toss_times[i][:-1])
-            print(f'BundleSDF toss {i} trajectory information:' + \
+            print(f'BundleSDF toss {toss_i} trajectory information:' + \
                 f'\n\t{self.bundlesdf_b_toss_processed_states[i].shape=}' + \
                 f'\n\t{self.bundlesdf_toss_times[i][0]=}' + \
                 f'\n\tAverage frame rate (toss): {1/bsdf_toss_dts}\n')
 
-            print(f'BundleSDF keyframe toss {i} trajectory information:' + \
-                f'\n\t{self.keyframe_b_toss_processed_states[i].shape=}' + \
-                f'\n\t{self.keyframe_toss_times[i][0]=}\n')
+            print(f'BundleSDF keyframe toss {toss_i} trajectory information:' + \
+                f'\n\t{self.keyframe_b_toss_processed_states[i].shape=}')
+            if self.keyframe_b_toss_times[i].shape[0] > 0:
+                print(f'\t{self.keyframe_toss_times[i][0]=}\n')
+            else:
+                print(f'\tNo keyframes for toss {toss_i}.\n')
 
     def _trim_processed_trajectories(self) -> None:
         """After trajectories are already processed, store trimmed versions of
@@ -740,11 +744,12 @@ class TrajectoryConverterBundleSDFToPLL:
                               label='BundleSDF, T Origin')
             ax[1, 0].plot(t_bsdf, q_bsdf_b[:, 0], label='BundleSDF, B Origin',
                           linestyle='--')
-            if not b_only:
-                ax[1, 0].scatter(t_key, q_key_t[:, 0], c='orange', s=20,
-                                 label='Keyframes, T Origin')
-            ax[1, 0].scatter(t_key, q_key_b[:, 0], c='green', s=20,
-                             label='Keyframes, B Origin')
+            if len(t_key) > 0:
+                if not b_only:
+                    ax[1, 0].scatter(t_key, q_key_t[:, 0], c='orange', s=20,
+                                    label='Keyframes, T Origin')
+                ax[1, 0].scatter(t_key, q_key_b[:, 0], c='green', s=20,
+                                label='Keyframes, B Origin')
             ax[1, 0].set_title('W Quaternion')
             if not b_only:
                 ax[1, 1].plot(t_ts, q_ts[:, 1], label='TagSLAM')
@@ -752,11 +757,12 @@ class TrajectoryConverterBundleSDFToPLL:
                               label='BundleSDF, T Origin')
             ax[1, 1].plot(t_bsdf, q_bsdf_b[:, 1], label='BundleSDF, B Origin',
                           linestyle='--')
-            if not b_only:
-                ax[1, 1].scatter(t_key, q_key_t[:, 1], c='orange', s=20,
-                                 label='Keyframes, T Origin')
-            ax[1, 1].scatter(t_key, q_key_b[:, 1], c='green', s=20,
-                             label='Keyframes, B Origin')
+            if len(t_key) > 0:
+                if not b_only:
+                    ax[1, 1].scatter(t_key, q_key_t[:, 1], c='orange', s=20,
+                                    label='Keyframes, T Origin')
+                ax[1, 1].scatter(t_key, q_key_b[:, 1], c='green', s=20,
+                                label='Keyframes, B Origin')
             ax[1, 1].set_title('X Quaternion')
             if not b_only:
                 ax[1, 2].plot(t_ts, q_ts[:, 2], label='TagSLAM')
@@ -764,11 +770,12 @@ class TrajectoryConverterBundleSDFToPLL:
                               label='BundleSDF, T Origin')
             ax[1, 2].plot(t_bsdf, q_bsdf_b[:, 2], label='BundleSDF, B Origin',
                           linestyle='--')
-            if not b_only:
-                ax[1, 2].scatter(t_key, q_key_t[:, 2], c='orange', s=20,
-                                 label='Keyframes, T Origin')
-            ax[1, 2].scatter(t_key, q_key_b[:, 2], c='green', s=20,
-                             label='Keyframes, B Origin')
+            if len(t_key) > 0:
+                if not b_only:
+                    ax[1, 2].scatter(t_key, q_key_t[:, 2], c='orange', s=20,
+                                    label='Keyframes, T Origin')
+                ax[1, 2].scatter(t_key, q_key_b[:, 2], c='green', s=20,
+                                label='Keyframes, B Origin')
             ax[1, 2].set_title('Y Quaternion')
             if not b_only:
                 ax[1, 3].plot(t_ts, q_ts[:, 3], label='TagSLAM')
@@ -776,11 +783,12 @@ class TrajectoryConverterBundleSDFToPLL:
                               label='BundleSDF, T Origin')
             ax[1, 3].plot(t_bsdf, q_bsdf_b[:, 3], label='BundleSDF, B Origin',
                           linestyle='--')
-            if not b_only:
-                ax[1, 3].scatter(t_key, q_key_t[:, 3], c='orange', s=20,
-                                 label='Keyframes, T Origin')
-            ax[1, 3].scatter(t_key, q_key_b[:, 3], c='green', s=20,
-                             label='Keyframes, B Origin')
+            if len(t_key) > 0:
+                if not b_only:
+                    ax[1, 3].scatter(t_key, q_key_t[:, 3], c='orange', s=20,
+                                    label='Keyframes, T Origin')
+                ax[1, 3].scatter(t_key, q_key_b[:, 3], c='green', s=20,
+                                label='Keyframes, B Origin')
             ax[1, 3].set_title('Z Quaternion')
 
             if not b_only:
@@ -831,16 +839,17 @@ class TrajectoryConverterBundleSDFToPLL:
             if not b_only:
                 q_errors = math_utils.quaternion_error(q_ts, q_bsdf_t)
                 q_errors *= 180 / np.pi
-
-                # Include the orientation error for the keyframes.
-                tagslam_time_indices = [np.argmin((t_ts - t)**2) for t in t_key]
-                q_key_errors = math_utils.quaternion_error(
-                    q_ts[tagslam_time_indices], q_key_t)
-                q_key_errors *= 180 / np.pi
                 ax[0, 3].plot(t_ts, q_errors, color='r',
                             label='TagSLAM-to-BundleSDF T')
-                ax[0, 3].scatter(t_key, q_key_errors, color='r', s=20,
-                                label='TagSLAM-to-Keyframes T')
+
+                # Include the orientation error for the keyframes.
+                if len(t_key) > 0:
+                    tagslam_time_idx = [np.argmin((t_ts - t)**2) for t in t_key]
+                    q_key_errors = math_utils.quaternion_error(
+                        q_ts[tagslam_time_idx], q_key_t)
+                    q_key_errors *= 180 / np.pi
+                    ax[0, 3].scatter(t_key, q_key_errors, color='r', s=20,
+                                    label='TagSLAM-to-Keyframes T')
                 ax[0, 3].set_title('Orientation Error')
                 ax[0, 3].legend()
 

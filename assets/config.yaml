@@ -369,8 +369,11 @@ dataset: #toss_id:rosbag_id
     9: 50
     10: 50
 
+# WARNING:  When we parse this yaml, it relies on the tosses going
+# chronologically, starting from 0, with no skipped tosses.  If you want to have
+# entries for tosses 1 and 3, it is also necessary to have (empty) entries for
+# tosses 0 and 2.
 tosses:
-  ### Create empty list for each object and let me fill the secs and nsecs
   bakingbox:
     - toss: 0
     - toss: 1
