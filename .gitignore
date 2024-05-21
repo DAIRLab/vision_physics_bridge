@@ -16,3 +16,4 @@
 *.obj
 *.ply
 /consolidated_results
+/evaluation
