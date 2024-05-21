@@ -586,7 +586,7 @@ class TrajectoryConverterBundleSDFToPLL:
 
             print(f'BundleSDF keyframe toss {toss_i} trajectory information:' + \
                 f'\n\t{self.keyframe_b_toss_processed_states[i].shape=}')
-            if self.keyframe_b_toss_times[i].shape[0] > 0:
+            if self.keyframe_toss_times[i].shape[0] > 0:
                 print(f'\t{self.keyframe_toss_times[i][0]=}\n')
             else:
                 print(f'\tNo keyframes for toss {toss_i}.\n')
