@@ -8,6 +8,7 @@ import os
 import os.path as op
 import pdb
 from PIL import Image, ImageDraw, ImageFont
+import cv2
 from tempfile import TemporaryDirectory
 import rosbag
 from selenium import webdriver
@@ -290,18 +291,22 @@ class OverlayVideoGenerator:
         if not hasattr(self, 'start_frames'):
             self._get_absolute_frames()
 
-        # A frame is within a PLL toss if it is greater than the start frame and
-        # less than the same toss's end frame.
-        if np.sum(frame_i >= self.start_frames) == \
-            np.sum(frame_i <= self.end_frames):
-            toss_i = self.start_toss + np.sum(frame_i >= self.start_frames) - 1
+        # A frame is within a PLL toss if the last toss whose start frame it
+        # satisfies is the first toss whose end frame it satisfies.
+        good_starts = np.where(frame_i >= self.start_frames)[0]
+        good_ends = np.where(frame_i <= self.end_frames)[0]
+        if len(good_starts) > 0 and len(good_ends) > 0 and \
+            good_starts[-1] == good_ends[0]:
+            toss_i = self.start_toss + good_starts[-1]
 
             # Add a PLL toss label to the image.
             draw = ImageDraw.Draw(im)
             draw.polygon([(25, 435), (100, 435), (100, 475), (25, 475)],
                          fill='black')
+            font_path = os.path.join(cv2.__path__[0],'qt','fonts','DejaVuSans.ttf')
+            font = ImageFont.truetype(font_path, 20)
             draw.text((30, 440), f'Toss {toss_i}', fill='white',
-                      font=ImageFont.truetype('arial.ttf', 20))
+                      font=font)
 
         return im
 
@@ -340,8 +345,9 @@ class OverlayVideoGenerator:
         im.paste(mesh_im, (0,0), mask = mesh_im)
 
         # Add annotation to show what portions of the video are part of a toss
-        # trajectory we give to PLL.
-        self._add_watermark(im, frame_i)
+        # trajectory we give to PLL.  Add 1 since the watermarks are determined
+        # based on 1-indexing frame numbers.
+        self._add_watermark(im, frame_i+1)
 
         return im
 
