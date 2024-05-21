@@ -12,7 +12,8 @@ DATA_GEN_DIR = op.dirname(op.realpath(__file__))
 REPO_DIR = op.dirname(DATA_GEN_DIR)
 PLL_DIR = op.join(REPO_DIR, 'dair_pll')
 
-sys.path.append(PLL_DIR)    # For importing dair_pll.
+if PLL_DIR not in sys.path:
+    sys.path.append(PLL_DIR)    # For importing dair_pll.
 
 from dair_pll import quaternion
 
@@ -25,6 +26,11 @@ def get_deep_support_query_directions() -> Tensor:
     surface = points_on_box_surface / points_on_box_surface.norm(
         dim=-1, keepdim=True)
     return surface.to(torch.float64)
+
+
+def to_homogeneous(points):
+    assert len(points.shape)==2, f'pts.shape: {points.shape}'
+    return np.concatenate([points, np.ones_like(points[:, :1])], axis=-1)
 
 
 def log_mean(a, b):
@@ -307,6 +313,63 @@ def transform_bundletrack_origin_to_tagslam_origin(
         return pred_new_world
     
     return pred_new
+
+
+def transform_t_origin_to_b_origin_pll_format(
+        full_tagslam_trajectory, synced_bsdf_pose, synced_tagslam_pose
+):
+    """Given a (N, 13) trajectory of the TagSLAM body origin in world frame, and
+    given (4, 4) time-synchronized poses of the BundleSDF and TagSLAM body
+    origins in world frame, get a (N, 13) trajectory of the BundleSDF body
+    origin in world frame.  The trajectory is in PLL format.
+
+    We wish to do:
+
+        world_T_Bn = world_T_Tn * Tn_T_Bn
+                   = world_T_Tn * T0_T_B0
+                   = world_T_Tn * T0_T_world * world_T_B0
+                   = world_T_Tn * inv(world_T_T0) * world_T_B0
+    """
+    world_T_T0 = synced_tagslam_pose
+    world_T_B0 = synced_bsdf_pose
+
+    tagslam_states_in_b_origin = np.zeros_like(full_tagslam_trajectory)
+    for i in range(len(full_tagslam_trajectory)):
+        tagslam_pll_state = full_tagslam_trajectory[i]
+
+        # Handle the configuration terms.
+        world_T_Ti = pll_format_to_trans_mat(tagslam_pll_state)
+        world_T_Bi = world_T_Ti @ np.linalg.inv(world_T_T0) @ world_T_B0
+        tagslam_states_in_b_origin[i,:7] = trans_mat_to_pll_config(world_T_Bi)
+
+        # Handle the linear velocity term:  They were already represented in
+        # world coordinates, so they can be directly copied over.
+        tagslam_states_in_b_origin[i, 10:13] = tagslam_pll_state[10:13]
+
+        # Handle the angular velocity term:  They are represented in body frame,
+        # so they need to be transformed from TagSLAM to BundleSDF body frame.
+        """B_T_p = (inv(world_T_B0) * world_T_T0) * T_T_p"""
+        trans_mat_t = np.eye(4)
+        trans_mat_t[:3, 3] = full_tagslam_trajectory[i, 7:10]
+        trans_mat_b = np.linalg.inv(world_T_B0) @ world_T_T0 @ trans_mat_t
+        tagslam_states_in_b_origin[i, 7:10] = trans_mat_b[:3, 3]
+
+    return tagslam_states_in_b_origin
+
+
+def pll_format_to_trans_mat(pll_format_pose):
+    """Converts a pose in PLL format to a transformation matrix."""
+    quat_xyzw = wxyz2xyzw(pll_format_pose[:4])
+    xyz = pll_format_pose[4:7]
+    pos_quat = np.concatenate((xyz, quat_xyzw))
+    return pos_quat_to_trans_mat(pos_quat)
+
+
+def trans_mat_to_pll_config(trans_mat):
+    pos_quat = trans_mat_to_pos_quat(trans_mat)
+    xyz = pos_quat[:3]
+    quat_wxyz = xyzw2wxyz(pos_quat[3:7])
+    return np.concatenate((quat_wxyz, xyz)).squeeze()
 
 
 def transform_points_wrt_tagslam_origin_to_bundletrack_origin(

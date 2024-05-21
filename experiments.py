@@ -5,40 +5,9 @@ import os
 import trimesh
 from scipy.spatial import cKDTree
 import open3d as o3d
-from math_utils import pos_quat_to_trans_mat, transform_bundletrack_origin_to_tagslam_origin
 
-def to_homo(pts):
-    '''
-    @pts: (N,3 or 2) will homogeneliaze the last dimension
-    '''
-    assert len(pts.shape)==2, f'pts.shape: {pts.shape}'
-    homo = np.concatenate((pts, np.ones((pts.shape[0],1))),axis=-1)
-    return homo
+import eval_utils, math_utils
 
-# TODO: trajectory metric here
-def add_err(pred,gt,model_pts):
-    """
-    Average Distance of Model Points for objects with no indistinguishable views
-    - by Hinterstoisser et al. (ACCV 2012).
-    """
-    pred_pts = (pred@to_homo(model_pts).T).T[:,:3]
-    gt_pts = (gt@to_homo(model_pts).T).T[:,:3]
-    e = np.linalg.norm(pred_pts - gt_pts, axis=1).mean()
-    return e
-
-# TODO: trajectory metric here
-def adi_err(pred,gt,model_pts):
-    """
-    @pred: 4x4 mat
-    @gt:
-    @model: (N,3)
-    """
-    pred_pts = (pred@to_homo(model_pts).T).T[:,:3]
-    gt_pts = (gt@to_homo(model_pts).T).T[:,:3]
-    nn_index = cKDTree(pred_pts)
-    nn_dists, _ = nn_index.query(gt_pts, k=1, workers=-1)
-    e = nn_dists.mean()
-    return e
 
 def compute_auc(rec, max_val=0.1):
     '''https://github.com/wenbowen123/iros20-6d-pose-tracking/blob/2df96b720e8e499b9f0d5fcebfbae2bcfa51ab19/eval_ycb.py#L45
@@ -126,7 +95,7 @@ def benchmark_one_video():
     pred_poses, gt_poses = [], []
     for frame_id in range(1, gt_data.shape[0]):
         output_pose = np.loadtxt(OUTPUT_POSE_DIR + "%04i.txt" % frame_id)
-        output_pose = transform_bundletrack_origin_to_tagslam_origin(
+        output_pose = math_utils.transform_bundletrack_origin_to_tagslam_origin(
             output_pose,
             OUTPUT_POSE_DIR,
             ODOM_FILE_PATH,
@@ -136,7 +105,7 @@ def benchmark_one_video():
         )
         pred_poses.append(output_pose)
         tagslam_pose = gt_data[frame_id, 1:]
-        tagslam_mat = pos_quat_to_trans_mat(tagslam_pose)
+        tagslam_mat = math_utils.pos_quat_to_trans_mat(tagslam_pose)
         gt_poses.append(tagslam_mat)
     gt_mesh = trimesh.load(GT_MESH_FILE)
     pred_mesh = trimesh.load(PRED_MESH_FILE)
@@ -144,8 +113,10 @@ def benchmark_one_video():
     pred_poses = np.array(pred_poses)
     adi_errs, add_errs = [], []
     for i in range(len(pred_poses)):
-        adi = adi_err(pred_poses[i],gt_poses[i],gt_mesh.vertices.copy())
-        add = add_err(pred_poses[i],gt_poses[i],gt_mesh.vertices.copy())
+        adi = eval_utils.compute_adds_tracking_error(
+            pred_poses[i],gt_poses[i],gt_mesh.vertices.copy())
+        add = eval_utils.compute_add_tracking_error(
+            pred_poses[i],gt_poses[i],gt_mesh.vertices.copy())
         adi_errs.append(adi)
         add_errs.append(add)
     adi_errs = np.array(adi_errs)
@@ -180,7 +151,7 @@ def benchmark_one_video():
         thres = 0.02
         print(f'pred: {len(pred_pts)}, gt: {len(gt_pts)}')
         reg_p2p = o3d.pipelines.registration.registration_icp(pcd_pred, pcd_gt, thres, np.eye(4), o3d.pipelines.registration.TransformationEstimationPointToPoint())
-        pred_pts_icp = (reg_p2p.transformation@to_homo(pred_pts).T).T[:,:3]
+        pred_pts_icp = (reg_p2p.transformation@eval_utils.to_homogeneous(pred_pts).T).T[:,:3]
         chamfer_dists = chamfer_distance_between_clouds_mutual(pred_pts_icp, gt_pts)
         cd = chamfer_dists.mean()*100
         print("chamfer_dist(cm)",cd)

@@ -26,8 +26,10 @@ DATA_GEN_DIR = op.dirname(op.realpath(__file__))
 REPO_DIR = op.dirname(DATA_GEN_DIR)
 PLL_DIR = op.join(REPO_DIR, 'dair_pll')
 
-sys.path.append(PLL_DIR)    # For importing dair_pll.
-sys.path.append(REPO_DIR)   # For importing bundlenets.
+if PLL_DIR not in sys.path:
+    sys.path.append(PLL_DIR)    # For importing dair_pll.
+if REPO_DIR not in sys.path:
+    sys.path.append(REPO_DIR)   # For importing bundlenets.
 
 from dair_pll import file_utils as pll_file_utils
 from bundlenets import file_utils as bsdf_file_utils
@@ -180,28 +182,37 @@ def contactnets_input_dir(object: str) -> str:
         op.join(pll_file_utils.ASSETS_DIR, f'vision_{object}')
     )
 
-def contactnets_input_dir_tagslam(dataset: str, full: bool = True) -> str:
+def contactnets_input_dir_tagslam(
+        dataset: str, full: bool = True, create: bool = True) -> str:
     """ContactNets' input directory for a particular experiment from TagSLAM."""
-    subdir_1 = 'full' if full else 'toss'
-    subdir_2 = '' if full else 'tagslam'
+    traj_subdir = 'full' if full else 'toss'
+    track_subdir = '' if full else 'tagslam'
     object = dataset.split('_')[0]
-    return assure_created(
-        op.join(contactnets_input_dir(object), dataset, subdir_1, subdir_2)
-    )
+    cn_input_dir = op.join(
+        contactnets_input_dir(object), dataset, traj_subdir, track_subdir)
+
+    if create:
+        return assure_created(cn_input_dir)
+    return cn_input_dir
 
 def contactnets_input_dir_bundlesdf(
-        dataset: str, iteration: int, bundlesdf_id: str, full: bool = True
+        dataset: str, iteration: int, bundlesdf_id: str, full: bool = True,
+        create: bool = True
 ) -> str:
     """ContactNets' input directory for a particular experiment from a
     particular iteration of BundleSDF."""
-    subdir_1 = 'full' if full else 'toss'
-    subdir_2 = f'bundlesdf_iteration_{iteration}'
-    subdir_3 = '' if full else bundlesdf_id
+    traj_subdir = 'full' if full else 'toss'
+    iteration_subdir = f'bundlesdf_iteration_{iteration}'
+    id_subdir = '' if full else bundlesdf_id
     object = dataset.split('_')[0]
-    return assure_created(
-        op.join(contactnets_input_dir(object), dataset, subdir_1, subdir_2,
-                subdir_3)
-    )
+
+    cn_input_dir = op.join(
+        contactnets_input_dir(object), dataset, traj_subdir, iteration_subdir,
+        id_subdir)
+
+    if create:
+        return assure_created(cn_input_dir)
+    return cn_input_dir
 
 def contactnets_input_geometry_dir(
         dataset: str, iteration: int, bundlesdf_id: str,
@@ -382,6 +393,31 @@ def inspection_3d_slice_figure_filepath(
             f'{nerf_bundlesdf_id}_{cycle_iteration}.fig.pickle'
 
     return op.join(slice_plot_dir, filename)
+
+
+"""Evaluation directories and utilities."""
+def evaluation_dir() -> str:
+    """Directory for all evaluation results."""
+    return assure_created(op.join(DATA_GEN_DIR, 'evaluation'))
+
+def evaluation_subdir(
+        dataset: str, tracking_bundlesdf_id: str, nerf_bundlesdf_id: str,
+        cycle_iteration: int) -> str:
+    """Subdirectory for a particular experiment's evaluation."""
+    eval_dir = evaluation_dir()
+
+    if tracking_bundlesdf_id.startswith('bundlesdf_id_'):
+        tracking_bundlesdf_id = tracking_bundlesdf_id[13:]
+    if nerf_bundlesdf_id.startswith('bundlesdf_id_'):
+        nerf_bundlesdf_id = nerf_bundlesdf_id[13:]
+
+    now = datetime.datetime.now()
+    date_str = now.strftime('%m%d')
+    subdir = \
+        f'{date_str}_{dataset}_{tracking_bundlesdf_id}_' + \
+            f'{nerf_bundlesdf_id}_{cycle_iteration}'
+
+    return assure_created(op.join(eval_dir, subdir))
 
 
 """Yaml file parsing utilities."""

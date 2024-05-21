@@ -17,10 +17,14 @@ PLL cyclic pipeline."""
 
 import click
 import numpy as np
+import os
 import os.path as op
 import pdb
+import torch
+from torch import Tensor
+import trimesh
 
-import file_utils
+import eval_utils, file_utils, math_utils
 
 from conversion_bsdf_to_pll import TrajectoryConverterBundleSDFToPLL
 
@@ -390,6 +394,9 @@ from conversion_bsdf_to_pll import TrajectoryConverterBundleSDFToPLL
 #     plot_with_time(bundletrack_time, gt_time, OUTPUT_POSE_DIR, tagslam_poses,
 #                    args.no_show)
 
+INERTIA_THETA_KEY = 'multibody_terms.lagrangian_terms.inertial_parameters'
+FRICTION_KEY = 'multibody_terms.contact_terms.friction_params'
+
 
 def traverse_run_history(
         vision_asset: str, bundlesdf_id: str, cycle_iteration: int) -> dict:
@@ -410,18 +417,26 @@ def traverse_run_history(
                                'pll_id': None}
         }
     """
+    history_dict = {f'cycle_iteration_{cycle_iteration}': {
+        'bundlesdf_id': bundlesdf_id, 'pll_id': None}}
+
+    # First, handle the cycle = 1 case, which means there should be no former
+    # associated PLL run.
     if cycle_iteration == 1:
-        return {'cycle_iteration_1': {
-            'bundlesdf_id': bundlesdf_id, 'pll_id': None}
-        }
-    
+        return history_dict
+
+    # For higher cycles, find the associated PLL run.
+
     # Get the PLL ID from the BundleSDF run's config_nerf.yml.
     bundlesdf_results_dir = file_utils.bundlesdf_run_results_dir(
         vision_asset, cycle_iteration=cycle_iteration, bundlesdf_id=bundlesdf_id
     )
     pll_id = file_utils.load_pll_id_from_bundlesdf_yml(bundlesdf_results_dir)
-    history_dict = {f'cycle_iteration_{cycle_iteration}': {
-        'bundlesdf_id': bundlesdf_id, 'pll_id': pll_id}
+    assert pll_id is not None, f'{cycle_iteration=} but found no PLL ID for' + \
+        f' {vision_asset=} with {bundlesdf_id=}.'
+
+    history_dict[f'cycle_iteration_{cycle_iteration-1}'] = {
+        'bundlesdf_id': None, 'pll_id': pll_id
     }
 
     # Traverse one level lower.
@@ -429,17 +444,25 @@ def traverse_run_history(
         vision_asset, cycle_iteration=cycle_iteration-1, pll_id=pll_id)
     former_bundlesdf_id = file_utils.load_bundlesdf_id_from_pll_json(
         pll_output_dir)
+    former_history_dict = traverse_run_history(
+        vision_asset, former_bundlesdf_id, cycle_iteration-1)
 
-    history_dict.update(traverse_run_history(
-        vision_asset, former_bundlesdf_id, cycle_iteration-1))
+    # Take care to update the history dictionary.
+    for cycle_key, cycle_info in former_history_dict.items():
+        if cycle_key not in history_dict.keys():
+            history_dict[cycle_key] = cycle_info
+        else:
+            assert history_dict[cycle_key]['bundlesdf_id'] is None, \
+                f'Found a BundleSDF ID for {cycle_key=} in {vision_asset=} ' + \
+                f'with {cycle_iteration=}.'
+            history_dict[cycle_key]['bundlesdf_id'] = cycle_info['bundlesdf_id']
 
     return history_dict
 
 
 class DynamicsPredictor:
-    """TODO"""
-    def __init__(self, vision_asset: str, bundlesdf_id: str,
-                 cycle_iteration: int):
+    """Dynamics-related methods."""
+    def __init__(self, vision_asset: str, history: dict, bsdf_only: bool):
         # First decode the system and start/end tosses from the provided asset
         # directory.
         self.object = vision_asset.split('_')[0]
@@ -453,22 +476,214 @@ class DynamicsPredictor:
         self.end_toss = end_toss
 
         self.vision_asset = vision_asset
-        self.bundlesdf_id = bundlesdf_id
-        self.cycle_iteration = cycle_iteration
+        self.history = history
+        self.bsdf_only = bsdf_only
+
+        last_bsdf_iteration = 1
+        for cycle in self.history.keys():
+            cycle_num = cycle.split('_')[-1]
+            if int(cycle_num) > last_bsdf_iteration:
+                last_bsdf_iteration = int(cycle_num)
+        self.last_bsdf_iteration = last_bsdf_iteration
+        self.last_bsdf_id = self.history[
+            f'cycle_iteration_{last_bsdf_iteration}']['bundlesdf_id']
+
+        learned_params = self._look_up_latest_pll_results()
+        learned_params.update(self._look_up_latest_bundlesdf_results())
+
+        self.learned_params = learned_params
+
+        self.eval_dir = file_utils.evaluation_subdir(
+            dataset=self.vision_asset, cycle_iteration=self.last_bsdf_iteration,
+            tracking_bundlesdf_id=self.last_bsdf_id,
+            nerf_bundlesdf_id=self.last_bsdf_id
+        )
 
     def _look_up_latest_pll_results(self):
-        """"""
-        history = traverse_run_history(
-            self.vision_asset, self.bundlesdf_id, self.cycle_iteration)
-        assert f'cycle_iteration_{self.cycle_iteration-1}' in history.keys(), \
-            f'No history found; have cycles {history.keys()}.'
-        latest_pll_id = history[
-            f'cycle_iteration_{self.cycle_iteration-1}']['pll_id']
+        """Also stores self.pll_results_dir."""
+        if self.last_bsdf_iteration == 1:
+            print(f'No prior PLL results to look up for {self.vision_asset=}' +\
+                  f' with {self.history=}.')
+            return
+
+        pll_iteration = self.last_bsdf_iteration - 1
+        pll_id = self.history[f'cycle_iteration_{pll_iteration}']['pll_id']
+        self.pll_results_dir = file_utils.contactnets_output_dir(
+            dataset=self.vision_asset, cycle_iteration=pll_iteration,
+            pll_id=pll_id)
+
+        # TODO BIBIT decide if config/stats are necessary/useful
+        config, stats, checkpoint = eval_utils.get_pll_config_stats_checkpoint(
+            self.pll_results_dir)
+
+        best_system_state = checkpoint['best_learned_system_state']
+        params_dict = self._get_physical_parameters(
+            best_system_state, self.pll_results_dir)
+        # run_dict['learned_params'] = params_dict
+
+        # init_params_dict = get_init_physical_parameters(
+        #     system, body_names, checkpoint, wandb_api)
+        # run_dict['initial_params'] = init_params_dict
+        return params_dict
+
+    def _look_up_latest_bundlesdf_results(self):
+        """Also stores self.nerf_results_dir."""
+        self.nerf_results_dir = file_utils.bundlesdf_nerf_results_dir(
+            dataset=self.vision_asset, cycle_iteration=self.last_bsdf_iteration,
+            tracking_bundlesdf_id=self.last_bsdf_id,
+            nerf_bundlesdf_id=self.last_bsdf_id
+        )
+        geometry = trimesh.load(
+            op.join(self.nerf_results_dir, 'textured_mesh.obj'), force='mesh')
+
+        bsdf_params = {}
+        bsdf_params['bsdf_geometry'] = geometry
+        bsdf_params['bsdf_geometry_hull'] = geometry.convex_hull
+        return bsdf_params
+
+    def _get_physical_parameters(
+            self, system_state: dict, pll_results_dir: str) -> dict:
+        """Extract the physical parameters PLL learned from the given system
+        state dictionary.  This dictionary will contain keys:
+            - friction:  The friction coefficient.
+            - mass:  The mass of the object.
+            - com_x:  The x-coordinate of the center of mass.
+            - com_y:  The y-coordinate of the center of mass.
+            - com_z:  The z-coordinate of the center of mass.
+            - I_xx:  The moment of inertia about the x-axis.
+            - I_yy:  The moment of inertia about the y-axis.
+            - I_zz:  The moment of inertia about the z-axis.
+            - I_xy:  The moment of inertia about the xy-plane.
+            - I_xz:  The moment of inertia about the xz-plane.
+            - I_yz:  The moment of inertia about the yz-plane.
+            - geometry:  The geometry of the object as a trimesh object.
+        """
+        learned_params = {}
+
+        # =========== FRICTION: The friction is a single parameter, stored at
+        # index 0 at the friction key value (index 1 is the ground).
+        learned_params['friction'] = system_state[FRICTION_KEY][0].item()
+
+        # =========== INERTIA: Interpret inertia into individual parts.
+        inertia_theta = system_state[INERTIA_THETA_KEY]
+        inertia_pi_cm = eval_utils.convert_inertia_theta_to_pi_cm(
+            inertia_theta).squeeze()
+
+        # Sadly the mass that is stored in this checkpoint is slightly
+        # incorrect since it was not manually overwritten to be the original
+        # value.  We can look this up in the URDF.
+        urdf_path = op.join(
+            pll_results_dir, 'urdfs', 'with_bundlesdf_mesh.urdf')
+        mass = eval_utils.get_mass_from_urdf(urdf_path)
+
+        # Reminder, pi_cm format is:
+        # [m, m * p_x, m * p_y, m * p_z, I_xx, I_yy, I_zz, I_xy, I_xz, I_yz]
+
+        # Divide out the mass.
+        inertia_pi_cm[1:4] /= mass
+
+        # Store the human-interpretable inertia parameters -- these should
+        # exactly match the URDF.
+        learned_params['mass'] = mass
+        learned_params['com_x'] = inertia_pi_cm[1].item()
+        learned_params['com_y'] = inertia_pi_cm[2].item()
+        learned_params['com_z'] = inertia_pi_cm[3].item()
+        learned_params['I_xx'] = inertia_pi_cm[4].item()
+        learned_params['I_yy'] = inertia_pi_cm[5].item()
+        learned_params['I_zz'] = inertia_pi_cm[6].item()
+        learned_params['I_xy'] = inertia_pi_cm[7].item()
+        learned_params['I_xz'] = inertia_pi_cm[8].item()
+        learned_params['I_yz'] = inertia_pi_cm[9].item()
+
+        # =========== GEOMETRY: Extract the geometry from the obj file.
+        learned_params['pll_geometry'] = trimesh.load(
+            op.join(pll_results_dir, 'urdfs', 'test.obj'), force='mesh')
+
+        return learned_params
+
+    def _create_pll_sim_system(self):
+        """Create a PLL MultibodyLearnableSystem, which can be simulated."""
+        # First create a URDF.  This should be the same as the last PLL URDF but
+        # with the geometry replaced by the BSDF geometry.
+        old_urdf_path = op.join(
+            self.pll_results_dir, 'urdfs', 'with_bundlesdf_mesh.urdf')
+        new_urdf_path = op.join(self.eval_dir, 'bsdf_mesh_pll_params.urdf')
+        os.system(f'cp {old_urdf_path} {new_urdf_path}')
+
+        old_obj_path = op.join(self.nerf_results_dir, 'textured_mesh.obj')
+        new_obj_path = op.join(self.eval_dir, 'bsdf_mesh.obj')
+        os.system(f'cp {old_obj_path} {new_obj_path}')
+
+        # Need to overwrite the geometry in the URDF to refer to the new obj.
+        eval_utils.overwrite_mesh_name_in_urdf(new_urdf_path)
+        print(f'Wrote URDF to {new_urdf_path}')
+
+        # Next, create the system.
+        self.pll_system = eval_utils.create_multibody_learnable_system(
+            new_urdf_path)
+
+    def generate_rollouts(self):
+        """Generate rollouts for the object using the learned parameters.
+
+        TODO: Currently this relies on TagSLAM to provide the ground truth.
+        """
+        # Create the simulation system.
+        self._create_pll_sim_system()
+
+        # Get ground truth trajectories from TagSLAM.
+        tagslam_trajs = eval_utils.get_pll_tagslam_trajectories_pll_format(
+            object=self.object)
+
+        # Convert the TagSLAM trajectories to be represented with respect to the
+        # BundleSDF body origin.
+        tagslam_trajs_of_b_origin = {}
+        for key, traj in tagslam_trajs.items():
+            # Get synchronized BundleSDF and TagSLAM poses.
+            b_mat, t_mat = eval_utils.get_synced_bsdf_tagslam_toss_poses(
+                vision_asset=self.vision_asset,
+                bundlesdf_id=self.last_bsdf_id,
+                cycle_iteration=self.last_bsdf_iteration,
+                desired_toss_num=key
+            )
+
+            # Do the conversion.
+            tagslam_trajs_of_b_origin[key] = \
+                math_utils.transform_t_origin_to_b_origin_pll_format(
+                    full_tagslam_trajectory=traj,
+                    synced_bsdf_pose=b_mat,
+                    synced_tagslam_pose=t_mat
+                )
+
+        # Get the predictions.
+        pred_trajs_of_b_origin = {}
+        for key, traj in tagslam_trajs_of_b_origin.items():
+            pred_trajs_of_b_origin[key] = eval_utils.get_pll_rollout_trajectory(
+                system=self.pll_system, target_traj=Tensor(traj)
+            )
+
+        # Store the targets and predictions.
+        self.target_trajs = tagslam_trajs_of_b_origin
+        self.predicted_trajs = pred_trajs_of_b_origin
+
+    def save_predictions(self):
+        """Save the target and prediction trajectories to the evaluation
+        directory."""
+        print(f'Saving trajectories to {self.eval_dir}:')
+
+        for toss_num, target_traj in self.target_trajs.items():
+            filename = f'target_toss_{toss_num}.pt'
+            torch.save(target_traj, op.join(self.eval_dir, filename))
+            print(f'\t{filename}')
+
+        for toss_num, pred_traj in self.predicted_trajs.items():
+            filename = f'predicted_toss_{toss_num}.pt'
+            torch.save(pred_traj, op.join(self.eval_dir, filename))
+            print(f'\t{filename}')
+
 
 class TrajectoryPerformanceEvaluator:
-    """TODO"""
-    def __init__(self, vision_asset: str, bundlesdf_id: str,
-                 cycle_iteration: int):
+    """Trajectory-related metrics."""
+    def __init__(self, vision_asset: str, history: dict, bsdf_only: bool):
         # First decode the system and start/end tosses from the provided asset
         # directory.
         self.object = vision_asset.split('_')[0]
@@ -482,67 +697,113 @@ class TrajectoryPerformanceEvaluator:
         self.end_toss = end_toss
         
         self.vision_asset = vision_asset
-        self.bundlesdf_id = bundlesdf_id
-        self.cycle_iteration = cycle_iteration
+        self.history = history
+        self.bsdf_only = bsdf_only
 
     def get_tracking_trajectories(self):
-        """TODO"""
+        """Creates the following attributes, all of which are dictionaries with
+        keys e.g. 'cycle_iteration_1' and values that are described below:
+            - bundlesdf_full_times:  (N,)
+            - bundlesdf_toss_times:  List of length n of (M_i,) arrays
+            - bsdf_b_full_states:  (N, 13)
+            - bsdf_b_toss_states:  List of length n of (M_i, 13) arrays
 
-        # Start times are for the start and end of a BundleSDF trajectory, which
-        # starts with the object unmoving on the table, includes the toss windup
-        # and execution, and ends with the object unmoving on the table again.
-        start_ros_times = np.array([file_utils.load_toss_time_from_yaml(
-            self.object, toss_i, 'start_time', as_ros_time=True) for \
-                toss_i in range(self.start_toss, self.end_toss+1)])
+        If not self.bsdf_only, also creates the following attributes with the
+        same structure as above:
+            - tagslam_full_times:  (N,)
+            - tagslam_toss_times:  List of length n of (M_i,) arrays
+            - tagslam_full_states:  (N, 13)
+            - bsdf_t_full_states:  (N, 13)
+            - tagslam_toss_states:  List of length n of (M_i, 13) arrays
+            - bsdf_t_toss_states:  List of length n of (M_i, 13) arrays
+        """
+        # Prepare to get the non-TagSLAM-related information.
+        self.bundlesdf_full_times = {}
+        self.bundlesdf_toss_times = {}
+        self.bsdf_b_full_states = {}
+        self.bsdf_b_toss_states = {}
 
-        # Start/end frames are the indices of the longer BundleSDF trajectories
-        # that correspond to the ContactNets trajectories, which include only
-        # the autonomous dynamics of the object dropping under gravity and
-        # colliding with the table.
-        relative_start_frames = np.array([file_utils.load_field_from_yaml(
-            self.object, toss_i, 'start_frame') for toss_i in range(
-                self.start_toss, self.end_toss+1)])
-        relative_end_frames = np.array([file_utils.load_field_from_yaml(
-            self.object, toss_i, 'end_frame') for toss_i in range(
-                self.start_toss, self.end_toss+1)])
-        
-        # Get the table height.  Use the average if using multiple tosses.
-        table_heights = np.array([
-            file_utils.load_table_z_height(self.object, toss) for toss in
-            range(self.start_toss, self.end_toss+1)
-        ])
-        z_table = np.mean(table_heights)
+        # Prepare to get the TagSLAM-related information, if available.
+        if not self.bsdf_only:
+            self.tagslam_full_times = {}
+            self.tagslam_toss_times = {}
+            self.tagslam_full_states = {}
+            self.bsdf_t_full_states = {}
+            self.tagslam_toss_states = {}
+            self.bsdf_t_toss_states = {}
 
-        # Get the camera intrinsics and extrinsics.
-        cam_trans, cam_axis_vec = \
-            file_utils.load_camera_extrinsics(self.object)
+        # Go through every cycle iteration and get the trajectory information.
+        for cycle_label, cycle_info in self.history.items():
+            bundlesdf_id = cycle_info['bundlesdf_id']
+            cycle_iteration = int(cycle_label.split('_')[-1])
 
-        traj_conv = TrajectoryConverterBundleSDFToPLL(
-            tracking_bundlesdf_id=self.bundlesdf_id,
-            nerf_bundlesdf_id=self.bundlesdf_id,  # TODO want to change?
-            relative_start_frames=relative_start_frames,
-            relative_end_frames=relative_end_frames,
-            start_ros_times=start_ros_times, start_toss=self.start_toss,
-            end_toss=self.end_toss, object=self.object,
-            cycle_iteration=self.cycle_iteration,
-            cam_trans=cam_trans, cam_rot_axis_angle=cam_axis_vec,
-            frame_rate=30, z_table=z_table, plot=False
-        )
-        traj_conv.do_process()
+            # Start times are for the start and end of a BundleSDF trajectory,
+            # which starts with the object unmoving on the table, includes the
+            # toss windup and execution, and ends with the object unmoving on
+            # the table again.
+            start_ros_times = np.array([file_utils.load_toss_time_from_yaml(
+                self.object, toss_i, 'start_time', as_ros_time=True) for \
+                    toss_i in range(self.start_toss, self.end_toss+1)])
 
-        self.tagslam_full_times = traj_conv.tagslam_full_times
-        self.bundlesdf_full_times = traj_conv.bundlesdf_full_times
+            # Start/end frames are the indices of the longer BundleSDF
+            # trajectories that correspond to the ContactNets trajectories,
+            # which include only the autonomous dynamics of the object dropping
+            # under gravity and colliding with the table.
+            relative_start_frames = np.array([file_utils.load_field_from_yaml(
+                self.object, toss_i, 'start_frame') for toss_i in range(
+                    self.start_toss, self.end_toss+1)])
+            relative_end_frames = np.array([file_utils.load_field_from_yaml(
+                self.object, toss_i, 'end_frame') for toss_i in range(
+                    self.start_toss, self.end_toss+1)])
 
-        self.tagslam_full_states = traj_conv.tagslam_full_processed_states
-        self.bsdf_t_full_states = traj_conv.bundlesdf_t_full_processed_states
-        self.bsdf_b_full_states = traj_conv.bundlesdf_b_full_processed_states
+            # Get the table height.  Use the average if using multiple tosses.
+            table_heights = np.array([
+                file_utils.load_table_z_height(self.object, toss) for toss in
+                range(self.start_toss, self.end_toss+1)
+            ])
+            z_table = np.mean(table_heights)
 
-        self.tagslam_toss_times = traj_conv.tagslam_toss_times
-        self.bundlesdf_toss_times = traj_conv.bundlesdf_toss_times
+            # Get the camera intrinsics and extrinsics.
+            cam_trans, cam_axis_vec = \
+                file_utils.load_camera_extrinsics(self.object)
 
-        self.tagslam_toss_states = traj_conv.tagslam_toss_processed_states
-        self.bsdf_t_toss_states = traj_conv.bundlesdf_t_toss_processed_states
-        self.bsdf_b_toss_states = traj_conv.bundlesdf_b_toss_processed_states
+            traj_conv = TrajectoryConverterBundleSDFToPLL(
+                tracking_bundlesdf_id=bundlesdf_id,
+                nerf_bundlesdf_id=bundlesdf_id,  # TODO want to change?
+                relative_start_frames=relative_start_frames,
+                relative_end_frames=relative_end_frames,
+                start_ros_times=start_ros_times, start_toss=self.start_toss,
+                end_toss=self.end_toss, object=self.object,
+                cycle_iteration=cycle_iteration, bsdf_only=self.bsdf_only,
+                cam_trans=cam_trans, cam_rot_axis_angle=cam_axis_vec,
+                frame_rate=30, z_table=z_table, plot=False
+            )
+            traj_conv.do_process()
+
+            # Get the non-TagSLAM-related information.
+            self.bundlesdf_full_times[cycle_label] = \
+                traj_conv.bundlesdf_full_times
+            self.bundlesdf_toss_times[cycle_label] = \
+                traj_conv.bundlesdf_toss_times
+            self.bsdf_b_full_states[cycle_label] = \
+                traj_conv.bundlesdf_b_full_processed_states
+            self.bsdf_b_toss_states[cycle_label] = \
+                traj_conv.bundlesdf_b_toss_processed_states
+
+            # Get the TagSLAM-related information, if available.
+            if not self.bsdf_only:
+                self.tagslam_full_times[cycle_label] = \
+                    traj_conv.tagslam_full_times
+                self.tagslam_toss_times[cycle_label] = \
+                    traj_conv.tagslam_toss_times
+                self.tagslam_full_states[cycle_label] = \
+                    traj_conv.tagslam_full_processed_states
+                self.bsdf_t_full_states[cycle_label] = \
+                    traj_conv.bundlesdf_t_full_processed_states
+                self.tagslam_toss_states[cycle_label] = \
+                    traj_conv.tagslam_toss_processed_states
+                self.bsdf_t_toss_states[cycle_label] = \
+                    traj_conv.bundlesdf_t_toss_processed_states
 
 
 
@@ -571,11 +832,25 @@ def main_command(vision_asset: str, bundlesdf_id: str, cycle_iteration: int):
     if bundlesdf_id[:13] != 'bundlesdf_id_':
         bundlesdf_id = f'bundlesdf_id_{bundlesdf_id}'
 
-    pdb.set_trace()
+    # Automatically detect if BundleSDF-only is necessary based on if the object
+    # is a tagless one.
+    bsdf_only = False
+    object = vision_asset.split('_')[0]
+    if object in file_utils.TAGLESS_OBJECTS:
+        bsdf_only = True
+        print(f'Automatically setting {bsdf_only=} for tagless {object=}.')
+
     history = traverse_run_history(vision_asset, bundlesdf_id, cycle_iteration)
 
-    traj_evaluator = TrajectoryPerformanceEvaluator(
-        vision_asset, bundlesdf_id, cycle_iteration)
+    # traj_evaluator = TrajectoryPerformanceEvaluator(
+    #     vision_asset, history, bsdf_only)
+    # traj_evaluator.get_tracking_trajectories()
+
+    dynamics_predictor = DynamicsPredictor(vision_asset, history, bsdf_only)
+    dynamics_predictor.generate_rollouts()
+    dynamics_predictor.save_predictions()
+
+    pdb.set_trace()
 
 
 if __name__ == "__main__":
