@@ -197,6 +197,12 @@ def main_command(vision_asset: str, pll_id: str, cycle_iteration: int):
         do_tagslam_to_bsdf_transform = True
         raise NotImplementedError('TagSLAM to BundleSDF origin conversion ' + \
             'for TagSLAM PLL runs not yet implemented.')
+
+        # Load the annotated poses directory, which contains 0000.txt with the
+        # first frame's TagSLAM pose.
+        annotated_poses_dir = file_utils.bundlesdf_annotated_poses_dir(
+            vision_asset)
+
     else:
         do_tagslam_to_bsdf_transform = False
 
@@ -208,10 +214,8 @@ def main_command(vision_asset: str, pll_id: str, cycle_iteration: int):
             vision_asset, cycle_iteration=cycle_iteration,
             bundlesdf_id=bundlesdf_id)
 
-        # Load the annotated poses directory, which contains 0000.txt with the
-        # first frame's TagSLAM pose.
-        annotated_poses_dir = file_utils.bundlesdf_annotated_poses_dir(
-            vision_asset)
+        # No need for the annotated poses directory.
+        annotated_poses_dir = None
 
     bundlesdf_geometry_input_dir = file_utils.bundlesdf_geometry_dir(
         vision_asset, cycle_iteration=cycle_iteration, pll_run_id=pll_id,
