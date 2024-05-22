@@ -1,8 +1,10 @@
 """Utilities for evaluations."""
 
+from PIL import Image
 import numpy as np
 import os
 import os.path as op
+import pdb
 import pickle
 from scipy.spatial import cKDTree
 import sys
@@ -10,7 +12,13 @@ import torch
 from torch import Tensor
 from typing import Tuple
 
-import file_utils, math_utils
+import meshcat
+import meshcat.geometry as g
+import meshcat.transformations as tf
+
+import file_utils, math_utils, overlay_videos
+
+from overlay_videos import OverlayVideoGenerator
 
 DATA_GEN_DIR = op.dirname(op.realpath(__file__))
 REPO_DIR = op.dirname(DATA_GEN_DIR)
@@ -154,6 +162,25 @@ def get_pll_tagslam_trajectories_pll_format(object: str) -> dict:
             print(f'No trajectory found for {vision_asset}; skipping.')
 
     return trajectories
+
+def get_bundlesdf_trajectories_pll_format(
+        vision_asset: str, cycle_iteration: int, bundlesdf_id: str) -> dict:
+    """Load BundleSDF trajectories from the PLL assets directory so they are
+    already in PLL format.  Returns a dictionary with toss numbers as keys and
+    torch tensors (N, 13) as values.  Gets all toss numbers included in the
+    vision asset."""
+    trajectories = {}
+
+    bsdf_pose_dir = file_utils.contactnets_input_dir_bundlesdf(
+        vision_asset, cycle_iteration, bundlesdf_id, full=False, create=False)
+
+    for file in os.listdir(bsdf_pose_dir):
+        if file.endswith('.pt'):
+            toss_i = int(file.split('.')[0])
+            trajectory = torch.load(op.join(bsdf_pose_dir, file))
+            trajectories[toss_i] = trajectory
+
+    return trajectories
     
 def get_synced_bsdf_tagslam_toss_poses(
         vision_asset: str, bundlesdf_id: str, cycle_iteration: int,
@@ -219,3 +246,142 @@ def get_pll_rollout_trajectory(
 
     return prediction.detach().clone()
 
+
+class PredictionOverlayGenerator(OverlayVideoGenerator):
+    """Make an overlay video showing the tracked BundleSDF poses and the
+    dynamics predictions during the tosses."""
+    def __init__(self, vision_asset: str, tracking_bundlesdf_id: str,
+                 nerf_bundlesdf_id: str, cycle_iteration: int,
+                 prediction_tosses: list, bsdf_only: bool = False,
+                 remote: bool = False):
+        super().__init__(
+            vision_asset=vision_asset,
+            tracking_bundlesdf_id=tracking_bundlesdf_id,
+            nerf_bundlesdf_id=nerf_bundlesdf_id,
+            cycle_iteration=cycle_iteration,
+            bsdf_only=bsdf_only, remote=remote
+        )
+
+        # Overwrite the output file so it gets written to evaluation directory.
+        self.output_file = file_utils.evaluation_toss_prediction_video_filepath(
+            dataset=vision_asset, tracking_bundlesdf_id=tracking_bundlesdf_id,
+            nerf_bundlesdf_id=nerf_bundlesdf_id, cycle_iteration=cycle_iteration
+        )
+
+        # Temporary restriction that we can only support rendering toss
+        # predictions that are within the vision asset's range.
+        prediction_tosses_to_render = []
+        for toss in prediction_tosses:
+            if toss < self.start_toss or toss > self.end_toss:
+                print(f'Cannot render toss {toss} for {vision_asset}.')
+            else:
+                prediction_tosses_to_render.append(toss)
+        self.prediction_tosses = prediction_tosses_to_render
+
+        # Get the path to the evaluation directory.
+        self.evaluation_dir = file_utils.evaluation_subdir(
+            dataset=self.vision_asset,
+            tracking_bundlesdf_id=self.tracking_bundlesdf_id,
+            nerf_bundlesdf_id=self.nerf_bundlesdf_id,
+            cycle_iteration=self.cycle_iteration
+        )
+
+        # From the evaluation directory, get the predicted tosses.
+        self._get_predicted_poses_in_world()
+
+    def _get_predicted_poses_in_world(self):
+        """Get the target and predicted trajectories for every toss in
+        self.prediction_tosses.  These are in 4x4 transformation matrix form and
+        stored as a dictionary with keys as the prediction toss number and the
+        entries an (Ni, 4, 4) numpy array."""
+        # The stored trajectories used PLL's space, which has the table height
+        # at z=0.  Need to add the table height back in to make consistent with
+        # world coordinates.
+        table_heights = np.array([
+            file_utils.load_table_z_height(self.object, toss) for toss in
+            range(self.start_toss, self.end_toss+1)
+        ])
+        z_table = np.mean(table_heights)
+
+        target_trajs = {}
+        predicted_trajs = {}
+        for toss in self.prediction_tosses:
+            target_name = op.join(self.evaluation_dir, f'target_toss_{toss}.pt')
+            pred_name = op.join(
+                self.evaluation_dir, f'predicted_toss_{toss}.pt')
+            
+            assert op.exists(target_name), f'Cannot find {target_name=}.'
+            assert op.exists(pred_name), f'Cannot find {pred_name=}.'
+
+            target_traj = np.array(torch.load(target_name))
+            predicted_traj = np.array(torch.load(pred_name))
+            assert target_traj.shape == predicted_traj.shape, f'Cannot ' + \
+                f'handle different shapes {target_traj.shape=}, ' + \
+                f'{predicted_traj.shape=}.'
+
+            # Convert to 4x4 transformation matrices.
+            target_traj_trans = np.zeros((target_traj.shape[0], 4, 4))
+            predicted_traj_trans = np.zeros((predicted_traj.shape[0], 4, 4))
+            for i in range(target_traj.shape[0]):
+                target_pose = target_traj[i]
+                predicted_pose = predicted_traj[i]
+                target_trans_mat = math_utils.pll_format_to_trans_mat(
+                    target_pose)
+                predicted_trans_mat = math_utils.pll_format_to_trans_mat(
+                    predicted_pose)
+
+                # Adjust for the table height.
+                target_trans_mat[2, 3] += z_table
+                predicted_trans_mat[2, 3] += z_table
+
+                # Store to tensor.
+                target_traj_trans[i] = target_trans_mat
+                predicted_traj_trans[i] = predicted_trans_mat
+
+            # Store the whole (N, 4, 4) trajectory to dictionary.
+            target_trajs[toss] = target_traj_trans
+            predicted_trajs[toss] = predicted_traj_trans
+
+        self.target_trajs = target_trajs
+        self.predicted_trajs = predicted_trajs
+
+    def _add_meshcat_objects(self, vis: meshcat.Visualizer) -> None:
+        super()._add_meshcat_objects(vis)
+        vis["dynamics_triad"].set_object(g.triad(scale=0.1))
+        vis["dynamics_mesh"].set_object(
+            g.ObjMeshGeometry.from_file(self.mesh_file),
+            g.MeshLambertMaterial(
+                color=overlay_videos.PREDICTION_COLOR,
+                reflectivity=0.0, transparent=0, opacity=.4)
+        )
+
+    def _set_meshcat_object_poses(self, frame_i: int, T_WA: np.ndarray,
+                                  T_CB: np.ndarray) -> None:
+        super()._set_meshcat_object_poses(frame_i, T_WA, T_CB)
+
+        # First determine if the frame is within a toss.
+        toss_i = self._within_which_toss(image_frame_i=frame_i+1)
+
+        if (toss_i is not None) and (toss_i in self.prediction_tosses):
+            # Get the predicted pose.
+            toss_frame = frame_i+1 - self.start_frames[toss_i - self.start_toss]
+            T_WP = self.predicted_trajs[toss_i][toss_frame]
+            # TODO can debug the TagSLAM to BundleSDF transformation by looking
+            # at the target trajectories here^
+
+            self.vis["dynamics_triad"].set_transform(self.T_MW @ T_WP)
+            self.vis["dynamics_mesh"].set_transform(self.T_MW @ T_WP)
+
+        # If not showing a prediction, move the predicted geometry out of view.
+        else:
+            out_of_view_tf = tf.translation_matrix([0, 0, -1])
+
+            self.vis["dynamics_triad"].set_transform(self.T_MC @ out_of_view_tf)
+            self.vis["dynamics_mesh"].set_transform(self.T_MC @ out_of_view_tf)
+
+# if __name__ == '__main__':
+#     pdb.set_trace()
+#     pgen = PredictionOverlayGenerator('bakingbox_1-2', '00', '00', 2, [1, 2])
+#     # pgen = PredictionOverlayGenerator('cube_1', '00', '00', 2, [1])
+#     pgen.make_overlay_video()
+#     pdb.set_trace()

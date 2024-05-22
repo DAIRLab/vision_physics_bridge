@@ -625,48 +625,61 @@ class DynamicsPredictor:
         # Export the URDF.
         self.pll_system.generate_updated_urdfs()
 
-    def generate_rollouts(self):
+    def generate_rollout_trajectories(self):
         """Generate rollouts for the object using the learned parameters.
 
-        TODO: Currently this relies on TagSLAM to provide the ground truth.
+        TODO: Currently it is broken to rely on TagSLAM to provide the ground
+        truth; there seems to be an error in the TagSLAM-to-BundleSDF origin
+        conversion, as the initial pose is not aligned with the tracked pose,
+        but the landing pose is reasonably on the surface.
         """
         # Create the simulation system.
         self._create_pll_sim_system()
-        pdb.set_trace()
 
-        # Get ground truth trajectories from TagSLAM.
-        tagslam_trajs = eval_utils.get_pll_tagslam_trajectories_pll_format(
-            object=self.object)
+        if self.bsdf_only:
+            bsdf_trajs = eval_utils.get_bundlesdf_trajectories_pll_format(
+                self.vision_asset, self.last_bsdf_iteration, self.last_bsdf_id)
+            target_trajs_of_b_origin = bsdf_trajs
 
-        # Convert the TagSLAM trajectories to be represented with respect to the
-        # BundleSDF body origin.
-        tagslam_trajs_of_b_origin = {}
-        for key, traj in tagslam_trajs.items():
-            # Get synchronized BundleSDF and TagSLAM poses.
-            b_mat, t_mat = eval_utils.get_synced_bsdf_tagslam_toss_poses(
-                vision_asset=self.vision_asset,
-                bundlesdf_id=self.last_bsdf_id,
-                cycle_iteration=self.last_bsdf_iteration,
-                desired_toss_num=key
-            )
+        else:
+            raise RuntimeError(
+                'TagSLAM-based rollouts seem to have an issue in converting' + \
+                ' TagSLAM to BundleSDF origin.')
+            # Get ground truth trajectories from TagSLAM.
+            tagslam_trajs = eval_utils.get_pll_tagslam_trajectories_pll_format(
+                object=self.object)
 
-            # Do the conversion.
-            tagslam_trajs_of_b_origin[key] = \
-                math_utils.transform_t_origin_to_b_origin_pll_format(
-                    full_tagslam_trajectory=traj,
-                    synced_bsdf_pose=b_mat,
-                    synced_tagslam_pose=t_mat
+            # Convert the TagSLAM trajectories to be represented with respect to
+            # the BundleSDF body origin.
+            tagslam_trajs_of_b_origin = {}
+            for key, traj in tagslam_trajs.items():
+                # Get synchronized BundleSDF and TagSLAM poses.
+                b_mat, t_mat = eval_utils.get_synced_bsdf_tagslam_toss_poses(
+                    vision_asset=self.vision_asset,
+                    bundlesdf_id=self.last_bsdf_id,
+                    cycle_iteration=self.last_bsdf_iteration,
+                    desired_toss_num=key
                 )
+
+                # Do the conversion.
+                tagslam_trajs_of_b_origin[key] = \
+                    math_utils.transform_t_origin_to_b_origin_pll_format(
+                        full_tagslam_trajectory=traj,
+                        synced_bsdf_pose=b_mat,
+                        synced_tagslam_pose=t_mat
+                    )
+
+            target_trajs_of_b_origin = tagslam_trajs_of_b_origin
 
         # Get the predictions.
         pred_trajs_of_b_origin = {}
-        for key, traj in tagslam_trajs_of_b_origin.items():
-            pred_trajs_of_b_origin[key] = eval_utils.get_pll_rollout_trajectory(
-                system=self.pll_system, target_traj=Tensor(traj)
-            )
+        for key, traj in target_trajs_of_b_origin.items():
+            pred_trajs_of_b_origin[key] = \
+                eval_utils.get_pll_rollout_trajectory(
+                    system=self.pll_system, target_traj=Tensor(traj))
 
         # Store the targets and predictions.
-        self.target_trajs = tagslam_trajs_of_b_origin
+        self.target_trajs = target_trajs_of_b_origin
         self.predicted_trajs = pred_trajs_of_b_origin
 
     def save_predictions(self):
@@ -683,6 +696,17 @@ class DynamicsPredictor:
             filename = f'predicted_toss_{toss_num}.pt'
             torch.save(pred_traj, op.join(self.eval_dir, filename))
             print(f'\t{filename}')
+
+    def make_prediction_video(self):
+        prediction_tosses = [i for i in range(self.start_toss, self.end_toss+1)]
+        prediction_overlay = eval_utils.PredictionOverlayGenerator(
+            vision_asset=self.vision_asset,
+            tracking_bundlesdf_id=self.last_bsdf_id,
+            nerf_bundlesdf_id=self.last_bsdf_id,
+            cycle_iteration=self.last_bsdf_iteration,
+            prediction_tosses=prediction_tosses
+        )
+        prediction_overlay.make_overlay_video()
 
 
 class TrajectoryPerformanceEvaluator:
@@ -851,8 +875,9 @@ def main_command(vision_asset: str, bundlesdf_id: str, cycle_iteration: int):
     # traj_evaluator.get_tracking_trajectories()
 
     dynamics_predictor = DynamicsPredictor(vision_asset, history, bsdf_only)
-    dynamics_predictor.generate_rollouts()
+    dynamics_predictor.generate_rollout_trajectories()
     dynamics_predictor.save_predictions()
+    dynamics_predictor.make_prediction_video()
 
     pdb.set_trace()
 

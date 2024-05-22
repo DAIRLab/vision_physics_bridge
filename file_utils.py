@@ -419,6 +419,14 @@ def evaluation_subdir(
 
     return assure_created(op.join(eval_dir, subdir))
 
+def evaluation_toss_prediction_video_filepath(
+        dataset: str, tracking_bundlesdf_id: str, nerf_bundlesdf_id: str,
+        cycle_iteration: int) -> str:
+    """Overlay video filename for a particular toss prediction."""
+    run_eval_dir = evaluation_subdir(
+        dataset, tracking_bundlesdf_id, nerf_bundlesdf_id, cycle_iteration)
+    return op.join(run_eval_dir, f'predicted_tosses.mp4')
+
 
 """Yaml file parsing utilities."""
 def load_camera_extrinsics(object: str) -> Tuple[np.ndarray, np.ndarray]:

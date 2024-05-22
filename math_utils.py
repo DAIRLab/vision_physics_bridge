@@ -356,9 +356,24 @@ def transform_t_origin_to_b_origin_pll_format(
 
     return tagslam_states_in_b_origin
 
+def batch_pll_format_to_trans_mat(pll_format_poses):
+    """Batched version of pll_format_to_trans_mat."""
+    assert pll_format_poses.ndim == 2, f'Expecting batched poses: ' + \
+        f'{pll_format_poses.shape=}'
+    assert pll_format_poses.shape[1] == 13, f'Expecting PLL format: ' + \
+        f'{pll_format_poses.shape=}'
+
+    trans_mats = np.zeros((pll_format_poses.shape[0], 4, 4))
+    for i in range(pll_format_poses.shape[0]):
+        trans_mats = pll_format_to_trans_mat(pll_format_poses[i])
+
+    return trans_mats
+
 
 def pll_format_to_trans_mat(pll_format_pose):
     """Converts a pose in PLL format to a transformation matrix."""
+    assert pll_format_pose.ndim == 1, f'Cannot handle batches: ' + \
+        f'{pll_format_pose.shape=}'
     quat_xyzw = wxyz2xyzw(pll_format_pose[:4])
     xyz = pll_format_pose[4:7]
     pos_quat = np.concatenate((xyz, quat_xyzw))

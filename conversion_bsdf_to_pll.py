@@ -1279,10 +1279,10 @@ class GeometryConverterBundleSDFToPLL:
 @click.option('--bsdf-only',
               is_flag=True,
               help="whether to generate just BundleSDF-related data.")
-@click.option('--make-overlay/--skip-overlay',
+@click.option('--make-videos/--skip-videos',
               type=bool,
               default=True,
-              help="whether to make an overlay video.")
+              help="whether to make overlay and slice videos.")
 @click.option('--remote/--local',
               default=False,
               help="whether to run on a remote server.")
@@ -1290,9 +1290,8 @@ class GeometryConverterBundleSDFToPLL:
               default=True,
               help="whether to show the plots.")
 
-
 def main_command(vision_asset: str, bundlesdf_id: str, nerf_bundlesdf_id: str,
-                 cycle_iteration: int, bsdf_only: bool, make_overlay: bool,
+                 cycle_iteration: int, bsdf_only: bool, make_videos: bool,
                  remote: bool, show: bool):
     # First decode the system and start/end tosses from the provided asset
     # directory.
@@ -1378,7 +1377,7 @@ def main_command(vision_asset: str, bundlesdf_id: str, nerf_bundlesdf_id: str,
     traj_converter.save_data(save_tagslam=not bsdf_only, save_bundlesdf=True)
 
     # Create an overlay video.
-    if make_overlay:
+    if make_videos:
         overlay_generator = OverlayVideoGenerator(
             vision_asset=vision_asset, tracking_bundlesdf_id=bundlesdf_id,
             nerf_bundlesdf_id=nerf_bundlesdf_id, bsdf_only=bsdf_only,
@@ -1390,11 +1389,14 @@ def main_command(vision_asset: str, bundlesdf_id: str, nerf_bundlesdf_id: str,
         print('Skipping overlay video creation.')
 
     # Generate the SDF slice images.
-    sdf_slice_generator = SDFSliceViewer(
-        vision_asset=vision_asset, tracking_bundlesdf_id=bundlesdf_id,
-        nerf_bundlesdf_id=nerf_bundlesdf_id, cycle_iteration=cycle_iteration
-    )
-    sdf_slice_generator.visualization()
+    if make_videos:
+        sdf_slice_generator = SDFSliceViewer(
+            vision_asset=vision_asset, tracking_bundlesdf_id=bundlesdf_id,
+            nerf_bundlesdf_id=nerf_bundlesdf_id, cycle_iteration=cycle_iteration
+        )
+        sdf_slice_generator.visualization()
+    else:
+        print('Skipping slice video creation.')
 
 
 if __name__ == '__main__':

@@ -27,6 +27,16 @@ import file_utils
 # Overlay video settings.
 TAGSLAM_COLOR = 0xff0000
 BUNDLESDF_COLOR = 0x00ff00
+PREDICTION_COLOR = 0x800080
+
+########################
+# Frames
+# (W) World
+# (M) Meshcat
+# (C) Camera
+# (A) TagSLAM origin
+# (B) BundleSDF origin
+# (P) Prediction BundleSDF origin
 
 
 class OverlayVideoGenerator:
@@ -55,8 +65,8 @@ class OverlayVideoGenerator:
         elif nerf_bundlesdf_id[:13] != 'bundlesdf_id_':
             nerf_bundlesdf_id = f'bundlesdf_id_{nerf_bundlesdf_id}'
 
-        # Automatically detect if BundleSDF-only is necessary based on if the object
-        # is a tagless one.
+        # Automatically detect if BundleSDF-only is necessary based on if the
+        # object is a tagless one.
         object = vision_asset.split('_')[0]
         if object in file_utils.TAGLESS_OBJECTS:
             bsdf_only = True
@@ -155,13 +165,7 @@ class OverlayVideoGenerator:
         self.image_width = self.rgb_images.shape[2]
         self.image_height = self.rgb_images.shape[1]
 
-    def _set_up_meshcat(self) -> None:
-        # Can specify zmq_url="tcp://127.0.0.1:6000" argument after the first
-        # run but the frame will mismatch.
-        print('\nNo need to open this link: ', end='')
-        vis = meshcat.Visualizer()
-
-        ##################
+    def _add_meshcat_objects(self, vis: meshcat.Visualizer) -> None:
         # # Only render the cube in the TagSLAM trajectory if cube asset.
         # if 'cube' in self.vision_asset:
         #     vis["tagslam_cube"].set_object(
@@ -179,6 +183,15 @@ class OverlayVideoGenerator:
                 color=BUNDLESDF_COLOR, reflectivity=0.0, transparent=0,
                 opacity=.4)
         )
+
+    def _set_up_meshcat(self) -> None:
+        # Can specify zmq_url="tcp://127.0.0.1:6000" argument after the first
+        # run but the frame will mismatch.
+        print('\nNo need to open this link: ', end='')
+        vis = meshcat.Visualizer()
+
+        ##################
+        self._add_meshcat_objects(vis)
         ########################
         base_url = "http://127.0.0.1"
         meshcat_url = f'{base_url}:{vis.url().split(":")[-1]}'
@@ -205,14 +218,6 @@ class OverlayVideoGenerator:
         # Set the desired window size.
         self.driver.set_window_size(self.image_width, self.image_height)
         self.driver.get(meshcat_url)
-
-        ########################
-        # Frames
-        # (W) World
-        # (M) Meshcat
-        # (C) Camera
-        # (A) TagSLAM origin
-        # (B) BundleSDF origin
 
         # Compute T_WC, transform from world to camera.
         # TODO For some reason, need to use the inverse transform.  Maybe
@@ -284,21 +289,29 @@ class OverlayVideoGenerator:
         self.end_frames = math_utils.convert_relative_frames_to_absolute(
             relative_end_frames, bundlesdf_times, start_ros_times)
 
-    def _add_watermark(self, im: Image, frame_i: int) -> Image:
-        """Add a label to the image to specify whether the portion of the video
-        is part of the PLL toss or not."""
-        # First determine if the frame index is within a PLL toss.
+    def _within_which_toss(self, image_frame_i: int) -> int:
+        """Determine if the current frame index is within a toss or not.  If so,
+        return the toss number.  Otherwise, return None."""
         if not hasattr(self, 'start_frames'):
             self._get_absolute_frames()
 
         # A frame is within a PLL toss if the last toss whose start frame it
         # satisfies is the first toss whose end frame it satisfies.
-        good_starts = np.where(frame_i >= self.start_frames)[0]
-        good_ends = np.where(frame_i <= self.end_frames)[0]
+        good_starts = np.where(image_frame_i >= self.start_frames)[0]
+        good_ends = np.where(image_frame_i < self.end_frames)[0]
         if len(good_starts) > 0 and len(good_ends) > 0 and \
             good_starts[-1] == good_ends[0]:
             toss_i = self.start_toss + good_starts[-1]
+            return toss_i
+        return None
 
+    def _add_watermark(self, im: Image, image_frame_i: int) -> Image:
+        """Add a label to the image to specify whether the portion of the video
+        is part of the PLL toss or not."""
+        # First determine if the frame index is within a PLL toss.
+        toss_i = self._within_which_toss(image_frame_i)
+
+        if toss_i is not None:
             # Add a PLL toss label to the image.
             draw = ImageDraw.Draw(im)
             draw.polygon([(25, 435), (100, 435), (100, 475), (25, 475)],
@@ -310,12 +323,8 @@ class OverlayVideoGenerator:
 
         return im
 
-    def _render_one_image(self, frame_i: int, T_WA: np.ndarray,
-                          T_CB: np.ndarray) -> Image:
-        """Given the frame index, TagSLAM pose in world, and BundleSDF pose in
-        camera, render and return the image with the overlay."""
-        im = Image.fromarray(self.rgb_images[frame_i]).convert('RGB')
-
+    def _set_meshcat_object_poses(self, frame_i: int, T_WA: np.ndarray,
+                          T_CB: np.ndarray) -> None:
         # if 'cube' in self.vision_asset:
         #     self.vis["tagslam_cube"].set_transform(self.T_MW @ T_WA)
         if not self.bsdf_only:
@@ -323,6 +332,13 @@ class OverlayVideoGenerator:
         self.vis["bundlesdf_triad"].set_transform(self.T_MC @ T_CB)
         self.vis["bundlesdf_mesh"].set_transform(self.T_MC @ T_CB)
 
+    def _render_one_image(self, frame_i: int, T_WA: np.ndarray,
+                          T_CB: np.ndarray) -> Image:
+        """Given the frame index, TagSLAM pose in world, and BundleSDF pose in
+        camera, render and return the image with the overlay."""
+        im = Image.fromarray(self.rgb_images[frame_i]).convert('RGB')
+
+        self._set_meshcat_object_poses(frame_i, T_WA, T_CB)
         mesh_im = self.vis.get_image()
 
         # Sadly meshcat's PerspectiveCamera doesn't compensate for cy, only cx.
@@ -347,7 +363,7 @@ class OverlayVideoGenerator:
         # Add annotation to show what portions of the video are part of a toss
         # trajectory we give to PLL.  Add 1 since the watermarks are determined
         # based on 1-indexing frame numbers.
-        self._add_watermark(im, frame_i+1)
+        self._add_watermark(im, image_frame_i=frame_i+1)
 
         return im
 
@@ -365,7 +381,9 @@ class OverlayVideoGenerator:
                 T_CB = self.bundlesdf_poses_in_cam[i]
 
                 im = self._render_one_image(i, T_WA=T_WA, T_CB=T_CB)
-                im.save(op.join(tmpdir, f'{i:07d}.png'), format="png")
+                if i == 368:
+                    pdb.set_trace()
+                im.save(op.join(tmpdir, f'{i+1:07d}.png'), format="png")
 
             # Make video with ffmpeg from stored images.
             # -y means overwrite output files without asking.
