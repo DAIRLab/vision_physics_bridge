@@ -116,11 +116,16 @@ def create_multibody_learnable_system(
     """Create a MultibodyLearnableSystem from a URDF path.  Note that this
     hardcodes the frame rate to be 30.  The loss weights are all given as zeros,
     but this should be inconsequential since the system will not be trained."""
+    output_urdf_dir = file_utils.assure_created(
+        op.join(op.dirname(urdf_path), 'pll_urdf'))
+
     return MultibodyLearnableSystem(
         init_urdfs = {'learned_object': urdf_path},
         dt = 1.0/30,
         loss_weights_dict = {
-            'w_pred': 0, 'w_comp': 0, 'w_pen': 0, 'w_diss': 0, 'w_bsdf': 0}
+            'w_pred': 0, 'w_comp': 0, 'w_pen': 0, 'w_diss': 0, 'w_bsdf': 0},
+        force_mesh_to_be_polygon = True,
+        output_urdfs_dir = output_urdf_dir
     ).eval()
 
 

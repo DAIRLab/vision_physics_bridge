@@ -614,13 +614,16 @@ class DynamicsPredictor:
         new_obj_path = op.join(self.eval_dir, 'bsdf_mesh.obj')
         os.system(f'cp {old_obj_path} {new_obj_path}')
 
-        # Need to overwrite the geometry in the URDF to refer to the new obj.
+        # Overwrite the geometry in the URDF to refer to the new obj.
         eval_utils.overwrite_mesh_name_in_urdf(new_urdf_path)
         print(f'Wrote URDF to {new_urdf_path}')
 
-        # Next, create the system.
+        # Create the system.
         self.pll_system = eval_utils.create_multibody_learnable_system(
             new_urdf_path)
+
+        # Export the URDF.
+        self.pll_system.generate_updated_urdfs()
 
     def generate_rollouts(self):
         """Generate rollouts for the object using the learned parameters.
@@ -629,6 +632,7 @@ class DynamicsPredictor:
         """
         # Create the simulation system.
         self._create_pll_sim_system()
+        pdb.set_trace()
 
         # Get ground truth trajectories from TagSLAM.
         tagslam_trajs = eval_utils.get_pll_tagslam_trajectories_pll_format(
