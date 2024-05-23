@@ -17,7 +17,12 @@ import math_utils
 TRANSFORM_EXCLUDE_FILENAMES = [
     'sdfs.pt',
     'sdf_bounds.pt',
-    'support_point_normal_forces.pt'
+    'support_point_normal_forces.pt',
+    'support_point_states.pt',
+    'tosses_and_frames.pt',
+    'p_toss_frames.pt',
+    'v_toss_frames.pt',
+    'w_toss_frames.pt'
 ]
 
 
