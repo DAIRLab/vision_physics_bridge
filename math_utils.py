@@ -133,8 +133,8 @@ def transform_point_coordinates_given_pose(
 
     rotation_matrix = R.from_quat(quat_xyzw).as_matrix()
 
-    points_in_world = (rotation_matrix @ points_in_A.T).T + xyz
-    return points_in_world
+    points_in_B = (rotation_matrix @ points_in_A.T).T + xyz
+    return points_in_B
 
 
 def ros_time_to_float(ros_times: np.ndarray) -> np.ndarray:

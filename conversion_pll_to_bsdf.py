@@ -5,7 +5,9 @@ import click
 import numpy as np
 import os
 import os.path as op
+import pdb
 import torch
+from torch import Tensor
 
 import file_utils
 import math_utils
@@ -25,6 +27,17 @@ TRANSFORM_EXCLUDE_FILENAMES = [
     'w_toss_frames.pt'
 ]
 
+REQUIRES_TRANSFORM = 'requires_transform'
+NO_TRANSFORM = 'no_transform'
+TOSS_FRAME_LOOKUP = {
+    'p_toss_frames.pt': {REQUIRES_TRANSFORM: ['ps.pt'],
+                         NO_TRANSFORM: ['sdfs.pt']},
+    'v_toss_frames.pt': {REQUIRES_TRANSFORM: ['vs.pt'],
+                         NO_TRANSFORM: ['sdf_bounds.pt']},
+    'w_toss_frames.pt': {REQUIRES_TRANSFORM: ['ws.pt', 'w_normals.pt'],
+                         NO_TRANSFORM: []}
+}
+
 
 def batch_no_transform_function(points_wrt_T: np.ndarray,
                                 bsdf_output_pose_dir: str,
@@ -41,7 +54,8 @@ class GeometryConverterPLLToBundleSDF:
     The only change that might be needed is if the PLL run used TagSLAM poses
     instead of BundleSDF poses.  In that case, PLL's body origin matches
     TagSLAM's and needs to be converted to BundleSDF's origin.  TODO"""
-    def __init__(self, pll_geom_output_dir: str,
+    def __init__(self, vision_asset: str, pll_id: str, cycle_iteration: int,
+                 pll_geom_output_dir: str,
                  bundlesdf_geom_input_dir: str,
                  bundlesdf_pose_output_dir: str,
                  annotated_poses_dir: str,
@@ -54,6 +68,19 @@ class GeometryConverterPLLToBundleSDF:
             op.basename(bundlesdf_geom_input_dir), f'Expecting to find ' + \
             f'consistent PLL run IDs in {pll_geom_output_dir=} and ' + \
             f'{bundlesdf_geom_input_dir=}.'
+
+        object = vision_asset.split('_')[:-1]
+        object = '_'.join(object)
+        start_toss = int(vision_asset.split('_')[1].split('-')[0])
+        end_toss = start_toss if '-' not in vision_asset else \
+            int(vision_asset.split('-')[1])
+
+        self.vision_asset = vision_asset
+        self.object = object
+        self.start_toss = start_toss
+        self.end_toss = end_toss
+        self.pll_id = pll_id
+        self.cycle_iteration = cycle_iteration
 
         # If the BundleSDF pose directory and annotated poses directory are not
         # provided, then it is assumed that the PLL run used BundleSDF poses
@@ -87,6 +114,7 @@ class GeometryConverterPLLToBundleSDF:
             source_directory=self.pll_geom_output_dir,
             destination_directory=self.bundlesdf_geom_input_dir
         )
+        self._make_contact_in_cam()
         print(f'\nFinished processing {self.pll_geom_output_dir} and put' + \
               f' the results in {self.bundlesdf_geom_input_dir}.')
 
@@ -151,6 +179,132 @@ class GeometryConverterPLLToBundleSDF:
         filename = op.basename(source_file)
         torch.save(torch.tensor(points_wrt_bundletrack),
                    op.join(destination_directory, filename))
+
+    def _get_absolute_frames(self) -> None:
+        """Determine the start and end frames of each PLL toss relative to the
+        beginning of the full overlay video.  This is necessary to label the
+        video with the toss number."""
+        relative_start_frames = np.array([file_utils.load_field_from_yaml(
+            self.object, toss_i, 'start_frame') for toss_i in range(
+                self.start_toss, self.end_toss+1)])
+        start_ros_times = np.array([file_utils.load_toss_time_from_yaml(
+            self.object, toss_i, 'start_time', as_ros_time=True) for toss_i \
+                in range(self.start_toss, self.end_toss+1)])
+        cnets_data_gen_dir = file_utils.cnets_data_gen_dataset_dir(
+            self.vision_asset, check_exists=True)
+        bundlesdf_times = np.loadtxt(
+            op.join(cnets_data_gen_dir, 'bundlesdf_timestamps.txt'))
+
+        self.start_frames = math_utils.convert_relative_frames_to_absolute(
+            relative_start_frames, bundlesdf_times, start_ros_times)
+
+    def _convert_body_to_cam_frame(
+            self, data_in_body: Tensor, pose_dir: str, camera_frame_i: int
+    ) -> Tensor:
+        """Convert a point represented in body frame to represented in camera
+        frame, using BundleSDF's estimated body pose in camera frame."""
+        # Look up the body's pose in camera frame from BundleSDF's outputs.
+        body_in_cam = np.loadtxt(op.join(pose_dir, f'{camera_frame_i:04d}.txt'))
+        body_in_cam_pos_quat = \
+            math_utils.trans_mat_to_pos_quat(body_in_cam).squeeze()
+
+        # Transform the body points so they are represented in camera frame.
+        return Tensor(
+            math_utils.transform_point_coordinates_given_pose(
+                points_in_A=np.array(data_in_body),
+                pose_A_in_B=np.array(body_in_cam_pos_quat)
+            ))
+
+    def _make_contact_in_cam(self):
+        """Make a contact_in_cam folder containing:
+            - XXXX/
+                - from_mesh_surface/
+                    - ps.pt
+                    - sdfs.pt
+                    - vs.pt
+                    - sdf_bounds.pt
+                    - ws.pt
+                    - w_normals.pt
+                - from_support_points/
+                    - ps.pt
+                    - sdfs.pt
+                    - vs.pt
+                    - sdf_bounds.pt
+            - XXXY/
+                - ...
+
+        ...where each of the XXXX/ folders is the BundleSDF video's frame
+        number.
+        """
+        print(f'\nMaking contact_in_cam directory in ' + \
+              f'{self.bundlesdf_geom_input_dir}...')
+
+        # Make the contact_in_cam directory.
+        contact_in_cam_dir = op.join(
+            self.bundlesdf_geom_input_dir, 'contact_in_cam')
+        file_utils.assure_created(contact_in_cam_dir)
+
+        # Get the BundleSDF poses in camera -- this will require looking up the
+        # prior BundleSDF run's results.
+        bundlesdf_id = file_utils.load_bundlesdf_id_from_pll_json(
+            op.dirname(self.pll_geom_output_dir))
+        bundlesdf_pose_output_dir = file_utils.bundlesdf_pose_dir(
+            dataset=self.vision_asset, cycle_iteration=self.cycle_iteration,
+            bundlesdf_id=bundlesdf_id
+        )
+
+        # Store the start frame number for each toss within the longer video.
+        self._get_absolute_frames()
+
+        for subdir in ['from_mesh_surface', 'from_support_points']:
+            pll_geom_output_dir = op.join(self.pll_geom_output_dir, subdir)
+            contact_in_cam_subdir = op.join(contact_in_cam_dir, subdir)
+            file_utils.assure_created(contact_in_cam_subdir)
+
+            # Iterate through the file groups in the PLL geometry output.
+            for toss_frames_filename, file_groups in TOSS_FRAME_LOOKUP.items():
+                if toss_frames_filename == 'w_toss_frames.pt' and subdir == \
+                    'from_support_points':
+                    continue
+
+                toss_frames = torch.load(
+                    op.join(pll_geom_output_dir, toss_frames_filename))
+
+                files = file_groups[REQUIRES_TRANSFORM] + \
+                    file_groups[NO_TRANSFORM]
+                for filename in files:
+                    data = torch.load(op.join(pll_geom_output_dir, filename))
+
+                    # Gather all of the contact information per video frame.
+                    for toss_frame in torch.unique(toss_frames, dim=0):
+                        # The video frame is the PLL trajectory frame plus the
+                        # start frame of the toss.
+                        toss_i = toss_frame[0]
+                        frame_i = toss_frame[1]
+                        camera_frame_i = \
+                            self.start_frames[toss_i-self.start_toss] + frame_i
+
+                        # Get the points and SDFs in body frame.
+                        data_in_body = data[
+                            (toss_frames == toss_frame).all(dim=1)]
+                        data_in_cam = data_in_body if filename in \
+                            file_groups[NO_TRANSFORM] else \
+                            self._convert_body_to_cam_frame(
+                                data_in_body,
+                                pose_dir=bundlesdf_pose_output_dir,
+                                camera_frame_i=camera_frame_i
+                            )
+
+                        # Store the result.
+                        file_utils.assure_created(
+                            op.join(
+                                contact_in_cam_subdir, f'{camera_frame_i:04d}'))
+                        filepath = op.join(
+                            contact_in_cam_subdir, f'{camera_frame_i:04d}',
+                            filename)
+                        torch.save(data_in_cam, filepath)
+                        print(f'Saved {subdir}/{filename} for frame ' + \
+                              f'{camera_frame_i}.')
 
 
 #######################################################################
@@ -228,6 +382,8 @@ def main_command(vision_asset: str, pll_id: str, cycle_iteration: int):
     )
 
     converter = GeometryConverterPLLToBundleSDF(
+        vision_asset=vision_asset, pll_id=pll_id,
+        cycle_iteration=cycle_iteration,
         pll_geom_output_dir=pll_geometry_output_dir,
         bundlesdf_geom_input_dir=bundlesdf_geometry_input_dir,
         bundlesdf_pose_output_dir=bundlesdf_pose_output_dir,
