@@ -5,6 +5,7 @@ to do the accommodation on the TagSLAM side since more of the BundleSDF-PLL
 pipeline uses the depth readings.  Keeping these at their native values seems
 like a less invasive solution."""
 
+import os
 import os.path as op
 import matplotlib
 matplotlib.use('TkAgg')
@@ -12,6 +13,8 @@ import matplotlib.cm as cmx
 import matplotlib.pyplot as plt
 import numpy as np
 import pdb
+import torch
+from torch import Tensor
 from typing import Tuple
 import cv2
 
@@ -22,7 +25,7 @@ from compute_table_offsets import CUBE_CORNERS_IN_CUBE_FRAME, X_LIMS, Y_LIMS, \
 
 
 CUBE_EXTRA_BUFFER = 0.2
-CUBE_CORNERS_PLOTTABLE_INDICES = [0, 1, 2, 3, 0, 4, 5, 6, 7, 4, 5, 1, 2, 6, 7, 3]
+CUBE_CORNERS_PLOTTABLE_INDICES=[0, 1, 2, 3, 0, 4, 5, 6, 7, 4, 5, 1, 2, 6, 7, 3]
 
 DEPTH_PLOT_HELP_PRINT = \
 '''From past experience, the following offsets have looked reasonable for the 
@@ -159,7 +162,7 @@ def load_tagslam_pose(vision_asset: str, frame_num: int) -> np.ndarray:
     return np.loadtxt(tagslam_path)
 
 def load_poses_and_camera_images(vision_asset: str, frame_num: int):
-    """"""
+    """Load the TagSLAM poses and camera images for a given frame."""
     object = vision_asset.split('_')[0]
     start_toss = int(vision_asset.split('_')[1].split('-')[0])
     end_toss = start_toss if '-' not in vision_asset else \
@@ -236,7 +239,7 @@ def get_all_camera_intrinsics_extrinsics(vision_asset: str):
     
     return intrinsics, translations, axis_angles
 
-def inspect_tagslam_poses_and_images(vision_asset: str):
+def inspect_camera_poses_and_images(vision_asset: str, frame_num: int = 1):
     """Plot the camera locations in 3D."""
     intrinsics, translations, axis_angles = \
         get_all_camera_intrinsics_extrinsics(vision_asset)
@@ -253,7 +256,7 @@ def inspect_tagslam_poses_and_images(vision_asset: str):
     world_to_realsense = np.concatenate((world, realsense), axis=0)
 
     pose_t, pose, image_t, image = load_poses_and_camera_images(
-        vision_asset, 1)
+        vision_asset, frame_num)
     cube_corners_world = compute_cube_corners_in_world(pose)
 
     def plot_camera_triad(cam_trans, cam_axis_angle, label):
@@ -269,6 +272,9 @@ def inspect_tagslam_poses_and_images(vision_asset: str):
                  color='#0000ff', linewidth=5)
         plt.plot(cam_trans[0], cam_trans[1], cam_trans[2], marker='o',
                  color=CAMERA_MARKER_COLORS[label], markersize=10, label=label)
+
+    # Be prepared to return all the figures.
+    figs = {}
 
     plt.ion()
     fig = plt.figure()
@@ -293,6 +299,7 @@ def inspect_tagslam_poses_and_images(vision_asset: str):
 
     ax.set_box_aspect([np.ptp(arr) for arr in \
                       [ax.get_xlim(), ax.get_ylim(), ax.get_zlim()]])
+    figs['camera_poses'] = fig
     
     for cam in image.keys():
         # First compute the cube corners in camera frame.
@@ -316,15 +323,46 @@ def inspect_tagslam_poses_and_images(vision_asset: str):
         x_pixel = uvw[0] / uvw[2]
         y_pixel = uvw[1] / uvw[2]
 
-        plt.figure()
+        fig = plt.figure()
         if cam == 'realsense':
             plt.imshow(image[cam])
         else:
             plt.imshow(image[cam], cmap='gray', vmin=0, vmax=255)
         plt.scatter(x_pixel, y_pixel)
         plt.title(cam)
+        figs[cam] = fig
 
     pdb.set_trace()
+    return figs
+
+def add_contact_visuals_to_figs(
+        vision_asset: str, figs: dict, ps: Tensor, sdfs: Tensor, vs: Tensor,
+        sdf_bounds: Tensor):
+    """"""
+    ps = np.array(ps)
+    sdfs = np.array(sdfs)
+    vs = np.array(vs)
+    sdf_bounds = np.array(sdf_bounds)
+
+    # Get the camera intrinsics.
+    intrinsics, translations, axis_angles = \
+        get_all_camera_intrinsics_extrinsics(vision_asset)
+
+    # Do the realsense image.
+    cam = 'realsense'
+    P_matrix = intrinsics[cam].reshape(3, 4)
+
+    XYZ1 = np.hstack((ps, np.ones((ps.shape[0], 1))))
+    uvw = P_matrix @ XYZ1.T
+    x_pixel = uvw[0] / uvw[2]
+    y_pixel = uvw[1] / uvw[2]
+
+    fig = figs[cam]
+    ax = fig.gca()
+    sdfs = ax.scatter(x_pixel, y_pixel, c=sdfs, cmap='coolwarm', vmin=-0.01,
+                      vmax=0.01, label='SDF', s=10)
+    cbar = fig.colorbar(sdfs)
+
 
 def compute_cube_corners_in_world(pose):
     return math_utils.transform_point_coordinates_given_pose(
@@ -459,9 +497,43 @@ def load_tagslam_images(vision_asset: str, frame_num: int):
     """"""
     pass
 
+def load_contact_information(
+        vision_asset: str, cycle_iteration: int, pll_id: str):
+    """Look for contact information stored in BundleSDF's geometry input
+    directory."""
+    geometry_dir = file_utils.bundlesdf_geometry_dir(
+        dataset=vision_asset, cycle_iteration=cycle_iteration,
+        pll_run_id=pll_id, create=False)
+    if not op.exists(geometry_dir):
+        print(f'No geometry found at {geometry_dir}.')
+        return None
+
+    from_mesh_dir = op.join(geometry_dir, 'contact_in_cam', 'from_mesh_surface')
+    from_supports_dir = op.join(
+        geometry_dir, 'contact_in_cam', 'from_support_points')
+
+    # Iterate over all the frames with contact information.
+    for frame_num in os.listdir(from_supports_dir):
+        print(f'Loading frame {frame_num}...')
+        ps = torch.load(op.join(from_supports_dir, frame_num, 'ps.pt'))
+        sdfs = torch.load(op.join(from_supports_dir, frame_num, 'sdfs.pt'))
+
+        vs = torch.load(op.join(from_mesh_dir, frame_num, 'vs.pt'))
+        sdf_bounds = torch.load(
+            op.join(from_mesh_dir, frame_num, 'sdf_bounds.pt'))
+
+        figs = inspect_camera_poses_and_images(vision_asset, int(frame_num))
+
+        add_contact_visuals_to_figs(
+            vision_asset=vision_asset, figs=figs, ps=ps, sdfs=sdfs, vs=vs,
+            sdf_bounds=sdf_bounds
+        )
+        pdb.set_trace()
+
 
 
 if __name__ == '__main__':
     # interactive_offset_adjustment('cube_2', 1, smoothing=False)
-    inspect_tagslam_poses_and_images('cube_1')
+    # inspect_camera_poses_and_images('cube_2')
     # inspect_tagslam_times("cube_2", 1)
+    load_contact_information('cube_2', 1, 'pll_id_p10')
