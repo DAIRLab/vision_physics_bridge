@@ -78,7 +78,7 @@ def main_command(vision_asset: str, bundlesdf_id: str, nerf_bundlesdf_id: str,
     # Get the current date in MMDD format
     now = datetime.datetime.now()
     date_str = now.strftime('%m%d')
-    remote_mesh_file_name = f'{date_str}_{vision_asset}_{bundlesdf_id[13:]}_{cycle_iteration}.obj'
+    remote_mesh_file_name = f'{date_str}_{vision_asset}_{bundlesdf_id[13:]}_{nerf_bundlesdf_id[13:]}_{cycle_iteration}.obj'
     remote_directory = '/home/cnets-vision/Desktop/mesh_collection'
 
     remote_mesh_file = op.join(remote_directory, remote_mesh_file_name)
