@@ -309,7 +309,7 @@ class PredictionOverlayGenerator(OverlayVideoGenerator):
             target_name = op.join(self.evaluation_dir, f'target_toss_{toss}.pt')
             pred_name = op.join(
                 self.evaluation_dir, f'predicted_toss_{toss}.pt')
-            
+
             assert op.exists(target_name), f'Cannot find {target_name=}.'
             assert op.exists(pred_name), f'Cannot find {pred_name=}.'
 

@@ -381,8 +381,6 @@ class OverlayVideoGenerator:
                 T_CB = self.bundlesdf_poses_in_cam[i]
 
                 im = self._render_one_image(i, T_WA=T_WA, T_CB=T_CB)
-                if i == 368:
-                    pdb.set_trace()
                 im.save(op.join(tmpdir, f'{i+1:07d}.png'), format="png")
 
             # Make video with ffmpeg from stored images.

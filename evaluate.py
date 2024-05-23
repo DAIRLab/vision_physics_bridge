@@ -862,13 +862,17 @@ def main_command(vision_asset: str, bundlesdf_id: str, cycle_iteration: int):
 
     # Automatically detect if BundleSDF-only is necessary based on if the object
     # is a tagless one.
-    bsdf_only = False
-    object = vision_asset.split('_')[0]
-    if object in file_utils.TAGLESS_OBJECTS:
-        bsdf_only = True
-        print(f'Automatically setting {bsdf_only=} for tagless {object=}.')
+    # bsdf_only = False
+    # object = vision_asset.split('_')[0]
+    # if object in file_utils.TAGLESS_OBJECTS:
+    #     bsdf_only = True
+    #     print(f'Automatically setting {bsdf_only=} for tagless {object=}.')
+    bsdf_only = True
 
     history = traverse_run_history(vision_asset, bundlesdf_id, cycle_iteration)
+    print(f'Found run history:')
+    for key, val in history:
+        print(f'\t{key} : {val}')
 
     # traj_evaluator = TrajectoryPerformanceEvaluator(
     #     vision_asset, history, bsdf_only)
