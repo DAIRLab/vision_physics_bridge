@@ -338,7 +338,11 @@ def inspect_camera_poses_and_images(vision_asset: str, frame_num: int = 1):
 def add_contact_visuals_to_figs(
         vision_asset: str, figs: dict, ps: Tensor, sdfs: Tensor, vs: Tensor,
         sdf_bounds: Tensor):
-    """"""
+    """Add contact information to the realsense camera image, to verify the
+    contact_in_cam conversion looks reasonable.
+
+    TODO: Right now this just inspects ps and sdfs, not vs and sdf_bounds.
+    """
     ps = np.array(ps)
     sdfs = np.array(sdfs)
     vs = np.array(vs)
@@ -362,7 +366,6 @@ def add_contact_visuals_to_figs(
     sdfs = ax.scatter(x_pixel, y_pixel, c=sdfs, cmap='coolwarm', vmin=-0.01,
                       vmax=0.01, label='SDF', s=10)
     cbar = fig.colorbar(sdfs)
-
 
 def compute_cube_corners_in_world(pose):
     return math_utils.transform_point_coordinates_given_pose(

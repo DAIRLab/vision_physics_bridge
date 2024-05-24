@@ -837,7 +837,7 @@ class TrajectoryConverterBundleSDFToPLL:
 
             # Include an orientation error plot in the empty upper right.
             if not b_only:
-                q_errors = math_utils.quaternion_error(q_ts, q_bsdf_t)
+                q_errors = math_utils.quaternion_errors(q_ts, q_bsdf_t)
                 q_errors *= 180 / np.pi
                 ax[0, 3].plot(t_ts, q_errors, color='r',
                             label='TagSLAM-to-BundleSDF T')
@@ -845,7 +845,7 @@ class TrajectoryConverterBundleSDFToPLL:
                 # Include the orientation error for the keyframes.
                 if len(t_key) > 0:
                     tagslam_time_idx = [np.argmin((t_ts - t)**2) for t in t_key]
-                    q_key_errors = math_utils.quaternion_error(
+                    q_key_errors = math_utils.quaternion_errors(
                         q_ts[tagslam_time_idx], q_key_t)
                     q_key_errors *= 180 / np.pi
                     ax[0, 3].scatter(t_key, q_key_errors, color='r', s=20,

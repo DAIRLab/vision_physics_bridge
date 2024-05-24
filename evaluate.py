@@ -462,7 +462,8 @@ def traverse_run_history(
 
 class DynamicsPredictor:
     """Dynamics-related methods."""
-    def __init__(self, vision_asset: str, history: dict, bsdf_only: bool):
+    def __init__(self, vision_asset: str, history: dict, nerf_bundlesdf_id: str,
+                 bsdf_only: bool):
         # First decode the system and start/end tosses from the provided asset
         # directory.
         self.object = vision_asset.split('_')[0]
@@ -485,8 +486,9 @@ class DynamicsPredictor:
             if int(cycle_num) > last_bsdf_iteration:
                 last_bsdf_iteration = int(cycle_num)
         self.last_bsdf_iteration = last_bsdf_iteration
-        self.last_bsdf_id = self.history[
+        self.last_tracking_bsdf_id = self.history[
             f'cycle_iteration_{last_bsdf_iteration}']['bundlesdf_id']
+        self.last_nerf_bsdf_id = nerf_bundlesdf_id
 
         learned_params = self._look_up_latest_pll_results()
         learned_params.update(self._look_up_latest_bundlesdf_results())
@@ -495,8 +497,8 @@ class DynamicsPredictor:
 
         self.eval_dir = file_utils.evaluation_subdir(
             dataset=self.vision_asset, cycle_iteration=self.last_bsdf_iteration,
-            tracking_bundlesdf_id=self.last_bsdf_id,
-            nerf_bundlesdf_id=self.last_bsdf_id
+            tracking_bundlesdf_id=self.last_tracking_bsdf_id,
+            nerf_bundlesdf_id=self.last_nerf_bsdf_id
         )
 
     def _look_up_latest_pll_results(self):
@@ -530,8 +532,8 @@ class DynamicsPredictor:
         """Also stores self.nerf_results_dir."""
         self.nerf_results_dir = file_utils.bundlesdf_nerf_results_dir(
             dataset=self.vision_asset, cycle_iteration=self.last_bsdf_iteration,
-            tracking_bundlesdf_id=self.last_bsdf_id,
-            nerf_bundlesdf_id=self.last_bsdf_id
+            tracking_bundlesdf_id=self.last_tracking_bsdf_id,
+            nerf_bundlesdf_id=self.last_nerf_bsdf_id
         )
         geometry = trimesh.load(
             op.join(self.nerf_results_dir, 'textured_mesh.obj'), force='mesh')
@@ -638,7 +640,7 @@ class DynamicsPredictor:
 
         if self.bsdf_only:
             bsdf_trajs = eval_utils.get_bundlesdf_trajectories_pll_format(
-                self.vision_asset, self.last_bsdf_iteration, self.last_bsdf_id)
+                self.vision_asset, self.last_bsdf_iteration, self.last_tracking_bsdf_id)
             target_trajs_of_b_origin = bsdf_trajs
 
         else:
@@ -656,7 +658,7 @@ class DynamicsPredictor:
                 # Get synchronized BundleSDF and TagSLAM poses.
                 b_mat, t_mat = eval_utils.get_synced_bsdf_tagslam_toss_poses(
                     vision_asset=self.vision_asset,
-                    bundlesdf_id=self.last_bsdf_id,
+                    bundlesdf_id=self.last_tracking_bsdf_id,
                     cycle_iteration=self.last_bsdf_iteration,
                     desired_toss_num=key
                 )
@@ -701,8 +703,8 @@ class DynamicsPredictor:
         prediction_tosses = [i for i in range(self.start_toss, self.end_toss+1)]
         prediction_overlay = eval_utils.PredictionOverlayGenerator(
             vision_asset=self.vision_asset,
-            tracking_bundlesdf_id=self.last_bsdf_id,
-            nerf_bundlesdf_id=self.last_bsdf_id,
+            tracking_bundlesdf_id=self.last_tracking_bsdf_id,
+            nerf_bundlesdf_id=self.last_nerf_bsdf_id,
             cycle_iteration=self.last_bsdf_iteration,
             prediction_tosses=prediction_tosses
         )
@@ -833,6 +835,75 @@ class TrajectoryPerformanceEvaluator:
                 self.bsdf_t_toss_states[cycle_label] = \
                     traj_conv.bundlesdf_t_toss_processed_states
 
+    def compute_metrics(self):
+        """Metrics to include:
+            - positional error over trajectory
+            - orientation error over trajectory
+            - ADD (requires mesh)
+            - ADD-S (requires mesh)
+            - penetration (requires mesh)
+
+        Note:  All trajectories are in PLL format, which is:
+        [ qw qx qy qz  x y z  wx wy wz  vx vy vz ]
+
+        Creates the following attributes, all of which are dictionaries with
+        keys e.g. 'cycle_iteration_1' and values that are described below:
+            - bundlesdf_full_times:  (N,)
+            - bundlesdf_toss_times:  List of length n of (M_i,) arrays
+            - bsdf_b_full_states:  (N, 13)
+            - bsdf_b_toss_states:  List of length n of (M_i, 13) arrays
+
+        If not self.bsdf_only, also creates the following attributes with the
+        same structure as above:
+            - tagslam_full_times:  (N,)
+            - tagslam_toss_times:  List of length n of (M_i,) arrays
+            - tagslam_full_states:  (N, 13)
+            - bsdf_t_full_states:  (N, 13)
+            - tagslam_toss_states:  List of length n of (M_i, 13) arrays
+            - bsdf_t_toss_states:  List of length n of (M_i, 13) arrays
+        """
+        pass
+
+    # TODO
+    def _compute_add_error(self, target_traj: Tensor, pred_traj: Tensor):
+        """TODO"""
+        raise NotImplementedError
+
+    # TODO
+    def _compute_adds_error(self, target_traj: Tensor, pred_traj: Tensor):
+        """TODO"""
+        raise NotImplementedError
+
+    def _compute_pos_error(self, target_traj: Tensor, pred_traj: Tensor):
+        """Returns the mean positional error over the trajectory."""
+        target_xyz = target_traj[:, 4:7]
+        pred_xyz = pred_traj[:, 4:7]
+
+        pos_diff = target_xyz - pred_xyz
+        return torch.sqrt((pos_diff**2).sum(dim=-1)).mean()
+
+    def _compute_rot_error(self, target_traj: Tensor, pred_traj: Tensor):
+        """Returns the mean angular error over the trajectory."""
+        target_quat = target_traj[:, :4]
+        pred_quat = pred_traj[:, :4]
+
+        quat_errors = math_utils.quaternion_errors(target_quat, pred_quat)
+        return quat_errors.mean()
+
+    # TODO decide whether to put predicted geometry on true trajectory, or
+    # learned geometry on predicted trajectory.
+    def _compute_pen_error(self, pred_traj: Tensor):
+        """TODO"""
+        true_geom_system = self.get_true_geometry_multibody_learnable_system()
+
+        assert pred_traj.shape[1] == true_geom_system.space.n_x
+
+        n_steps = pred_traj.shape[0]
+
+        phi, _ = true_geom_system.multibody_terms.contact_terms(pred_traj)
+        phi = phi.detach().clone()
+        smallest_phis = phi.min(dim=1).values
+        return -smallest_phis[smallest_phis < 0].sum() / n_steps
 
 
 #######################################################################
@@ -846,19 +917,29 @@ class TrajectoryPerformanceEvaluator:
               type=str,
               default=None,
               help="what BundleSDF run ID associated with pose outputs to use.")
+@click.option('--nerf-bundlesdf-id',
+              type=str,
+              default=None,
+              help="what BundleSDF run ID associated with NeRF outputs to use.")
 @click.option('--cycle-iteration',
               type=int,
               default=1,
               help="BundleSDF iteration number (can't choose 0 since that " + \
                 "means use TagSLAM poses).")
 
-def main_command(vision_asset: str, bundlesdf_id: str, cycle_iteration: int):
+def main_command(vision_asset: str, bundlesdf_id: str, nerf_bundlesdf_id: str,
+                 cycle_iteration: int):
     assert cycle_iteration > 0, f'Invalid {cycle_iteration=}.'
     assert '_' in vision_asset, f'Invalid {vision_asset=}.'
 
     # Decode the BundleSDF run ID.
-    if bundlesdf_id[:13] != 'bundlesdf_id_':
-        bundlesdf_id = f'bundlesdf_id_{bundlesdf_id}'
+    tracking_bundlesdf_id = bundlesdf_id
+    if tracking_bundlesdf_id[:13] != 'bundlesdf_id_':
+        tracking_bundlesdf_id = f'bundlesdf_id_{tracking_bundlesdf_id}'
+    if nerf_bundlesdf_id is None:
+        nerf_bundlesdf_id = tracking_bundlesdf_id
+    elif nerf_bundlesdf_id[:13] != 'bundlesdf_id_':
+        nerf_bundlesdf_id = f'bundlesdf_id_{nerf_bundlesdf_id}'
 
     # Automatically detect if BundleSDF-only is necessary based on if the object
     # is a tagless one.
@@ -869,19 +950,21 @@ def main_command(vision_asset: str, bundlesdf_id: str, cycle_iteration: int):
     #     print(f'Automatically setting {bsdf_only=} for tagless {object=}.')
     bsdf_only = True
 
-    history = traverse_run_history(vision_asset, bundlesdf_id, cycle_iteration)
+    history = traverse_run_history(
+        vision_asset, tracking_bundlesdf_id, cycle_iteration)
     print(f'Found run history:')
-    for key, val in history:
+    for key, val in history.items():
         print(f'\t{key} : {val}')
 
-    # traj_evaluator = TrajectoryPerformanceEvaluator(
-    #     vision_asset, history, bsdf_only)
-    # traj_evaluator.get_tracking_trajectories()
+    traj_evaluator = TrajectoryPerformanceEvaluator(
+        vision_asset, history, bsdf_only)
+    traj_evaluator.get_tracking_trajectories()
 
-    dynamics_predictor = DynamicsPredictor(vision_asset, history, bsdf_only)
-    dynamics_predictor.generate_rollout_trajectories()
-    dynamics_predictor.save_predictions()
-    dynamics_predictor.make_prediction_video()
+    # dynamics_predictor = DynamicsPredictor(
+    #     vision_asset, history, nerf_bundlesdf_id, bsdf_only)
+    # dynamics_predictor.generate_rollout_trajectories()
+    # dynamics_predictor.save_predictions()
+    # dynamics_predictor.make_prediction_video()
 
     pdb.set_trace()
 

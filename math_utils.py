@@ -623,7 +623,7 @@ def fix_quaternions(quat_xyzw):
 
     return rot_t.as_quat()
 
-def quaternion_error(quat1_wxyz, quat2_wxyz):
+def quaternion_errors(quat1_wxyz, quat2_wxyz):
     """Input quaternions must be in wxyz format.  Returns the angular error in
     radians between the two quaternions over time.  Inputs can be (N, 4) or
     (4,)."""
