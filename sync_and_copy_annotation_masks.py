@@ -11,19 +11,23 @@ def create_ssh_client(server, port, user, password):
     client.connect(server, port=port, username=user, password=password)
     return client
 
-def find_offset_from_long_to_short(long_folder, short_folder):
+def find_offset_from_long_to_short(long_folder, short_folder, offset=None):
     '''
     Find the offset between the short and long images. short[0] == long[0+offset]
     '''
     # List all images in the short folder
     short_images = sorted(os.listdir(short_folder))
-    short_images_data = {img: imread(os.path.join(short_folder, img)) for img in short_images}
-    print(f'Number of short_images: {len(short_images_data.keys())}')
+    print(f'Number of short_images: {len(short_images)}')
 
     # List all images in the long folder
     long_images = sorted(os.listdir(long_folder))
+    print(f'Number of long_images: {len(long_images)}')
+
+    if offset is not None:
+        return offset, len(long_images) - len(short_images)
+
+    short_images_data = {img: imread(os.path.join(short_folder, img)) for img in short_images}
     long_images_data = {img: imread(os.path.join(long_folder, img)) for img in long_images}
-    print(f'Number of long_images: {len(long_images_data.keys())}')
 
     # Load long images and compare to find offset
     for offset in range(0, len(long_images) - len(short_images)+1):
@@ -31,7 +35,7 @@ def find_offset_from_long_to_short(long_folder, short_folder):
             if i % 10 == 0:
                 if not np.array_equal(long_images_data[long_images[i+offset]], short_images_data[short_img]):
                     break
-        return offset, len(long_images) - len(short_images)
+            return offset, len(long_images) - len(short_images)
     return None, len(long_images) - len(short_images)
     
 
@@ -48,19 +52,28 @@ def find_offset_from_short_remote_to_long_local(ssh_client, remote_folder, local
     # local_images_data = {img: local_images_data[img][..., ::-1] for img in local_images_data}
 
     # List all images in the remote folder
-    print(f"ls {remote_folder}")
-    stdin, stdout, stderr = ssh_client.exec_command(f"ls {remote_folder}")
-    remote_images = sorted(stdout.read().decode().split())
-    print(f'Number of remote_images: {len(remote_images)}')
+    if ssh_client is not None:
+        print(f"ls {remote_folder}")
+        stdin, stdout, stderr = ssh_client.exec_command(f"ls {remote_folder}")
+        remote_images = sorted(stdout.read().decode().split())
+        print(f'Number of remote_images: {len(remote_images)}')
+    else:
+        remote_images = sorted(os.listdir(remote_folder))
+        remote_image_data = {img: imread(os.path.join(remote_folder, img)) for img in remote_images}
+        print(f'Number of remote_images: {len(remote_images)}')
     
     # Load remote images and compare to find offset
     for offset in range(len(local_images) - len(remote_images), -1, -1):
         for i, remote_img in enumerate(remote_images):
             if i % 10 == 0:
-                stdin, stdout, stderr = ssh_client.exec_command(f"cat {remote_folder}/{remote_img}")
-                remote_img_data = imread(BytesIO(stdout.read()))
-                if not np.array_equal(local_images_data[local_images[i+offset]], remote_img_data):
-                    break
+                if ssh_client is None:
+                    if not np.array_equal(local_images_data[local_images[i+offset]], remote_image_data[remote_img]):
+                        break
+                else:
+                    stdin, stdout, stderr = ssh_client.exec_command(f"cat {remote_folder}/{remote_img}")
+                    remote_img_data = imread(BytesIO(stdout.read()))
+                    if not np.array_equal(local_images_data[local_images[i+offset]], remote_img_data):
+                        break
         # check if the offset + number of remote images is equal to the number of local images
         synced = len(local_images) == len(remote_images)
         return offset, synced
@@ -97,22 +110,30 @@ def copy_and_rename_files_from_short_remote_to_long_local(ssh_client, remote_fol
     '''
     long_local[0+offset] == short_remote[0]
     '''
-    stdin, stdout, stderr = ssh_client.exec_command(f"ls {remote_folder}")
-    remote_images = sorted(stdout.read().decode().split())
+    if ssh_client is not None:
+        stdin, stdout, stderr = ssh_client.exec_command(f"ls {remote_folder}")
+        remote_images = sorted(stdout.read().decode().split())
+    else:
+        remote_images = sorted(os.listdir(remote_folder))
 
     if not os.path.exists(local_target_folder):
         os.makedirs(local_target_folder)
 
     for remote_img in remote_images:
         original_mask_path = f"{remote_folder}/{remote_img}"
-        stdin, stdout, stderr = ssh_client.exec_command(f"cat {original_mask_path}")
-        mask_data = stdout.read()
+        if ssh_client is not None:
+            stdin, stdout, stderr = ssh_client.exec_command(f"cat {original_mask_path}")
+            mask_data = stdout.read()
         
-        new_index = int(remote_img.split('.')[0]) + offset
-        new_mask_path = f"{local_target_folder}/{str(new_index).zfill(4)}.png"
-        
-        with open(new_mask_path, 'wb') as f:
-            f.write(mask_data)
+            new_index = int(remote_img.split('.')[0]) + offset
+            new_mask_path = f"{local_target_folder}/{str(new_index).zfill(4)}.png"
+            
+            with open(new_mask_path, 'wb') as f:
+                f.write(mask_data)
+        else:
+            new_index = int(remote_img.split('.')[0]) + offset
+            new_mask_path = f"{local_target_folder}/{str(new_index).zfill(4)}.png"
+            copy2(original_mask_path, new_mask_path)
 
 def sync_from_remote_and_local(ssh_client, remote_root_folder, remote_toss_id, local_root_folder, local_toss_id):
     local_folder = f"{local_root_folder}/{local_toss_id}/rgb"
@@ -134,10 +155,10 @@ def sync_from_remote_and_local(ssh_client, remote_root_folder, remote_toss_id, l
     else:
         print("No suitable offset found. Check image content or adjust parameters.")
 
-def prop_mask_down(long_root_folder, long_toss_id, short_root_folder, short_toss_id):
+def prop_mask_down(long_root_folder, long_toss_id, short_root_folder, short_toss_id, offset=None):
     long_folder = f"{long_root_folder}/{long_toss_id}/rgb"
     short_folder = f"{short_root_folder}/{short_toss_id}/rgb"
-    offset, diff_len = find_offset_from_long_to_short(long_folder, short_folder)
+    offset, diff_len = find_offset_from_long_to_short(long_folder, short_folder, offset)
 
     print(f"Offset: {offset}, Diff_len: {diff_len}")
     if offset is not None:
@@ -172,21 +193,40 @@ local_folder_a = '/mnt/data0/minghz/repos/bundlenets/data'
 
 
 ssh_client = create_ssh_client(server, port, user, password)
-sync_from_remote_and_local(ssh_client, remote_folder_b, 'milk_1', local_folder_a, 'milk_1')
-sync_from_remote_and_local(ssh_client, remote_folder_b, 'milk_2', local_folder_a, 'milk_1-2')
-sync_from_remote_and_local(ssh_client, remote_folder_b, 'milk_3', local_folder_a, 'milk_1-3')
-sync_from_remote_and_local(ssh_client, remote_folder_b, 'milk_4', local_folder_a, 'milk_1-4')
-sync_from_remote_and_local(ssh_client, remote_folder_b, 'milk_5', local_folder_a, 'milk_1-5')
+# cube, bottle, half, milk, toblerone, prism, egg, napkin, box
+# bakingbox, burger, cardboard, chocolate, cream, croc, crushedcan, duck, gallon, greencan, hotdog, icetray, mug, oatly, pinkcan, stapler, styrofoam, toothpaste
 
-prop_annotation_up(local_folder_a, 'milk_1', local_folder_a, 'milk_1-2')
-prop_annotation_up(local_folder_a, 'milk_1-2', local_folder_a, 'milk_1-3')
-prop_annotation_up(local_folder_a, 'milk_1-3', local_folder_a, 'milk_1-4')
-prop_annotation_up(local_folder_a, 'milk_1-4', local_folder_a, 'milk_1-5')
 
-### do annotation on the largest (not in this script)
+for obj_name in ['bakingbox', 'burger', 'cardboard', 'chocolate', 'cream', 'croc', 'crushedcan', 'duck', 'gallon', 'greencan', 'hotdog', 'icetray', 'mug', 'oatly', 'pinkcan', 'stapler', 'styrofoam', 'toothpaste']:
+    # sync_from_remote_and_local(ssh_client, remote_folder_b, obj_name+'_1', local_folder_a, obj_name+'_1')
+    # sync_from_remote_and_local(ssh_client, remote_folder_b, obj_name+'_2', local_folder_a, obj_name+'_2')
+    # sync_from_remote_and_local(ssh_client, remote_folder_b, obj_name+'_3', local_folder_a, obj_name+'_3')
+    # sync_from_remote_and_local(ssh_client, remote_folder_b, obj_name+'_4', local_folder_a, obj_name+'_4')
+    # sync_from_remote_and_local(ssh_client, remote_folder_b, obj_name+'_5', local_folder_a, obj_name+'_5')
+    # sync_from_remote_and_local(ssh_client, remote_folder_b, obj_name+'_2', local_folder_a, obj_name+'_1-2')
+    # sync_from_remote_and_local(ssh_client, remote_folder_b, obj_name+'_3', local_folder_a, obj_name+'_1-3')
+    # sync_from_remote_and_local(ssh_client, remote_folder_b, obj_name+'_4', local_folder_a, obj_name+'_1-4')
+    # sync_from_remote_and_local(ssh_client, remote_folder_b, obj_name+'_5', local_folder_a, obj_name+'_1-5')
 
-# ## do propogation of the masks from the largest to the smallest
-# prop_mask_down(local_folder_a, 'milk_1-5', local_folder_a, 'milk_1-4')
-# prop_mask_down(local_folder_a, 'milk_1-4', local_folder_a, 'milk_1-3')
-# prop_mask_down(local_folder_a, 'milk_1-3', local_folder_a, 'milk_1-2')
-# # prop_mask_down(local_folder_a, 'half_1-2', local_folder_a, 'half_1')
+    # sync_from_remote_and_local(None, local_folder_a, obj_name+'_2', local_folder_a, obj_name+'_1-2')
+    # sync_from_remote_and_local(None, local_folder_a, obj_name+'_3', local_folder_a, obj_name+'_1-3')
+    # sync_from_remote_and_local(None, local_folder_a, obj_name+'_4', local_folder_a, obj_name+'_1-4')
+    # sync_from_remote_and_local(None, local_folder_a, obj_name+'_5', local_folder_a, obj_name+'_1-5')
+
+    # prop_annotation_up(local_folder_a, obj_name+'_1', local_folder_a, obj_name+'_1-2')
+    # prop_annotation_up(local_folder_a, obj_name+'_1-2', local_folder_a, obj_name+'_1-3')
+    # prop_annotation_up(local_folder_a, obj_name+'_1-3', local_folder_a, obj_name+'_1-4')
+    # prop_annotation_up(local_folder_a, obj_name+'_1-4', local_folder_a, obj_name+'_1-5')
+
+    ### do annotation on the largest (not in this script)
+
+    ## do propogation of the masks from the largest to the smallest
+    # prop_mask_down(local_folder_a, obj_name+'_1-5', local_folder_a, obj_name+'_1-4', offset=0)
+    # prop_mask_down(local_folder_a, obj_name+'_1-4', local_folder_a, obj_name+'_1-3', offset=0)
+    # prop_mask_down(local_folder_a, obj_name+'_1-3', local_folder_a, obj_name+'_1-2', offset=0)
+    # prop_mask_down(local_folder_a, obj_name+'_1-2', local_folder_a, obj_name+'_1', offset=0)
+
+    prop_mask_down(local_folder_a, obj_name+'_1-5', local_folder_a, obj_name+'_5')
+    prop_mask_down(local_folder_a, obj_name+'_1-5', local_folder_a, obj_name+'_4')
+    prop_mask_down(local_folder_a, obj_name+'_1-5', local_folder_a, obj_name+'_3')
+    prop_mask_down(local_folder_a, obj_name+'_1-5', local_folder_a, obj_name+'_2')
