@@ -627,17 +627,12 @@ def quaternion_errors(quat1_wxyz, quat2_wxyz):
     """Input quaternions must be in wxyz format.  Returns the angular error in
     radians between the two quaternions over time.  Inputs can be (N, 4) or
     (4,)."""
-    # Check inputs.
-    assert quat1_wxyz.shape == quat2_wxyz.shape
-    if quat1_wxyz.ndim == 1:
-        assert quat1_wxyz.shape[0] == 4
-        quat1_wxyz = quat1_wxyz.reshape(1, 4)
-        quat2_wxyz = quat2_wxyz.reshape(1, 4)
+    # Convert the quaternions.
+    rot1 = R.from_quat(wxyz2xyzw(quat1_wxyz))
+    rot2 = R.from_quat(wxyz2xyzw(quat2_wxyz))
 
-    quat1_wxyz = torch.Tensor(xyzw2wxyz(fix_quaternions(wxyz2xyzw(quat1_wxyz))))
-    quat2_wxyz = torch.Tensor(xyzw2wxyz(fix_quaternions(wxyz2xyzw(quat2_wxyz))))
+    # Compute the angular error.
+    rot_shift = rot1.inv() * rot2
+    angle_error = rot_shift.magnitude()
 
-    quat_shift = quaternion.multiply(quaternion.inverse(quat1_wxyz), quat2_wxyz)
-    rot = quaternion.log(quat_shift)
-
-    return torch.sqrt((rot**2).sum(dim=-1))
+    return angle_error
