@@ -17,3 +17,4 @@
 *.ply
 /consolidated_results
 /evaluation
+/assets/object_scans
