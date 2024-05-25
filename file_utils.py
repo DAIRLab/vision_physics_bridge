@@ -214,6 +214,25 @@ def contactnets_input_dir_bundlesdf(
         return assure_created(cn_input_dir)
     return cn_input_dir
 
+def contactnets_input_dir_keyframes(
+        dataset: str, iteration: int, bundlesdf_id: str, bsdf: bool,
+        create: bool = True
+) -> str:
+    """ContactNets' input directory for a particular experiment from the
+    keyframes of a particular iteration of BundleSDF."""
+    traj_subdir = 'keyframe_toss'
+    iteration_subdir = f'bundlesdf_iteration_{iteration}'
+    id_subdir = bundlesdf_id
+    object = dataset.split('_')[0]
+
+    cn_input_dir = op.join(
+        contactnets_input_dir(object), dataset, traj_subdir, iteration_subdir,
+        id_subdir)
+
+    if create:
+        return assure_created(cn_input_dir)
+    return cn_input_dir
+
 def contactnets_input_geometry_dir(
         dataset: str, iteration: int, bundlesdf_id: str,
         create: bool = True) -> str:
@@ -411,11 +430,14 @@ def evaluation_subdir(
     if nerf_bundlesdf_id.startswith('bundlesdf_id_'):
         nerf_bundlesdf_id = nerf_bundlesdf_id[13:]
 
-    now = datetime.datetime.now()
-    date_str = now.strftime('%m%d')
+    # now = datetime.datetime.now()
+    # date_str = now.strftime('%m%d')
+    # subdir = \
+    #     f'{date_str}_{dataset}_{tracking_bundlesdf_id}_' + \
+    #         f'{nerf_bundlesdf_id}_{cycle_iteration}'
     subdir = \
-        f'{date_str}_{dataset}_{tracking_bundlesdf_id}_' + \
-            f'{nerf_bundlesdf_id}_{cycle_iteration}'
+        f'{dataset}_{tracking_bundlesdf_id}_{nerf_bundlesdf_id}_' + \
+        f'{cycle_iteration}'
 
     return assure_created(op.join(eval_dir, subdir))
 
@@ -426,6 +448,19 @@ def evaluation_toss_prediction_video_filepath(
     run_eval_dir = evaluation_subdir(
         dataset, tracking_bundlesdf_id, nerf_bundlesdf_id, cycle_iteration)
     return op.join(run_eval_dir, f'predicted_tosses.mp4')
+
+def object_scan_dir() -> str:
+    """Directory for all object scans."""
+    return assure_created(op.join(DATA_GEN_DIR, 'assets', 'object_scans'))
+
+def object_scan_filepath(object: str) -> str:
+    """Return the filepath of an object's ground truth scan."""
+    scan_dir = object_scan_dir()
+    if f'{object}.obj' in os.listdir(scan_dir):
+        return op.join(scan_dir, f'{object}.obj')
+
+    print(f'No scan found for {object} in {scan_dir}.')
+    return None
 
 
 """Yaml file parsing utilities."""

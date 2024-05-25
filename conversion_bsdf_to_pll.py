@@ -201,7 +201,7 @@ class TrajectoryConverterBundleSDFToPLL:
         print(f'BundleSDF keyframe full trajectory information:' + \
               f'\n\t{self.keyframe_b_full_poses.shape=}' + \
               f'\n\t{self.keyframe_full_times[0]=}\n')
-        
+
     def _load_tagslam_poses(self) -> None:
         """Load all the poses reported by TagSLAM.  These are in world
         coordinates of the TagSLAM body origin with the following ordering:
@@ -269,10 +269,12 @@ class TrajectoryConverterBundleSDFToPLL:
         """
         # Get the keyframe indices from the BundleSDF tracking results' last
         # frame directory, in keyframes.yml.
-        keyframe_idx = \
+        keyframe_idx_1_indexed = \
             file_utils.load_keyframe_indices_from_nerf_results_yml(
                 self.dataset, self.cycle_iteration, self.tracking_bundlesdf_id)
-        self.keyframe_idx = [i-1 for i in keyframe_idx]
+
+        # Convert BundleSDF keyframes 1-indexing to 0-indexing.
+        self.keyframe_idx = [i-1 for i in keyframe_idx_1_indexed]
 
         # Get the adjusted keyframe poses from the BundleSDF NeRF results'
         # poses_after_nerf.txt.
@@ -286,9 +288,7 @@ class TrajectoryConverterBundleSDFToPLL:
         if not self.bsdf_only:
             keyframe_t_poses = []
         keyframe_b_poses = []
-
-        # Convert BundleSDF keyframes 1-indexing to 0-indexing.
-        keyframe_times = [self.bundlesdf_full_times[i-1] for i in keyframe_idx]
+        keyframe_times = self.bundlesdf_full_times[self.keyframe_idx]
 
         for bsdf_pose in keyframe_tfs:
             trans_mat = bsdf_pose
@@ -612,6 +612,9 @@ class TrajectoryConverterBundleSDFToPLL:
         self.keyframe_b_toss_processed_states = []
         self.keyframe_toss_times = []
 
+        # Be preparted to detect if the tosses have full keyframe data.
+        self.has_full_keyframe_tosses = True
+
         for i in range(len(self.start_frames)):
             # Need to do one less than provided start and end frames because
             # loaded data in 1-indexed directory but provided 0-indexed
@@ -622,7 +625,7 @@ class TrajectoryConverterBundleSDFToPLL:
                 self.bundlesdf_b_full_processed_states[b_start:b_end])
             self.bundlesdf_toss_times.append(
                 self.bundlesdf_full_times[b_start:b_end])
-            
+
             # Keep any keyframe data in the same time range as the toss.
             key_start = np.argmin(
                 (self.keyframe_full_times - self.bundlesdf_toss_times[i][0])**2)
@@ -633,6 +636,14 @@ class TrajectoryConverterBundleSDFToPLL:
                 self.keyframe_b_full_processed_states[key_start:key_end])
             self.keyframe_toss_times.append(
                 self.keyframe_full_times[key_start:key_end])
+
+            # Need all tosses to have continuous keyframe data to be able to
+            # export them as trajectories.
+            if self.keyframe_toss_times[i].shape != \
+                self.bundlesdf_toss_times[i].shape:
+                print(f'Keyframe data for toss {i+self.start_toss} is not ' + \
+                      'continuous.  Will not export keyframe trajectories.')
+                self.has_full_keyframe_tosses = False
 
         # Trim any TagSLAM-related data.
         if not self.bsdf_only:
@@ -1028,24 +1039,6 @@ class TrajectoryConverterBundleSDFToPLL:
 
         print('Saving files summary:')
 
-        if save_tagslam:
-            # Save full trajectory.
-            full_tagslam_dir = file_utils.contactnets_input_dir_tagslam(
-                dataset=self.dataset, full=True)
-            torch.save(
-                torch.tensor(self.tagslam_full_processed_states),
-                op.join(full_tagslam_dir, 'tagslam.pt'))
-            print(f"\t{op.join(full_tagslam_dir, 'tagslam.pt')}")
-
-            # Do toss trajectories.
-            toss_tagslam_dir = file_utils.contactnets_input_dir_tagslam(
-                dataset=self.dataset, full=False)
-            for i in range(len(toss_filenames)):
-                torch.save(
-                    torch.tensor(self.tagslam_toss_processed_states[i]),
-                    op.join(toss_tagslam_dir, toss_filenames[i]))
-                print(f'\t{op.join(toss_tagslam_dir, toss_filenames[i])}')
-
         if save_bundlesdf:
             # Save full trajectory.
             full_bundlesdf_dir = file_utils.contactnets_input_dir_bundlesdf(
@@ -1066,6 +1059,48 @@ class TrajectoryConverterBundleSDFToPLL:
                     torch.tensor(self.bundlesdf_b_toss_processed_states[i]),
                     op.join(toss_bundlesdf_dir, toss_filenames[i]))
                 print(f'\t{op.join(toss_bundlesdf_dir, toss_filenames[i])}')
+
+            # Do keyframe toss trajectories, if they are continuous.
+            if self.has_full_keyframe_tosses:
+                key_bundlesdf_dir = file_utils.contactnets_input_dir_keyframes(
+                    dataset=self.dataset, iteration=self.cycle_iteration,
+                    bundlesdf_id=self.tracking_bundlesdf_id, bsdf=True
+                )
+                for i in range(len(toss_filenames)):
+                    torch.save(
+                        torch.tensor(self.keyframe_b_toss_processed_states[i]),
+                        op.join(key_bundlesdf_dir, toss_filenames[i]))
+                    print(f'\t{op.join(key_bundlesdf_dir, toss_filenames[i])}')
+
+        if save_tagslam:
+            # Save full trajectory.
+            full_tagslam_dir = file_utils.contactnets_input_dir_tagslam(
+                dataset=self.dataset, full=True)
+            torch.save(
+                torch.tensor(self.tagslam_full_processed_states),
+                op.join(full_tagslam_dir, 'tagslam.pt'))
+            print(f"\t{op.join(full_tagslam_dir, 'tagslam.pt')}")
+
+            # Do toss trajectories.
+            toss_tagslam_dir = file_utils.contactnets_input_dir_tagslam(
+                dataset=self.dataset, full=False)
+            for i in range(len(toss_filenames)):
+                torch.save(
+                    torch.tensor(self.tagslam_toss_processed_states[i]),
+                    op.join(toss_tagslam_dir, toss_filenames[i]))
+                print(f'\t{op.join(toss_tagslam_dir, toss_filenames[i])}')
+
+            # Do keyframe toss trajectories, if they are continuous.
+            if self.has_full_keyframe_tosses:
+                key_tagslam_dir = file_utils.contactnets_input_dir_keyframes(
+                    dataset=self.dataset, iteration=self.cycle_iteration,
+                    bundlesdf_id=self.tracking_bundlesdf_id, bsdf=False
+                )
+                for i in range(len(toss_filenames)):
+                    torch.save(
+                        torch.tensor(self.keyframe_t_toss_processed_states[i]),
+                        op.join(key_tagslam_dir, toss_filenames[i]))
+                    print(f'\t{op.join(key_tagslam_dir, toss_filenames[i])}')
 
         print(f'\n')
 

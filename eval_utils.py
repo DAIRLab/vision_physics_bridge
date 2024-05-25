@@ -49,12 +49,17 @@ These both require a mesh, which is likely to be ground truth, but perhaps we
 could use the learned mesh instead.
 """
 def compute_add_tracking_error(predicted_pose, true_pose, surface_vertices):
+    """Average Distance of Model Points for objects with no indistinguishable
+    views by Hinterstoisser et al. (ACCV 2012).  Takes a single pose for each
+    the predicted and true trajectories, each as a 4x4 homogeneous transform.
     """
-    Average Distance of Model Points for objects with no indistinguishable views
-    - by Hinterstoisser et al. (ACCV 2012).
-    """
-    pred_pts = (predicted_pose@math_utils.to_homogeneous(surface_vertices).T).T[:,:3]
-    gt_pts = (true_pose@math_utils.to_homogeneous(surface_vertices).T).T[:,:3]
+    assert predicted_pose.shape == true_pose.shape == (4, 4), \
+        f'Invalid {predicted_pose.shape=} or {true_pose.shape=}.'
+    homogeneous_vertices = math_utils.to_homogeneous(surface_vertices)
+
+    pred_pts = (predicted_pose @ homogeneous_vertices.T).T[:, :3]
+    gt_pts = (true_pose @ homogeneous_vertices.T).T[:, :3]
+
     e = np.linalg.norm(pred_pts - gt_pts, axis=1).mean()
     return e
 
@@ -64,8 +69,13 @@ def compute_adds_tracking_error(predicted_pose, true_pose, surface_vertices):
     @true_pose: 4x4 mat
     @surface_vertices: (N,3)
     """
-    pred_pts = (predicted_pose@math_utils.to_homogeneous(surface_vertices).T).T[:,:3]
-    gt_pts = (true_pose@math_utils.to_homogeneous(surface_vertices).T).T[:,:3]
+    assert predicted_pose.shape == true_pose.shape == (4, 4), \
+        f'Invalid {predicted_pose.shape=} or {true_pose.shape=}.'
+    homogeneous_vertices = math_utils.to_homogeneous(surface_vertices)
+
+    pred_pts = (predicted_pose @ homogeneous_vertices.T).T[:, :3]
+    gt_pts = (true_pose @ homogeneous_vertices.T).T[:, :3]
+
     nn_index = cKDTree(pred_pts)
     nn_dists, _ = nn_index.query(gt_pts, k=1, workers=-1)
     e = nn_dists.mean()
@@ -109,12 +119,12 @@ def get_mass_from_urdf(urdf_path: str) -> float:
             return mass
     raise RuntimeError(f'Could not find mass in URDF file: {urdf_path}')
 
-def overwrite_mesh_name_in_urdf(urdf_path: str) -> None:
+def overwrite_mesh_name_in_urdf(urdf_path: str, new_obj_name: str) -> None:
     """Overwrite the mesh obj filename in the URDF path to match the expected
     BundleSDF-derived filename."""
     with open(urdf_path+'.tmp', 'w') as write_file:
         with open(urdf_path, 'r') as read_file:
-            line = read_file.read().replace('"test.obj"', '"bsdf_mesh.obj"')
+            line = read_file.read().replace('"test.obj"', f'"{new_obj_name}"')
             write_file.write(line)
 
     os.system(f'mv {urdf_path}.tmp {urdf_path}')

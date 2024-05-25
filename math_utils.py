@@ -365,7 +365,7 @@ def batch_pll_format_to_trans_mat(pll_format_poses):
 
     trans_mats = np.zeros((pll_format_poses.shape[0], 4, 4))
     for i in range(pll_format_poses.shape[0]):
-        trans_mats = pll_format_to_trans_mat(pll_format_poses[i])
+        trans_mats[i] = pll_format_to_trans_mat(pll_format_poses[i])
 
     return trans_mats
 
