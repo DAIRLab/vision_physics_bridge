@@ -231,7 +231,7 @@ def get_synced_bsdf_tagslam_toss_poses(
 
         b_traj = torch.load(op.join(bsdf_dir, f'{bundlesdf_id}.pt'))
         t_traj = torch.load(op.join(tagslam_dir, 'tagslam.pt'))
-        
+
     # Get the first poses.
     b_pll_state = b_traj[0]
     t_pll_state = t_traj[0]
@@ -376,8 +376,6 @@ class PredictionOverlayGenerator(OverlayVideoGenerator):
             # Get the predicted pose.
             toss_frame = frame_i+1 - self.start_frames[toss_i - self.start_toss]
             T_WP = self.predicted_trajs[toss_i][toss_frame]
-            # TODO can debug the TagSLAM to BundleSDF transformation by looking
-            # at the target trajectories here^
 
             self.vis["dynamics_triad"].set_transform(self.T_MW @ T_WP)
             self.vis["dynamics_mesh"].set_transform(self.T_MW @ T_WP)

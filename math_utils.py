@@ -330,6 +330,15 @@ def transform_t_origin_to_b_origin_pll_format(
                    = world_T_Tn * T0_T_world * world_T_B0
                    = world_T_Tn * inv(world_T_T0) * world_T_B0
     """
+    assert full_tagslam_trajectory.ndim == 2, f'Expecting batched poses: ' + \
+        f'{full_tagslam_trajectory.shape=}'
+    assert full_tagslam_trajectory.shape[1] == 13, f'Expecting PLL format: ' + \
+        f'{full_tagslam_trajectory.shape=}'
+    assert synced_bsdf_pose.shape == (4, 4), f'Expecting (4, 4) pose: ' + \
+        f'{synced_bsdf_pose.shape=}'
+    assert synced_tagslam_pose.shape == (4, 4), f'Expecting (4, 4) pose: ' + \
+        f'{synced_tagslam_pose.shape=}'
+
     world_T_T0 = synced_tagslam_pose
     world_T_B0 = synced_bsdf_pose
 
@@ -374,16 +383,35 @@ def pll_format_to_trans_mat(pll_format_pose):
     """Converts a pose in PLL format to a transformation matrix."""
     assert pll_format_pose.ndim == 1, f'Cannot handle batches: ' + \
         f'{pll_format_pose.shape=}'
-    quat_xyzw = wxyz2xyzw(pll_format_pose[:4])
+
     xyz = pll_format_pose[4:7]
-    pos_quat = np.concatenate((xyz, quat_xyzw))
-    return pos_quat_to_trans_mat(pos_quat)
+    quat_wxyz = pll_format_pose[:4]
+    quat_xyzw = wxyz2xyzw(quat_wxyz)
+    rot_mat = R.from_quat(quat_xyzw).as_matrix()
+
+    trans_mat = np.eye(4)
+    trans_mat[:3, 3] = xyz
+    trans_mat[:3, :3] = rot_mat
+    return trans_mat
 
 
 def trans_mat_to_pll_config(trans_mat):
-    pos_quat = trans_mat_to_pos_quat(trans_mat)
-    xyz = pos_quat[:3]
-    quat_wxyz = xyzw2wxyz(pos_quat[3:7])
+    assert trans_mat.shape == (4,4), f'Invalid {trans_mat.shape=}'
+
+    xyz = trans_mat[:3, 3]
+    quat_xyzw = R.from_matrix(trans_mat[:3, :3]).as_quat()
+    quat_wxyz = xyzw2wxyz(quat_xyzw)
+
+    # Return with positive w.
+    if quat_wxyz[0] < 0:
+        quat_wxyz = -quat_wxyz
+    elif quat_wxyz[0] == 0:
+        if quat_wxyz[1] < 0:
+            quat_wxyz = -quat_wxyz
+        elif quat_wxyz[1] == 0:
+            if quat_wxyz[2] < 0:
+                quat_wxyz = -quat_wxyz
+
     return np.concatenate((quat_wxyz, xyz)).squeeze()
 
 
@@ -580,7 +608,7 @@ def wxyz2xyzw(quat_wxyz):
         quat_wxyz = quat_wxyz.reshape(1, 4)
 
     w = quat_wxyz[:, 0:1]
-    xyz = quat_wxyz[:, 1:]
+    xyz = quat_wxyz[:, 1:4]
     return np.concatenate((xyz, w), axis=1).reshape(original_shape)
 
 def xyzw2wxyz(quat_xyzw):

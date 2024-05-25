@@ -462,7 +462,7 @@ def traverse_run_history(
 
 
 class DynamicsPredictor:
-    """Dynamics-related methods."""
+    """Generate dynamics predictions."""
     def __init__(self, vision_asset: str, history: dict, nerf_bundlesdf_id: str,
                  bsdf_only: bool):
         # First decode the system and start/end tosses from the provided asset
@@ -607,7 +607,7 @@ class DynamicsPredictor:
     def _create_pll_sim_system(self):
         """Create a PLL MultibodyLearnableSystem, which can be simulated."""
         # First create a URDF.  This should be the same as the last PLL URDF but
-        # with the geometry replaced by the BSDF geometry.
+        # with the geometry replaced by the new BSDF geometry.
         old_urdf_path = op.join(
             self.pll_results_dir, 'urdfs', 'with_bundlesdf_mesh.urdf')
         new_urdf_path = op.join(self.eval_dir, 'bsdf_mesh_pll_params.urdf')
@@ -639,15 +639,18 @@ class DynamicsPredictor:
         # Create the simulation system.
         self._create_pll_sim_system()
 
+        # Get the BundleSDF trajectories for each toss.
+        bsdf_trajs = eval_utils.get_bundlesdf_trajectories_pll_format(
+            self.vision_asset, self.last_bsdf_iteration,
+            self.last_tracking_bsdf_id)
+
+        # Get the target trajectories.  If BundleSDF only, the target has to be
+        # the BundleSDF trajectory itself.
         if self.bsdf_only:
-            bsdf_trajs = eval_utils.get_bundlesdf_trajectories_pll_format(
-                self.vision_asset, self.last_bsdf_iteration, self.last_tracking_bsdf_id)
             target_trajs_of_b_origin = bsdf_trajs
 
+        # If TagSLAM is available, the target trajectories can be from TagSLAM.
         else:
-            raise RuntimeError(
-                'TagSLAM-based rollouts seem to have an issue in converting' + \
-                ' TagSLAM to BundleSDF origin.')
             # Get ground truth trajectories from TagSLAM.
             tagslam_trajs = eval_utils.get_pll_tagslam_trajectories_pll_format(
                 object=self.object)
@@ -655,19 +658,28 @@ class DynamicsPredictor:
             # Convert the TagSLAM trajectories to be represented with respect to
             # the BundleSDF body origin.
             tagslam_trajs_of_b_origin = {}
-            for key, traj in tagslam_trajs.items():
+            for key, tagslam_traj in tagslam_trajs.items():
                 # Get synchronized BundleSDF and TagSLAM poses.
-                b_mat, t_mat = eval_utils.get_synced_bsdf_tagslam_toss_poses(
-                    vision_asset=self.vision_asset,
-                    bundlesdf_id=self.last_tracking_bsdf_id,
-                    cycle_iteration=self.last_bsdf_iteration,
-                    desired_toss_num=key
-                )
+                if key in bsdf_trajs.keys():
+                    print(f'Can synchronize toss {key} with BundleSDF poses.')
+                    b_mat = math_utils.pll_format_to_trans_mat(
+                        bsdf_trajs[key][0])
+                    t_mat = math_utils.pll_format_to_trans_mat(tagslam_traj[0])
+
+                else:
+                    print(f'Need to synchronize at beginning for toss {key}.')
+                    b_mat, t_mat = \
+                        eval_utils.get_synced_bsdf_tagslam_toss_poses(
+                            vision_asset=self.vision_asset,
+                            bundlesdf_id=self.last_tracking_bsdf_id,
+                            cycle_iteration=self.last_bsdf_iteration,
+                            desired_toss_num=key
+                        )
 
                 # Do the conversion.
                 tagslam_trajs_of_b_origin[key] = \
                     math_utils.transform_t_origin_to_b_origin_pll_format(
-                        full_tagslam_trajectory=traj,
+                        full_tagslam_trajectory=tagslam_traj,
                         synced_bsdf_pose=b_mat,
                         synced_tagslam_pose=t_mat
                     )
@@ -676,10 +688,10 @@ class DynamicsPredictor:
 
         # Get the predictions.
         pred_trajs_of_b_origin = {}
-        for key, traj in target_trajs_of_b_origin.items():
+        for key, target_traj in target_trajs_of_b_origin.items():
             pred_trajs_of_b_origin[key] = \
                 eval_utils.get_pll_rollout_trajectory(
-                    system=self.pll_system, target_traj=Tensor(traj))
+                    system=self.pll_system, target_traj=Tensor(target_traj))
 
         # Store the targets and predictions.
         self.target_trajs = target_trajs_of_b_origin
@@ -1117,9 +1129,13 @@ class TrajectoryPerformanceEvaluator:
               default=1,
               help="BundleSDF iteration number (can't choose 0 since that " + \
                 "means use TagSLAM poses).")
+@click.option('--do-videos/--skip-videos',
+              type=bool,
+              default=True,
+              help="whether to generate videos.")
 
 def main_command(vision_asset: str, bundlesdf_id: str, nerf_bundlesdf_id: str,
-                 cycle_iteration: int):
+                 cycle_iteration: int, do_videos: bool):
     assert cycle_iteration > 0, f'Invalid {cycle_iteration=}.'
     assert '_' in vision_asset, f'Invalid {vision_asset=}.'
 
@@ -1139,7 +1155,8 @@ def main_command(vision_asset: str, bundlesdf_id: str, nerf_bundlesdf_id: str,
     if object in file_utils.TAGLESS_OBJECTS:
         bsdf_only = True
         print(f'Automatically setting {bsdf_only=} for tagless {object=}.')
-    # bsdf_only = False
+    else:
+        print(f'Using TagSLAM and BundleSDF: {bsdf_only=}')
 
     history = traverse_run_history(
         vision_asset, tracking_bundlesdf_id, cycle_iteration)
@@ -1147,16 +1164,20 @@ def main_command(vision_asset: str, bundlesdf_id: str, nerf_bundlesdf_id: str,
     for key, val in history.items():
         print(f'\t{key} : {val}')
 
-    traj_evaluator = TrajectoryPerformanceEvaluator(
+    dynamics_predictor = DynamicsPredictor(
         vision_asset, history, nerf_bundlesdf_id, bsdf_only)
-    traj_evaluator.get_tracking_trajectories()
-    traj_evaluator.compute_metrics()
+    dynamics_predictor.generate_rollout_trajectories()
+    dynamics_predictor.save_predictions()
+    if do_videos:
+        dynamics_predictor.make_prediction_video()
+    else:
+        print(f'Skipping video generation for {vision_asset=}, ' + \
+              f'{bundlesdf_id=}, {nerf_bundlesdf_id=}, {cycle_iteration=}.')
 
-    # dynamics_predictor = DynamicsPredictor(
+    # traj_evaluator = TrajectoryPerformanceEvaluator(
     #     vision_asset, history, nerf_bundlesdf_id, bsdf_only)
-    # dynamics_predictor.generate_rollout_trajectories()
-    # dynamics_predictor.save_predictions()
-    # dynamics_predictor.make_prediction_video()
+    # traj_evaluator.get_tracking_trajectories()
+    # traj_evaluator.compute_metrics()
 
     pdb.set_trace()
 
