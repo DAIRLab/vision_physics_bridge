@@ -118,16 +118,18 @@ class TrajectoryConverterBundleSDFToPLL:
         self._load_poses()
 
         # Compute the absolute start and end frames for each toss.
-        self._get_absolute_frames(start_ros_times, relative_start_frames,
-                                  relative_end_frames)
+        self._get_absolute_frames(
+            start_ros_times, relative_start_frames, relative_end_frames,
+            self.bundlesdf_full_times
+        )
 
     def _get_absolute_frames(self, start_ros_times, relative_start_frames,
-                             relative_end_frames) -> None:
+                             relative_end_frames, full_times) -> None:
         """Compute the absolute start and end frames for each toss."""
         self.start_frames = math_utils.convert_relative_frames_to_absolute(
-            relative_start_frames, self.bundlesdf_full_times, start_ros_times)
+            relative_start_frames, full_times, start_ros_times)
         self.end_frames = math_utils.convert_relative_frames_to_absolute(
-            relative_end_frames, self.bundlesdf_full_times, start_ros_times)
+            relative_end_frames, full_times, start_ros_times)
 
     def _set_up_directories(self) -> None:
         """Given the stored object and start/end toss numbers, loads the

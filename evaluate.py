@@ -629,72 +629,61 @@ class DynamicsPredictor:
         self.pll_system.generate_updated_urdfs()
 
     def generate_rollout_trajectories(self):
-        """Generate rollouts for the object using the learned parameters.
-
-        TODO: Currently it is broken to rely on TagSLAM to provide the ground
-        truth; there seems to be an error in the TagSLAM-to-BundleSDF origin
-        conversion, as the initial pose is not aligned with the tracked pose,
-        but the landing pose is reasonably on the surface.
-        """
+        """Generate rollouts for the object using the learned parameters."""
         # Create the simulation system.
         self._create_pll_sim_system()
 
         # Get the BundleSDF trajectories for each toss.
-        bsdf_trajs = eval_utils.get_bundlesdf_trajectories_pll_format(
+        self.bundlesdf_trajs = eval_utils.get_bundlesdf_trajectories_pll_format(
             self.vision_asset, self.last_bsdf_iteration,
             self.last_tracking_bsdf_id)
 
-        # Get the target trajectories.  If BundleSDF only, the target has to be
-        # the BundleSDF trajectory itself.
-        if self.bsdf_only:
-            target_trajs_of_b_origin = bsdf_trajs
+        # Get ground truth trajectories from TagSLAM.
+        tagslam_trajs = eval_utils.get_pll_tagslam_trajectories_pll_format(
+            object=self.object)
 
-        # If TagSLAM is available, the target trajectories can be from TagSLAM.
-        else:
-            # Get ground truth trajectories from TagSLAM.
-            tagslam_trajs = eval_utils.get_pll_tagslam_trajectories_pll_format(
-                object=self.object)
+        # Convert the TagSLAM trajectories to be represented with respect to
+        # the BundleSDF body origin.
+        tagslam_trajs_of_b_origin = {}
+        for key, tagslam_traj in tagslam_trajs.items():
+            # Get synchronized BundleSDF and TagSLAM poses.
+            if key in self.bundlesdf_trajs.keys():
+                print(f'Can synchronize toss {key} with BundleSDF poses.')
+                b_mat = math_utils.pll_format_to_trans_mat(
+                    self.bundlesdf_trajs[key][0])
+                t_mat = math_utils.pll_format_to_trans_mat(tagslam_traj[0])
 
-            # Convert the TagSLAM trajectories to be represented with respect to
-            # the BundleSDF body origin.
-            tagslam_trajs_of_b_origin = {}
-            for key, tagslam_traj in tagslam_trajs.items():
-                # Get synchronized BundleSDF and TagSLAM poses.
-                if key in bsdf_trajs.keys():
-                    print(f'Can synchronize toss {key} with BundleSDF poses.')
-                    b_mat = math_utils.pll_format_to_trans_mat(
-                        bsdf_trajs[key][0])
-                    t_mat = math_utils.pll_format_to_trans_mat(tagslam_traj[0])
-
-                else:
-                    print(f'Need to synchronize at beginning for toss {key}.')
-                    b_mat, t_mat = \
-                        eval_utils.get_synced_bsdf_tagslam_toss_poses(
-                            vision_asset=self.vision_asset,
-                            bundlesdf_id=self.last_tracking_bsdf_id,
-                            cycle_iteration=self.last_bsdf_iteration,
-                            desired_toss_num=key
-                        )
-
-                # Do the conversion.
-                tagslam_trajs_of_b_origin[key] = \
-                    math_utils.transform_t_origin_to_b_origin_pll_format(
-                        full_tagslam_trajectory=tagslam_traj,
-                        synced_bsdf_pose=b_mat,
-                        synced_tagslam_pose=t_mat
+            else:
+                print(f'Need to synchronize at beginning for toss {key}.')
+                b_mat, t_mat = \
+                    eval_utils.get_synced_bsdf_tagslam_toss_poses(
+                        vision_asset=self.vision_asset,
+                        bundlesdf_id=self.last_tracking_bsdf_id,
+                        cycle_iteration=self.last_bsdf_iteration,
+                        desired_toss_num=key
                     )
 
-            target_trajs_of_b_origin = tagslam_trajs_of_b_origin
+            # Do the conversion.
+            tagslam_trajs_of_b_origin[key] = \
+                math_utils.transform_t_origin_to_b_origin_pll_format(
+                    full_tagslam_trajectory=tagslam_traj,
+                    synced_bsdf_pose=b_mat,
+                    synced_tagslam_pose=t_mat
+                )
+
+        self.tagslam_b_trajs = tagslam_trajs_of_b_origin
 
         # Get the predictions.
         pred_trajs_of_b_origin = {}
-        for key, target_traj in target_trajs_of_b_origin.items():
+        trajs = self.bundlesdf_trajs if not hasattr(self, 'tagslam_b_trajs') \
+            else self.tagslam_b_trajs
+
+        for key, target_traj in trajs.items():
             pred_trajs_of_b_origin[key] = \
                 eval_utils.get_pll_rollout_trajectory(
                     system=self.pll_system, target_traj=Tensor(target_traj))
 
         # Store the targets and predictions.
-        self.target_trajs = target_trajs_of_b_origin
         self.predicted_trajs = pred_trajs_of_b_origin
 
     def save_predictions(self):
@@ -702,15 +691,21 @@ class DynamicsPredictor:
         directory."""
         print(f'Saving trajectories to {self.eval_dir}:')
 
-        for toss_num, target_traj in self.target_trajs.items():
-            filename = f'target_toss_{toss_num}.pt'
-            torch.save(target_traj, op.join(self.eval_dir, filename))
-            print(f'\t{filename}')
-
         for toss_num, pred_traj in self.predicted_trajs.items():
             filename = f'predicted_toss_{toss_num}.pt'
             torch.save(pred_traj, op.join(self.eval_dir, filename))
             print(f'\t{filename}')
+
+        for toss_num, target_traj in self.bundlesdf_trajs.items():
+            filename = f'bundlesdf_toss_{toss_num}.pt'
+            torch.save(target_traj, op.join(self.eval_dir, filename))
+            print(f'\t{filename}')
+
+        if hasattr(self, 'tagslam_b_trajs'):
+            for toss_num, target_traj in self.tagslam_b_trajs.items():
+                filename = f'tagslam_b_toss_{toss_num}.pt'
+                torch.save(target_traj, op.join(self.eval_dir, filename))
+                print(f'\t{filename}')
 
     def make_prediction_video(self):
         prediction_tosses = [i for i in range(self.start_toss, self.end_toss+1)]

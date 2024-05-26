@@ -18,6 +18,7 @@ import meshcat.transformations as tf
 
 import file_utils, math_utils, overlay_videos
 
+from conversion_bsdf_to_pll import TrajectoryConverterBundleSDFToPLL
 from overlay_videos import OverlayVideoGenerator
 
 DATA_GEN_DIR = op.dirname(op.realpath(__file__))
@@ -156,10 +157,21 @@ def get_pll_tagslam_trajectories_pll_format(object: str) -> dict:
     if object in file_utils.TAGLESS_OBJECTS:
         print(f'Object {object} is tagless; no TagSLAM trajectories.')
         return None
-    
+
     # Get all of the trajectories, tosses 1 through 10 (or up until created).
     trajectories = {}
 
+    print(f'First checking for TagSLAM trajectories for {object}_1-10.')
+    vision_asset = f'{object}_1-10'
+    tagslam_dir = file_utils.contactnets_input_dir_tagslam(
+        vision_asset, full=False, create=False)
+    if op.exists(tagslam_dir):
+        for toss_i in range(1, 11):
+            trajectory = torch.load(op.join(tagslam_dir, f'{toss_i}.pt'))
+            trajectories[toss_i] = trajectory
+        return trajectories
+    
+    print(f'{object}_1-10 not found; trying individual tosses instead.')
     for toss_i in range(1, 11):
         vision_asset = f'{object}_{toss_i}'
         tagslam_dir = file_utils.contactnets_input_dir_tagslam(
@@ -278,16 +290,6 @@ class PredictionOverlayGenerator(OverlayVideoGenerator):
             nerf_bundlesdf_id=nerf_bundlesdf_id, cycle_iteration=cycle_iteration
         )
 
-        # Temporary restriction that we can only support rendering toss
-        # predictions that are within the vision asset's range.
-        prediction_tosses_to_render = []
-        for toss in prediction_tosses:
-            if toss < self.start_toss or toss > self.end_toss:
-                print(f'Cannot render toss {toss} for {vision_asset}.')
-            else:
-                prediction_tosses_to_render.append(toss)
-        self.prediction_tosses = prediction_tosses_to_render
-
         # Get the path to the evaluation directory.
         self.evaluation_dir = file_utils.evaluation_subdir(
             dataset=self.vision_asset,
@@ -298,6 +300,78 @@ class PredictionOverlayGenerator(OverlayVideoGenerator):
 
         # From the evaluation directory, get the predicted tosses.
         self._get_predicted_poses_in_world()
+
+        # If there are more predicted tosses than there are tracked tosses, then
+        # get the longer video length.
+        self._adjust_for_longer_video()
+
+    def _adjust_for_longer_video(self):
+        """If more predictions are generated than are included in the training
+        video, making overlays requires the object's 1-10 dataset to exist."""
+        # Check if the prediction tosses include some beyond the tracking.
+        min_prediction_toss = 11
+        max_prediction_toss = 0
+        for toss in self.prediction_tosses:
+            if toss > max_prediction_toss:
+                max_prediction_toss = toss
+            if toss < min_prediction_toss:
+                min_prediction_toss = toss
+        if max_prediction_toss == self.end_toss and \
+            min_prediction_toss == self.start_toss:
+            print(f'Predictions are the same as {self.start_toss=} and ' + \
+                  f'{self.end_toss=}; no need to extend video.')
+            return
+
+        print(f'Extending video to include tosses {min_prediction_toss} ' + \
+              f'to {max_prediction_toss}: from {self.rgb_images.shape[0]}' + \
+              f' images to ', end='')
+
+        # Compute the new start/end frames.
+        relative_start_frames = np.array([file_utils.load_field_from_yaml(
+            self.object, toss_i, 'start_frame') for toss_i in range(
+                min_prediction_toss, max_prediction_toss+1)])
+        relative_end_frames = np.array([file_utils.load_field_from_yaml(
+            self.object, toss_i, 'end_frame') for toss_i in range(
+                min_prediction_toss, max_prediction_toss+1)])
+        start_ros_times = np.array([file_utils.load_toss_time_from_yaml(
+            self.object, toss_i, 'start_time', as_ros_time=True) for toss_i \
+                in range(min_prediction_toss, max_prediction_toss+1)])
+        cnets_data_gen_dir = file_utils.cnets_data_gen_dataset_dir(
+            f'{self.object}_1-10', check_exists=True)
+        bundlesdf_times = np.loadtxt(
+            op.join(cnets_data_gen_dir, 'bundlesdf_timestamps.txt'))
+
+        self.start_frames = math_utils.convert_relative_frames_to_absolute(
+            relative_start_frames, bundlesdf_times, start_ros_times)
+        self.end_frames = math_utils.convert_relative_frames_to_absolute(
+            relative_end_frames, bundlesdf_times, start_ros_times)
+
+        # Need to extend the video.  Only extend to the end of the last toss
+        # that has a prediction.
+        full_dataset_dir = file_utils.cnets_data_gen_dataset_dir(
+            dataset=f'{self.object}_1-10', check_exists=True)
+        full_dataset_times_filepath = op.join(
+            full_dataset_dir, 'bundlesdf_timestamps.txt')
+        assert op.exists(full_dataset_times_filepath), f'Missing ' + \
+            f'{full_dataset_times_filepath=}.'
+        full_dataset_times = np.loadtxt(full_dataset_times_filepath)
+
+        last_toss_end = file_utils.load_toss_time_from_yaml(
+            self.object, max_prediction_toss, 'end_time', as_ros_time=False)
+
+        rgb_images = []
+        full_rgb_dir = file_utils.bundlesdf_video_rgb_dir(f'{self.object}_1-10')
+        for filename in sorted(os.listdir(full_rgb_dir)):
+            frame_num = int(filename.split('.')[0])
+            if full_dataset_times[frame_num-1] <= last_toss_end:
+                im = Image.open(op.join(full_rgb_dir, filename))
+                rgb_images.append(np.array(im))
+                del im
+            else:
+                break
+
+        self.rgb_images = np.array(rgb_images)
+        print(f'{self.rgb_images.shape[0]} images.')
 
     def _get_predicted_poses_in_world(self):
         """Get the target and predicted trajectories for every toss in
@@ -313,47 +387,77 @@ class PredictionOverlayGenerator(OverlayVideoGenerator):
         ])
         z_table = np.mean(table_heights)
 
-        target_trajs = {}
         predicted_trajs = {}
-        for toss in self.prediction_tosses:
-            target_name = op.join(self.evaluation_dir, f'target_toss_{toss}.pt')
+        prediction_tosses = []
+        for toss in range(1, 11):
             pred_name = op.join(
                 self.evaluation_dir, f'predicted_toss_{toss}.pt')
+            if not op.exists(pred_name):
+                print(f'Did not find predictions for toss {toss}; skipping.')
+                continue
+            prediction_tosses.append(toss)
 
-            assert op.exists(target_name), f'Cannot find {target_name=}.'
-            assert op.exists(pred_name), f'Cannot find {pred_name=}.'
-
-            target_traj = np.array(torch.load(target_name))
             predicted_traj = np.array(torch.load(pred_name))
-            assert target_traj.shape == predicted_traj.shape, f'Cannot ' + \
-                f'handle different shapes {target_traj.shape=}, ' + \
-                f'{predicted_traj.shape=}.'
 
             # Convert to 4x4 transformation matrices.
-            target_traj_trans = np.zeros((target_traj.shape[0], 4, 4))
             predicted_traj_trans = np.zeros((predicted_traj.shape[0], 4, 4))
-            for i in range(target_traj.shape[0]):
-                target_pose = target_traj[i]
+            for i in range(predicted_traj_trans.shape[0]):
                 predicted_pose = predicted_traj[i]
-                target_trans_mat = math_utils.pll_format_to_trans_mat(
-                    target_pose)
                 predicted_trans_mat = math_utils.pll_format_to_trans_mat(
                     predicted_pose)
 
                 # Adjust for the table height.
-                target_trans_mat[2, 3] += z_table
                 predicted_trans_mat[2, 3] += z_table
 
                 # Store to tensor.
-                target_traj_trans[i] = target_trans_mat
                 predicted_traj_trans[i] = predicted_trans_mat
 
             # Store the whole (N, 4, 4) trajectory to dictionary.
-            target_trajs[toss] = target_traj_trans
             predicted_trajs[toss] = predicted_traj_trans
 
-        self.target_trajs = target_trajs
         self.predicted_trajs = predicted_trajs
+        self.prediction_tosses = prediction_tosses
+
+        # Store the same trajectories as reported by BundleSDF and/or TagSLAM.
+        tagslam_b_trajs = {}
+        bundlesdf_trajs = {}
+        for toss in self.prediction_tosses:
+            tagslam_b_name = op.join(
+                self.evaluation_dir, f'tagslam_b_toss_{toss}.pt')
+            bundlesdf_name = op.join(
+                self.evaluation_dir, f'bundlesdf_toss_{toss}.pt')
+
+            assert op.exists(tagslam_b_name) or op.exists(bundlesdf_name), \
+                f'No comparison trajectories found for toss {toss} at ' + \
+                f'{tagslam_b_name=} or {bundlesdf_name=}.'
+
+            for filename, storage in zip([tagslam_b_name, bundlesdf_name],
+                                         [tagslam_b_trajs, bundlesdf_trajs]):
+                if not op.exists(filename):
+                    continue
+                comp_traj = np.array(torch.load(filename))
+
+                assert comp_traj.shape[0] == \
+                    self.predicted_trajs[toss].shape[0], \
+                    f'Cannot handle different shapes {comp_traj.shape=}, ' + \
+                    f'{self.predicted_trajs[toss].shape=}.'
+
+                # Convert to 4x4 transformation matrices.
+                comp_traj_trans = np.zeros((comp_traj.shape[0], 4, 4))
+                for i in range(comp_traj_trans.shape[0]):
+                    trans_mat = math_utils.pll_format_to_trans_mat(comp_traj[i])
+
+                    # Adjust for the table height.
+                    trans_mat[2, 3] += z_table
+
+                    # Store to tensor.
+                    comp_traj_trans[i] = trans_mat
+
+                # Store the whole (N, 4, 4) trajectory to dictionary.
+                storage[toss] = comp_traj_trans
+
+        self.bundlesdf_trajs = bundlesdf_trajs
+        self.tagslam_b_trajs = tagslam_b_trajs
 
     def _add_meshcat_objects(self, vis: meshcat.Visualizer) -> None:
         super()._add_meshcat_objects(vis)
@@ -382,14 +486,130 @@ class PredictionOverlayGenerator(OverlayVideoGenerator):
 
         # If not showing a prediction, move the predicted geometry out of view.
         else:
-            out_of_view_tf = tf.translation_matrix([0, 0, -1])
+            out_of_view_tf = self.T_MC @ tf.translation_matrix([0, 0, -1])
 
-            self.vis["dynamics_triad"].set_transform(self.T_MC @ out_of_view_tf)
-            self.vis["dynamics_mesh"].set_transform(self.T_MC @ out_of_view_tf)
+            self.vis["dynamics_triad"].set_transform(out_of_view_tf)
+            self.vis["dynamics_mesh"].set_transform(out_of_view_tf)
 
-# if __name__ == '__main__':
-#     pdb.set_trace()
-#     pgen = PredictionOverlayGenerator('bakingbox_1-2', '00', '00', 2, [1, 2])
-#     # pgen = PredictionOverlayGenerator('cube_1', '00', '00', 2, [1])
-#     pgen.make_overlay_video()
-#     pdb.set_trace()
+
+class TagSLAMTrajectoryConverter(TrajectoryConverterBundleSDFToPLL):
+    """Create dair_pll/assets/vision_{object}/{vision_asset}/{full or toss}/
+    tagslam/ entries, without needing to have run a BundleSDF experiment on
+    that asset.
+
+    An example of how this would get called:
+
+        tagslam_converter = TagSLAMTrajectoryConverter('bottle_1-10')
+        tagslam_converter.do_process()
+        tagslam_converter.save_data()
+    """
+    def __init__(self, vision_asset: str):
+        object = vision_asset.split('_')[0]
+
+        start_toss = int(vision_asset.split('_')[1].split('-')[0])
+        end_toss = start_toss if '-' not in vision_asset else \
+            int(vision_asset.split('-')[1])
+        assert start_toss <= end_toss, f'Invalid toss range: {start_toss} ' + \
+                f'-{end_toss} inferred from {vision_asset=}.'
+
+        # Get the camera extrinsics.
+        cam_trans, cam_rot_axis_angle = file_utils.load_camera_extrinsics(
+            object)
+
+        # Get the table height.  Use the average if using multiple tosses.
+        table_heights = np.array([
+            file_utils.load_table_z_height(object, toss) for toss in
+            range(start_toss, end_toss+1)
+        ])
+        z_table = np.mean(table_heights)
+
+        # Get the relevant timings.
+        start_ros_times = np.array([file_utils.load_toss_time_from_yaml(
+            object, toss_i, 'start_time', as_ros_time=True) for toss_i in range(
+                start_toss, end_toss+1)])
+        relative_start_frames = np.array([file_utils.load_field_from_yaml(
+            object, toss_i, 'start_frame') for toss_i in range(
+                start_toss, end_toss+1)])
+        relative_end_frames = np.array([file_utils.load_field_from_yaml(
+            object, toss_i, 'end_frame') for toss_i in range(
+                start_toss, end_toss+1)])
+
+        # Store class attributes.
+        self.start_toss = start_toss
+        self.end_toss = end_toss
+        self.object = object
+        self.cam_trans = cam_trans
+        self.cam_rot_axis_angle = cam_rot_axis_angle
+        self.frame_rate = 30
+        self.z_table = z_table
+        self.dataset = vision_asset
+        self.has_full_keyframe_tosses = False
+
+        self.tagslam_dir = file_utils.synchronized_tagslam_pose_dir(
+            vision_asset, check_exists=True)
+
+        self._load_tagslam_poses()
+        self._get_absolute_frames(start_ros_times, relative_start_frames,
+                                  relative_end_frames, self.tagslam_full_times)
+
+    def _load_tagslam_poses(self):
+        super()._load_tagslam_poses()
+        tagslam_full_dts = np.mean(
+            self.tagslam_full_times[1:] - self.tagslam_full_times[:-1]
+        )
+        print(f'TagSLAM full trajectory information:' + \
+            f'\n\t{self.tagslam_full_poses.shape=}' + \
+            f'\n\t{self.tagslam_full_times[0]=}' + \
+            f'\n\tAverage frame rate (full): {1/tagslam_full_dts}\n')
+
+    def _trim_processed_trajectories(self):
+        self.tagslam_toss_processed_states = []
+        self.tagslam_toss_times = []
+
+        for i in range(len(self.start_frames)):
+            # Need to do one less than provided start and end frames because
+            # loaded data in 1-indexed directory but provided 0-indexed
+            # start_frame and end_frame.
+            t_start = self.start_frames[i] - 1
+            t_end = self.end_frames[i] - 1
+            self.tagslam_toss_processed_states.append(
+                self.tagslam_full_processed_states[t_start:t_end])
+            self.tagslam_toss_times.append(
+                self.tagslam_full_times[t_start:t_end])
+
+    def do_process(self):
+        q_ts, p_ts, w_ts, v_ts = self._process_poses(
+            self.tagslam_full_poses, self.tagslam_full_times)
+        self.tagslam_full_processed_states = np.concatenate(
+            (q_ts, p_ts, w_ts, v_ts), axis=1)
+
+        self._trim_processed_trajectories()
+
+        # Print information about the trimmed trajectories.
+        for i in range(len(self.start_frames)):
+            toss_i = i + self.start_toss
+            print(f'\n=================== TOSS {toss_i} ===================')
+            tagslam_toss_dts = np.mean(self.tagslam_toss_times[i][1:] - \
+                                    self.tagslam_toss_times[i][:-1])
+            print(f'TagSLAM toss {toss_i} trajectory information:' + \
+                f'\n\t{self.tagslam_toss_processed_states[i].shape=}' + \
+                f'\n\t{self.tagslam_toss_times[i][0]=}' + \
+                f'\n\tAverage frame rate (toss): {1/tagslam_toss_dts}\n')
+
+    def save_data(self):
+        self.bsdf_only = False
+        super().save_data(save_bundlesdf=False, save_tagslam=True)
+
+
+
+if __name__ == '__main__':
+    # pdb.set_trace()
+    # pgen = PredictionOverlayGenerator('bakingbox_1-2', '00', '00', 2, [1, 2])
+    # # pgen = PredictionOverlayGenerator('cube_1', '00', '00', 2, [1])
+    # pgen.make_overlay_video()
+    # pdb.set_trace()
+    # pdb.set_trace()
+    tagslam_converter = TagSLAMTrajectoryConverter('bottle_1-10')
+    tagslam_converter.do_process()
+    tagslam_converter.save_data()
+    pdb.set_trace()

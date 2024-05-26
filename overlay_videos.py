@@ -174,8 +174,8 @@ class OverlayVideoGenerator:
         #             color=TAGSLAM_COLOR, reflectivity=0.0, transparent=0,
         #             opacity=.4)
         #     )
-        if not self.bsdf_only:
-            vis["tagslam_triad"].set_object(g.triad(scale=0.05))
+        # if not self.bsdf_only:
+        #     vis["tagslam_triad"].set_object(g.triad(scale=0.05))
         vis["bundlesdf_triad"].set_object(g.triad(scale=0.1))
         vis["bundlesdf_mesh"].set_object(
             g.ObjMeshGeometry.from_file(self.mesh_file),
@@ -316,7 +316,7 @@ class OverlayVideoGenerator:
             draw = ImageDraw.Draw(im)
             draw.polygon([(25, 435), (100, 435), (100, 475), (25, 475)],
                          fill='black')
-            font_path = os.path.join(cv2.__path__[0],'qt','fonts','DejaVuSans.ttf')
+            font_path = op.join(cv2.__path__[0],'qt','fonts','DejaVuSans.ttf')
             font = ImageFont.truetype(font_path, 20)
             draw.text((30, 440), f'Toss {toss_i}', fill='white',
                       font=font)
@@ -327,10 +327,17 @@ class OverlayVideoGenerator:
                           T_CB: np.ndarray) -> None:
         # if 'cube' in self.vision_asset:
         #     self.vis["tagslam_cube"].set_transform(self.T_MW @ T_WA)
-        if not self.bsdf_only:
-            self.vis["tagslam_triad"].set_transform(self.T_MW @ T_WA)
-        self.vis["bundlesdf_triad"].set_transform(self.T_MC @ T_CB)
-        self.vis["bundlesdf_mesh"].set_transform(self.T_MC @ T_CB)
+        # if T_WA is not None:
+        #     self.vis["tagslam_triad"].set_transform(self.T_MW @ T_WA)
+        if T_CB is not None:
+            self.vis["bundlesdf_triad"].set_transform(self.T_MC @ T_CB)
+            self.vis["bundlesdf_mesh"].set_transform(self.T_MC @ T_CB)
+
+        else:
+            out_of_view_tf = self.T_MC @ tf.translation_matrix([0, 0, -1])
+
+            self.vis["bundlesdf_triad"].set_transform(out_of_view_tf)
+            self.vis["bundlesdf_mesh"].set_transform(out_of_view_tf)
 
     def _render_one_image(self, frame_i: int, T_WA: np.ndarray,
                           T_CB: np.ndarray) -> Image:
@@ -375,10 +382,19 @@ class OverlayVideoGenerator:
             print(f'Storing temporary files at {tmpdir}')
 
             # Use tqdm to show a progress bar.
-            for i in tqdm(range(self.bundlesdf_poses_in_cam.shape[0])):
-                T_WA = None if self.bsdf_only else \
-                    self.tagslam_poses_in_world[i]
-                T_CB = self.bundlesdf_poses_in_cam[i]
+            for i in tqdm(range(self.rgb_images.shape[0])):
+                # Get the transformations of BundleSDF and/or TagSLAM tracking
+                # for annotations.
+                try:
+                    T_WA = None if not hasattr(self, 'tagslam_poses_in_world') \
+                        else self.tagslam_poses_in_world[i]
+                    T_CB = self.bundlesdf_poses_in_cam[i]
+
+                # If the video is longer than the BundleSDF tracking, still
+                # render the video but without annotated poses.
+                except IndexError:
+                    T_WA = None
+                    T_CB = None
 
                 im = self._render_one_image(i, T_WA=T_WA, T_CB=T_CB)
                 im.save(op.join(tmpdir, f'{i+1:07d}.png'), format="png")
