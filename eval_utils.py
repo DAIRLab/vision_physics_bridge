@@ -255,18 +255,25 @@ def get_synced_bsdf_tagslam_toss_poses(
     return b_trans_mat, t_trans_mat
 
 def get_pll_rollout_trajectory(
-        system: MultibodyLearnableSystem, target_traj: Tensor) -> Tensor:
+        system: MultibodyLearnableSystem, target_traj: Tensor,
+        start_adjust: int = 0) -> Tensor:
     """Get a rollout trajectory by simulating a PLL system from the first state
-    of a provided target trajectory."""
+    of a provided target trajectory.  A start adjust can be given to start the
+    rollout from a different beginning.  A start adjust of i means preserve the
+    first i steps of the trajectory, then simulate starting from the ith index.
+    """
     # Use the input argument structure of system.simulate().
-    x_0 = target_traj[..., :1, :]
+    x_pre = target_traj[..., :start_adjust, :]
+    x_0 = target_traj[..., start_adjust:start_adjust+1, :]
     carry_0 = system.carry_callback()
-    steps = target_traj.shape[0] - 1
+    steps = target_traj.shape[0] - 1 - start_adjust
 
     prediction, carry = system.simulate(x_0, carry_0, steps)
     del carry
 
-    return prediction.detach().clone()
+    full_traj = torch.concatenate((x_pre, prediction), dim=0)
+
+    return full_traj.detach().clone()
 
 
 class PredictionOverlayGenerator(OverlayVideoGenerator):

@@ -645,26 +645,26 @@ class DynamicsPredictor:
         # Convert the TagSLAM trajectories to be represented with respect to
         # the BundleSDF body origin.
         tagslam_trajs_of_b_origin = {}
-        for key, tagslam_traj in tagslam_trajs.items():
+        for toss_key, tagslam_traj in tagslam_trajs.items():
             # Get synchronized BundleSDF and TagSLAM poses.
-            if key in self.bundlesdf_trajs.keys():
-                print(f'Can synchronize toss {key} with BundleSDF poses.')
+            if toss_key in self.bundlesdf_trajs.keys():
+                print(f'Can synchronize toss {toss_key} with BundleSDF poses.')
                 b_mat = math_utils.pll_format_to_trans_mat(
-                    self.bundlesdf_trajs[key][0])
+                    self.bundlesdf_trajs[toss_key][0])
                 t_mat = math_utils.pll_format_to_trans_mat(tagslam_traj[0])
 
             else:
-                print(f'Need to synchronize at beginning for toss {key}.')
+                print(f'Need to synchronize at beginning for toss {toss_key}.')
                 b_mat, t_mat = \
                     eval_utils.get_synced_bsdf_tagslam_toss_poses(
                         vision_asset=self.vision_asset,
                         bundlesdf_id=self.last_tracking_bsdf_id,
                         cycle_iteration=self.last_bsdf_iteration,
-                        desired_toss_num=key
+                        desired_toss_num=toss_key
                     )
 
             # Do the conversion.
-            tagslam_trajs_of_b_origin[key] = \
+            tagslam_trajs_of_b_origin[toss_key] = \
                 math_utils.transform_t_origin_to_b_origin_pll_format(
                     full_tagslam_trajectory=tagslam_traj,
                     synced_bsdf_pose=b_mat,
@@ -678,10 +678,14 @@ class DynamicsPredictor:
         trajs = self.bundlesdf_trajs if not hasattr(self, 'tagslam_b_trajs') \
             else self.tagslam_b_trajs
 
-        for key, target_traj in trajs.items():
-            pred_trajs_of_b_origin[key] = \
+        for toss_key, target_traj in trajs.items():
+            start_adjust = file_utils.load_field_from_yaml(
+                object=self.object, toss_number=toss_key, key='start_adjust')
+            pred_trajs_of_b_origin[toss_key] = \
                 eval_utils.get_pll_rollout_trajectory(
-                    system=self.pll_system, target_traj=Tensor(target_traj))
+                    system=self.pll_system, target_traj=Tensor(target_traj),
+                    start_adjust=start_adjust
+                )
 
         # Store the targets and predictions.
         self.predicted_trajs = pred_trajs_of_b_origin
