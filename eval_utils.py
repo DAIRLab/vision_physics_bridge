@@ -125,7 +125,9 @@ def overwrite_mesh_name_in_urdf(urdf_path: str, new_obj_name: str) -> None:
     BundleSDF-derived filename."""
     with open(urdf_path+'.tmp', 'w') as write_file:
         with open(urdf_path, 'r') as read_file:
-            line = read_file.read().replace('"test.obj"', f'"{new_obj_name}"')
+            line = read_file.read(
+                ).replace('"test.obj"', f'"{new_obj_name}"'
+                ).replace('"bundlesdf_mesh.obj"', f'"{new_obj_name}"')
             write_file.write(line)
 
     os.system(f'mv {urdf_path}.tmp {urdf_path}')
@@ -147,7 +149,7 @@ def create_multibody_learnable_system(
         output_urdfs_dir = output_urdf_dir
     ).eval()
 
-def create_empty_results_dict(vision_asset: str) -> dict:
+def create_empty_results_dict(vision_asset: str, cycle_iteration: int) -> dict:
     """Create an empty results dictionary for a given vision asset.  It contains
     the structure of the results yaml file, modified to only include metric keys
     for metrics relevant to the vision asset -- i.e. TagSLAM-related metrics
@@ -179,6 +181,11 @@ def create_empty_results_dict(vision_asset: str) -> dict:
     if object in file_utils.TAGLESS_OBJECTS:
         for category_key in ['dynamics_metrics', 'tracking_metrics']:
             del empty_results[category_key]['against_tagslam']
+
+    # Third modification:  Get rid of any dynamics predictions if the cycle
+    # iteration is 1.
+    if cycle_iteration <= 1:
+        del empty_results['dynamics_metrics']
 
     return empty_results
 

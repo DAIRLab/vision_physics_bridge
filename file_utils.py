@@ -462,6 +462,10 @@ def object_scan_filepath(object: str) -> str:
     print(f'No scan found for {object} in {scan_dir}.')
     return None
 
+def template_urdf_filepath() -> str:
+    """Get the PLL template URDF filepath."""
+    return pll_file_utils.get_vision_urdf_template_path()
+
 def load_empty_results_yaml() -> dict:
     """Load an empty experiment results yaml, to be modified and saved."""
     filepath = op.join(evaluation_dir(), 'empty_experiment_results.yaml')

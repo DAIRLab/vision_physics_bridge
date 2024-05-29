@@ -261,21 +261,23 @@ class TrajectoryPerformanceEvaluator:
     def _get_true_geometry_pll_system(self):
         """Get a PLL system with the learned parameters but true geometry."""
         if not hasattr(self, 'true_geom_pll_system'):
-            # Make the true system have the learned friction and inertia from
-            # the last PLL round.
-            assert self.last_bsdf_iteration > 1, f'Cannot look up past PLL ' + \
-                f'experiment to determine friction/inertia parameters: ' + \
-                f'{self.history=}'
+            if self.last_bsdf_iteration > 1:
+                pll_iteration = self.last_bsdf_iteration - 1
+                pll_id = self.history[f'cycle_iteration_{pll_iteration}'][
+                    'pll_id']
+                pll_results_dir = file_utils.contactnets_output_dir(
+                    dataset=self.vision_asset, cycle_iteration=pll_iteration,
+                    pll_id=pll_id)
 
-            pll_iteration = self.last_bsdf_iteration - 1
-            pll_id = self.history[f'cycle_iteration_{pll_iteration}']['pll_id']
-            pll_results_dir = file_utils.contactnets_output_dir(
-                dataset=self.vision_asset, cycle_iteration=pll_iteration,
-                pll_id=pll_id)
+                # Get the old URDF from the PLL results.
+                old_urdf_path = op.join(
+                    pll_results_dir, 'urdfs', 'with_bundlesdf_mesh.urdf')
+
+            else:
+                # Use the original URDF.
+                old_urdf_path = file_utils.template_urdf_filepath()
 
             # First create a URDF.
-            old_urdf_path = op.join(
-                pll_results_dir, 'urdfs', 'with_bundlesdf_mesh.urdf')
             new_urdf_path = op.join(self.eval_dir, 'bsdf_mesh_pll_params.urdf')
             os.system(f'cp {old_urdf_path} {new_urdf_path}')
 
@@ -583,7 +585,7 @@ class DynamicsPredictor:
         if self.last_bsdf_iteration == 1:
             print(f'No prior PLL results to look up for {self.vision_asset=}' +\
                   f' with {self.history=}.')
-            return
+            return {}
 
         pll_iteration = self.last_bsdf_iteration - 1
         pll_id = self.history[f'cycle_iteration_{pll_iteration}']['pll_id']
@@ -684,8 +686,12 @@ class DynamicsPredictor:
         """Create a PLL MultibodyLearnableSystem, which can be simulated."""
         # First create a URDF.  This should be the same as the last PLL URDF but
         # with the geometry replaced by the new BSDF geometry.
-        old_urdf_path = op.join(
-            self.pll_results_dir, 'urdfs', 'with_bundlesdf_mesh.urdf')
+        if self.last_bsdf_iteration > 1:
+            old_urdf_path = op.join(
+                self.pll_results_dir, 'urdfs', 'with_bundlesdf_mesh.urdf')
+        else:
+            old_urdf_path = file_utils.template_urdf_filepath()
+
         new_urdf_path = op.join(self.eval_dir, 'bsdf_mesh_pll_params.urdf')
         os.system(f'cp {old_urdf_path} {new_urdf_path}')
 
@@ -1058,7 +1064,8 @@ def main_command(vision_asset: str, bundlesdf_id: str, nerf_bundlesdf_id: str,
         print(f'\t{key} : {val}')
 
     # Create an empty results dictionary to be stored as a yaml file.
-    results = eval_utils.create_empty_results_dict(vision_asset)
+    results = eval_utils.create_empty_results_dict(
+        vision_asset, cycle_iteration)
     results['_overview']['vision_asset'] = vision_asset
     results['_overview']['history'] = history
     results['_overview']['nerf_bundlesdf_id'] = nerf_bundlesdf_id
@@ -1070,16 +1077,17 @@ def main_command(vision_asset: str, bundlesdf_id: str, nerf_bundlesdf_id: str,
     traj_evaluator.store_tracking_metrics(results)
 
     ### Dynamics predictions.
-    dynamics_predictor = DynamicsPredictor(
-        vision_asset, history, nerf_bundlesdf_id, bsdf_only)
-    dynamics_predictor.generate_rollout_trajectories()
-    dynamics_predictor.save_predictions()
-    dynamics_predictor.store_dynamics_metrics(results, traj_evaluator)
-    if do_videos:
-        dynamics_predictor.make_prediction_video()
-    else:
-        print(f'Skipping video generation for {vision_asset=}, ' + \
-              f'{bundlesdf_id=}, {nerf_bundlesdf_id=}, {cycle_iteration=}.')
+    if cycle_iteration > 1:
+        dynamics_predictor = DynamicsPredictor(
+            vision_asset, history, nerf_bundlesdf_id, bsdf_only)
+        dynamics_predictor.generate_rollout_trajectories()
+        dynamics_predictor.save_predictions()
+        dynamics_predictor.store_dynamics_metrics(results, traj_evaluator)
+        if do_videos:
+            dynamics_predictor.make_prediction_video()
+        else:
+            print(f'Skipping video generation for {vision_asset=}, ' + \
+                f'{bundlesdf_id=}, {nerf_bundlesdf_id=}, {cycle_iteration=}.')
 
     file_utils.save_results_to_yaml(results, traj_evaluator.eval_dir)
 
