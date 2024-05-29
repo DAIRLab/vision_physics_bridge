@@ -1,0 +1,223 @@
+# An empty results yaml file.
+
+# Results are generated with a history of BundleSDF tracking and PLL run IDs for
+# a given vision asset, with the latest NeRF results from a given NeRF BundleSDF
+# run ID.
+_overview:
+  vision_asset: null
+  history: null
+  nerf_bundlesdf_id: null
+
+##### Performance results for dynamics predictions.
+dynamics_metrics:     # Delete this sub-section for BundleSDF-only baseline.
+  against_bundlesdf:  # Add toss keys for every toss contained in vision asset.
+    position_error:
+      toss_1:
+        traj: null
+        mean: null
+    rotation_error:   # All rotation errors in radians.
+      toss_1:
+        traj: null
+        mean: null
+    add_error:
+      toss_1:
+        traj: null
+        mean: null
+    adds_error:
+      toss_1:
+        traj: null
+        mean: null
+    penetration_true_geom_predicted_traj:
+      toss_1:
+        traj: null
+        mean: null
+
+  # Remove against_tagslam for tagless objects.
+  against_tagslam:    # There should always be every toss key 1 through 10.
+    position_error:
+      toss_1:
+        traj: null
+        mean: null
+      toss_2:
+        traj: null
+        mean: null
+      toss_3:
+        traj: null
+        mean: null
+      toss_4:
+        traj: null
+        mean: null
+      toss_5:
+        traj: null
+        mean: null
+      toss_6:
+        traj: null
+        mean: null
+      toss_7:
+        traj: null
+        mean: null
+      toss_8:
+        traj: null
+        mean: null
+      toss_9:
+        traj: null
+        mean: null
+      toss_10:
+        traj: null
+        mean: null
+    rotation_error:
+      toss_1:
+        traj: null
+        mean: null
+      toss_2:
+        traj: null
+        mean: null
+      toss_3:
+        traj: null
+        mean: null
+      toss_4:
+        traj: null
+        mean: null
+      toss_5:
+        traj: null
+        mean: null
+      toss_6:
+        traj: null
+        mean: null
+      toss_7:
+        traj: null
+        mean: null
+      toss_8:
+        traj: null
+        mean: null
+      toss_9:
+        traj: null
+        mean: null
+      toss_10:
+        traj: null
+        mean: null
+    add_error:
+      toss_1:
+        traj: null
+        mean: null
+      toss_2:
+        traj: null
+        mean: null
+      toss_3:
+        traj: null
+        mean: null
+      toss_4:
+        traj: null
+        mean: null
+      toss_5:
+        traj: null
+        mean: null
+      toss_6:
+        traj: null
+        mean: null
+      toss_7:
+        traj: null
+        mean: null
+      toss_8:
+        traj: null
+        mean: null
+      toss_9:
+        traj: null
+        mean: null
+      toss_10:
+        traj: null
+        mean: null
+    adds_error:
+      toss_1:
+        traj: null
+        mean: null
+      toss_2:
+        traj: null
+        mean: null
+      toss_3:
+        traj: null
+        mean: null
+      toss_4:
+        traj: null
+        mean: null
+      toss_5:
+        traj: null
+        mean: null
+      toss_6:
+        traj: null
+        mean: null
+      toss_7:
+        traj: null
+        mean: null
+      toss_8:
+        traj: null
+        mean: null
+      toss_9:
+        traj: null
+        mean: null
+      toss_10:
+        traj: null
+        mean: null
+
+
+##### Performance results for pose estimation.
+tracking_metrics:
+  against_bundlesdf:  # Add toss keys for every toss contained in vision asset.
+    penetration_true_geom_estimated_traj:
+      full:
+        traj: null
+        mean: null
+      toss_1:
+        traj: null
+        mean: null
+    penetration_learned_geom_estimated_traj:
+      full:
+        traj: null
+        mean: null
+      toss_1:
+        traj: null
+        mean: null
+
+  # Remove against_tagslam for tagless objects.
+  against_tagslam:    # Add toss keys for every toss contained in vision asset.
+    position_error:
+      full:
+        traj: null
+        mean: null
+      toss_1:
+        traj: null
+        mean: null
+    rotation_error:
+      full:
+        traj: null
+        mean: null
+      toss_1:
+        traj: null
+        mean: null
+    add_error:
+      full:
+        traj: null
+        mean: null
+      toss_1:
+        traj: null
+        mean: null
+    adds_error:
+      full:
+        traj: null
+        mean: null
+      toss_1:
+        traj: null
+        mean: null
+    penetration_learned_geom_tagslam_traj:
+      full:
+        traj: null
+        mean: null
+      toss_1:
+        traj: null
+        mean: null
+
+
+##### Performance results for geometry estimation.
+geometry_metrics:   # TODO these still TBD.
+  chamfer_distance: null
+  f_score: null
