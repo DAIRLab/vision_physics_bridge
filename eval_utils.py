@@ -147,6 +147,41 @@ def create_multibody_learnable_system(
         output_urdfs_dir = output_urdf_dir
     ).eval()
 
+def create_empty_results_dict(vision_asset: str) -> dict:
+    """Create an empty results dictionary for a given vision asset.  It contains
+    the structure of the results yaml file, modified to only include metric keys
+    for metrics relevant to the vision asset -- i.e. TagSLAM-related metrics
+    only if the object is tagged, and toss numbers only for those included in
+    the vision asset.  All entries are set to None."""
+    # First load the empty results yaml file.
+    empty_results = file_utils.load_empty_results_yaml()
+
+    # First modification:  Add the appropriate toss numbers.
+    start_toss = int(vision_asset.split('_')[-1].split('-')[0])
+    end_toss = start_toss if '-' not in vision_asset else \
+        int(vision_asset.split('-')[1])
+
+    for category_key in ['dynamics_metrics', 'tracking_metrics']:
+        sub_results = empty_results[category_key]['against_bundlesdf']
+        for metric_key in sub_results.keys():
+            sub_results[metric_key] = {
+                f'toss_{i}': {'traj': None, 'mean': None} for i in range(
+                    start_toss, end_toss+1)}
+    sub_results = empty_results['tracking_metrics']['against_tagslam']
+    for metric_key in sub_results.keys():
+        sub_results[metric_key] = {
+            f'toss_{i}': {'traj': None, 'mean': None} for i in range(
+                start_toss, end_toss+1)}
+
+    # Second modification:  Get rid of any against_tagslam entries if the object
+    # is tagless.
+    object = '_'.join(vision_asset.split('_')[:-1])
+    if object in file_utils.TAGLESS_OBJECTS:
+        for category_key in ['dynamics_metrics', 'tracking_metrics']:
+            del empty_results[category_key]['against_tagslam']
+
+    return empty_results
+
 
 #============================ DYNAMICS PREDICTIONS ============================#
 def get_pll_tagslam_trajectories_pll_format(object: str) -> dict:
@@ -565,7 +600,7 @@ class TagSLAMTrajectoryConverter(TrajectoryConverterBundleSDFToPLL):
             self.tagslam_full_times[1:] - self.tagslam_full_times[:-1]
         )
         print(f'TagSLAM full trajectory information:' + \
-            f'\n\t{self.tagslam_full_poses.shape=}' + \
+            f'\n\t{self.tagslam_t_full_poses.shape=}' + \
             f'\n\t{self.tagslam_full_times[0]=}' + \
             f'\n\tAverage frame rate (full): {1/tagslam_full_dts}\n')
 
@@ -586,7 +621,7 @@ class TagSLAMTrajectoryConverter(TrajectoryConverterBundleSDFToPLL):
 
     def do_process(self):
         q_ts, p_ts, w_ts, v_ts = self._process_poses(
-            self.tagslam_full_poses, self.tagslam_full_times)
+            self.tagslam_t_full_poses, self.tagslam_full_times)
         self.tagslam_full_processed_states = np.concatenate(
             (q_ts, p_ts, w_ts, v_ts), axis=1)
 

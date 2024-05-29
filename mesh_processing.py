@@ -50,8 +50,8 @@ class MeshProcessor:
         self.learned_mesh = icp.load_mesh_from_obj(learned_obj_file)
 
     def align_true_to_learned_mesh_with_icp(
-            self, show: bool = True, save_transform_to: str = None,
-            save_transformed_mesh_to: str = None):
+            self, show: bool = True, save_dir: str = None,
+            obj_name: str = 'true_geom_aligned.obj'):
         """Goal is to create a ground truth mesh that shares the same body
         origin as the learned mesh.  To do this, use ICP to register the true
         mesh to the learned mesh."""
@@ -63,6 +63,19 @@ class MeshProcessor:
         if show:
             o3d.visualization.draw_geometries(
                 [true_cloud, learned_cloud], window_name="Before ICP")
+        if save_dir is not None:
+            vis = o3d.visualization.Visualizer()
+            vis.create_window(visible=False)
+            vis.add_geometry(true_cloud)
+            vis.add_geometry(learned_cloud)
+            vis.poll_events()
+            vis.update_renderer()
+            image = vis.capture_screen_float_buffer(do_render=True)
+            o3d.io.write_image(
+                op.join(save_dir, 'alignment_before_icp.png'),
+                o3d.geometry.Image((255 * np.asarray(image)).astype(np.uint8))
+            )
+            vis.destroy_window()
 
         # Coarse initial alignment to get the true mesh's cloud centroid to the
         # same location as the learned mesh's cloud centroid.
@@ -80,9 +93,8 @@ class MeshProcessor:
         # Save the transformation matrix.
         print(f'Solved transformation matrix:\n{reg_p2p.transformation}')
         self.true_to_learned_transform = reg_p2p.transformation
-        if (save_transform_to is not None) and \
-           (save_transform_to.split('.')[-1] == 'txt'):
-            np.savetxt(save_transform_to, reg_p2p.transformation)
+        np.savetxt(
+            op.join(save_dir, 'true_to_learned_tf.txt'), reg_p2p.transformation)
 
         # Transform the true mesh's point cloud by the solved transform and view
         # the results.
@@ -91,13 +103,26 @@ class MeshProcessor:
         if show:
             o3d.visualization.draw_geometries(
                 [true_cloud, learned_cloud], window_name="After ICP")
+        if save_dir is not None:
+            vis = o3d.visualization.Visualizer()
+            vis.create_window(visible=False)
+            vis.add_geometry(true_cloud)
+            vis.add_geometry(learned_cloud)
+            vis.poll_events()
+            vis.update_renderer()
+            image = vis.capture_screen_float_buffer(do_render=True)
+            o3d.io.write_image(
+                op.join(save_dir, 'alignment_after_icp.png'),
+                o3d.geometry.Image((255 * np.asarray(image)).astype(np.uint8))
+            )
+            vis.destroy_window()
             
         # Save the transformed mesh to file.
-        if save_transformed_mesh_to is not None:
-            self.true_mesh.transform(self.true_to_learned_transform)
-            o3d.io.write_triangle_mesh(save_transformed_mesh_to, self.true_mesh)
-            print(f'Saved ground truth mesh transformed to align with ' + \
-                  f'BundleSDF mesh, to {save_transformed_mesh_to}.')
+        self.true_mesh.transform(self.true_to_learned_transform)
+        o3d.io.write_triangle_mesh(
+            op.join(save_dir, obj_name), self.true_mesh)
+        print(f'Saved ground truth mesh transformed to align with ' + \
+              f'BundleSDF mesh, as {obj_name} in {save_dir}.')
 
 
 #######################################################################

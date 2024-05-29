@@ -462,6 +462,18 @@ def object_scan_filepath(object: str) -> str:
     print(f'No scan found for {object} in {scan_dir}.')
     return None
 
+def load_empty_results_yaml() -> dict:
+    """Load an empty experiment results yaml, to be modified and saved."""
+    filepath = op.join(evaluation_dir(), 'empty_experiment_results.yaml')
+    with open(filepath, 'r') as stream:
+        empty_results = yaml.safe_load(stream)
+    return empty_results
+
+def save_results_to_yaml(results: dict, eval_dir: str) -> None:
+    """Save the results dictionary to a yaml file in a provided evaluation
+    directory."""
+    yaml.dump(results, open(op.join(eval_dir, 'results.yaml'), 'w'))
+
 
 """Yaml file parsing utilities."""
 def load_camera_extrinsics(object: str) -> Tuple[np.ndarray, np.ndarray]:

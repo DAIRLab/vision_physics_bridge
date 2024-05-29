@@ -1,20 +1,6 @@
 """An evaluation script to inspect and analyze the results from the BundleSDF-
 PLL cyclic pipeline."""
 
-# import argparse
-# import os
-# import numpy as np
-# import scipy.spatial as sp
-# import matplotlib.pyplot as plt
-# from scipy.spatial.transform import Rotation as R
-# import cv2
-
-# import file_utils
-# import math_utils
-# import rosbag_processor
-
-# import yaml
-
 import click
 import matplotlib.pyplot as plt
 import numpy as np
@@ -28,372 +14,9 @@ import trimesh
 import eval_utils, file_utils, math_utils, mesh_processing
 
 from conversion_bsdf_to_pll import TrajectoryConverterBundleSDFToPLL
+from eval_utils import MultibodyLearnableSystem
 
 
-
-# def get_cosine_sim(frame_id):
-#     """Compare the output of BundleTrack with the ground-truth poses of tagslam.
-#     """
-#     gt_pose = np.loadtxt(GT_POSE_DIR + "%04i.txt" % frame_id)
-#     output_pose = np.loadtxt(OUTPUT_POSE_DIR + "%04i.txt" % frame_id)
-#     return 1 - sp.distance.cdist(gt_pose, output_pose, "cosine")
-
-# def get_angle(P, Q):
-#     R = np.dot(P, Q.T)
-#     theta = (np.trace(R) - 1) / 2
-#     return np.arccos(theta) * (180 / np.pi)
-
-# def calculate_translation_error(estimated_pose, ground_truth_pose):
-#     est_translation = estimated_pose[:3, 3]
-#     gt_translation = ground_truth_pose[:3, 3]
-#     translation_error = np.linalg.norm(est_translation - gt_translation)
-#     return translation_error
-
-# def calculate_rotation_error(estimated_pose, ground_truth_pose):
-#     est_rotation = estimated_pose[:3, :3]
-#     gt_rotation = ground_truth_pose[:3, :3]
-#     cos_similarity = (np.trace(np.dot(est_rotation.T, gt_rotation)) - 1) / 2
-#     cos_similarity = np.clip(cos_similarity, -1, 1)
-#     rotation_error = np.arccos(cos_similarity)
-#     return rotation_error
-
-# def calculate_success_rate(translation_errors, rotation_errors,
-#                            translation_threshold, rotation_threshold):
-#     num_frames = len(translation_errors)
-#     success_count = sum(
-#         te <= translation_threshold and re <= rotation_threshold
-#         for te, re in zip(translation_errors, rotation_errors)
-#     )
-#     success_rate = (success_count / num_frames) * 100
-#     return success_rate
-
-# def plot_with_time(bundletrack_time, gt_time, bundletrack_pose_dir, gt_poses,
-#                    no_show=False):
-#     """Plot the x, y, z of BundleTrack output versus ground-truth poses of
-#     tagslam."""
-#     bundletrack_time = np.array(bundletrack_time)
-#     output_x, output_y, output_z = [], [], []  # translation
-#     gt_x, gt_y, gt_z = [], [], []
-#     estimated_w, estimated_x, estimated_y, estimated_z = [], [], [], []
-#     ground_truth_w, ground_truth_x, ground_truth_y, ground_truth_z = [], [], [], []
-#     frame_num = len(bundletrack_time)
-#     estimated_poses, ground_truth_poses = [], []
-#     for frame_id in range(1, frame_num + 1):
-#         output_pose = np.loadtxt(bundletrack_pose_dir + "%04i.txt" % frame_id)
-#         output_pose = math_utils.transform_bundletrack_origin_to_tagslam_origin(
-#             output_pose,
-#             bundletrack_pose_dir,
-#             ODOM_FILE_PATH,
-#             cam_trans,
-#             cam_axis_vec,
-#             to_world=True,
-#         ) # camera frame
-#         estimated_poses.append(output_pose)
-#         output_pose_ = math_utils.trans_mat_to_pos_quat(output_pose)
-#         output_x.append(output_pose_[0])
-#         output_y.append(output_pose_[1])
-#         output_z.append(output_pose_[2])
-#         x, y, z, w = (
-#             output_pose_[3],
-#             output_pose_[4],
-#             output_pose_[5],
-#             output_pose_[6],
-#         )
-#         estimated_w.append(w)
-#         estimated_x.append(x)
-#         estimated_y.append(y)
-#         estimated_z.append(z)
-
-#         ########## Transform to world again ############
-#         # output_pose_world_test = camera_to_world(output_pose)
-#         # estimated_x_world_pose.append(output_pose_world_test[0, 3])
-#         # estimated_y_world_pose.append(output_pose_world_test[1, 3])
-#         # estimated_z_world_pose.append(output_pose_world_test[2, 3])
-
-#         # x_test, y_test, z_test, w_test = R.from_matrix(output_pose_world_test[:3, :3]).as_quat()
-#         # estimate_x_world_quat_list.append(x_test)
-#         # estimate_y_world_quat_list.append(y_test)
-#         # estimate_z_world_quat_list.append(z_test)
-#         # estimate_w_world_quat_list.append(w_test)
-#         ################################################
-
-#     for frame_id in range(frame_num):
-#         gt_frame = frame_id
-#         gt_pose = gt_poses[gt_frame]
-#         gt_x.append(gt_pose[0])
-#         gt_y.append(gt_pose[1])
-#         gt_z.append(gt_pose[2])
-#         x_, y_, z_, w_ = (
-#             gt_pose[3],
-#             gt_pose[4],
-#             gt_pose[5],
-#             gt_pose[6],
-#         )
-#         ground_truth_poses.append(math_utils.pos_quat_to_trans_mat(gt_pose))
-#         ground_truth_w.append(w_)
-#         ground_truth_x.append(x_)
-#         ground_truth_y.append(y_)
-#         ground_truth_z.append(z_)
-#         ############# Transform to camera ##############
-#         # gt_pose_trans = math_utils.pos_quat_to_trans_mat(gt_pose)
-#         # gt_pose_trans_cam = math_utils.world_to_camera(
-#         #     gt_pose_trans,
-#         #     cam_trans,
-#         #     cam_axis_vec,
-#         # )
-#         # gt_pos_quat_cam = math_utils.trans_mat_to_pos_quat(gt_pose_trans_cam)
-#         # gt_x.append(gt_pos_quat_cam[0])
-#         # gt_y.append(gt_pos_quat_cam[1])
-#         # gt_z.append(gt_pos_quat_cam[2])
-#         # x_, y_, z_, w_ = (
-#         #     gt_pos_quat_cam[3],
-#         #     gt_pos_quat_cam[4],
-#         #     gt_pos_quat_cam[5],
-#         #     gt_pos_quat_cam[6],
-#         # )
-#         # ground_truth_poses.append(gt_pose_trans_cam)
-#         # ground_truth_w.append(w_)
-#         # ground_truth_x.append(x_)
-#         # ground_truth_y.append(y_)
-#         # ground_truth_z.append(z_)
-        
-#         ########### Transform to world again ############
-#         # gt_pose_world_test = camera_to_world(gt_pose_trans_cam)
-#         # gt_pose_world_quat = math_utils.trans_mat_to_pos_quat(gt_pose_world_test)
-#         # print("After world2cam and cam2world transform", gt_pose_world_quat)
-#         # gt_x_quat_test, gt_y_quat_test, gt_z_quat_test, gt_w_quat_test = (gt_pose_world_quat[3], 
-#         #                                    gt_pose_world_quat[4], 
-#         #                                    gt_pose_world_quat[5], 
-#         #                                    gt_pose_world_quat[6]
-#         #                                 )
-#         # gt_x_world_pose.append(gt_pose_world_quat[0]) 
-#         # gt_y_world_pose.append(gt_pose_world_quat[1])
-#         # gt_z_world_pose.append(gt_pose_world_quat[2])
-#         # gt_x_world_test_list.append(gt_x_quat_test)
-#         # gt_y_world_test_list.append(gt_y_quat_test)
-#         # gt_z_world_test_list.append(gt_z_quat_test)
-#         # gt_w_world_test_list.append(gt_w_quat_test)
-#         ################################################
-#     output_x, output_y, output_z = (
-#         np.array(output_x),
-#         np.array(output_y),
-#         np.array(output_z),
-#     )
-#     gt_x, gt_y, gt_z = np.array(gt_x), np.array(gt_y), np.array(gt_z)
-
-#     # Evaluate based on 5deg5cm metric
-#     translation_errors = [
-#         calculate_translation_error(estimated_pose, ground_truth_pose)
-#         for estimated_pose, ground_truth_pose in zip(estimated_poses,
-#                                                      ground_truth_poses)
-#     ]
-#     rotation_errors = [
-#         calculate_rotation_error(estimated_pose, ground_truth_pose)
-#         for estimated_pose, ground_truth_pose in zip(estimated_poses,
-#                                                      ground_truth_poses)
-#     ]
-
-#     # Set error thresholds for successful pose estimation
-#     translation_threshold = 0.05
-#     rotation_threshold = 5.0
-
-#     # Calculate success rate
-#     success_rate = calculate_success_rate(
-#         translation_errors,
-#         rotation_errors,
-#         translation_threshold,
-#         np.radians(rotation_threshold),
-#     )
-#     mean_trans_err = np.mean(translation_errors)
-#     mean_rot_err = np.degrees(np.mean(rotation_errors))
-#     print(f"Translation Error: {mean_trans_err:.4f}")
-#     print(f"Rotation Error: {mean_rot_err:.4f} degrees")
-#     print(f"Success Rate: {success_rate:.2f}%")
-
-#     fig, axs = plt.subplots(2, 4)
-#     fig.suptitle(f"{mean_trans_err:.2f}, {mean_rot_err:.2f} deg, " + \
-#                  f"{success_rate:.2f}%")
-#     axs[0, 0].plot(bundletrack_time, output_x, label="BundleTrack")
-#     axs[0, 0].plot(gt_time, gt_x, label="ground-truth")
-#     axs[0, 0].set_title("Position x")
-#     axs[0, 0].legend()
-
-#     axs[0, 1].plot(bundletrack_time, output_y, label="BundleTrack")
-#     axs[0, 1].plot(gt_time, gt_y, label="ground-truth")
-#     axs[0, 1].set_title("Position y")
-
-#     axs[0, 2].plot(bundletrack_time, output_z, label="BundleTrack")
-#     axs[0, 2].plot(gt_time, gt_z, label="ground-truth")
-#     axs[0, 2].set_title("Position z")
-
-#     axs[1, 0].plot(bundletrack_time, estimated_w, label="BundleTrack")
-#     axs[1, 0].plot(gt_time, ground_truth_w, label="ground-truth")
-#     axs[1, 0].set_title("w")
-
-#     axs[1, 1].plot(bundletrack_time, estimated_x, label="BundleTrack")
-#     axs[1, 1].plot(gt_time, ground_truth_x, label="ground-truth")
-#     axs[1, 1].set_title("x")
-
-#     axs[1, 2].plot(bundletrack_time, estimated_y, label="BundleTrack")
-#     axs[1, 2].plot(gt_time, ground_truth_y, label="ground-truth")
-#     axs[1, 2].set_title("y")
-
-#     axs[1, 3].plot(bundletrack_time, estimated_z, label="BundleTrack")
-#     axs[1, 3].plot(gt_time, ground_truth_z, label="ground-truth")
-#     axs[1, 3].set_title("z")
-
-#     spacing = 0.100
-#     fig.subplots_adjust(hspace=0.5)
-#     fig.subplots_adjust(bottom=spacing)
-#     plt.savefig(FIG_NAME)
-#     print(f'Figure saved to {FIG_NAME}')
-#     if not no_show:
-#         plt.show()
-
-# def draw_coords_to_image():
-#     """Draw rgb axes onto images to indicate the pose.
-#     """
-#     SEGMENT_IMAGE_DIR = f"/home/cnets-vision/mengti_ws/BundleSDF/results/cube_{toss_id}/color_segmented/"
-#     OUTPUT_SEGMENT_DIR = f"./dataset/cube_{toss_id}/color_segmented_coords/"
-#     if not os.path.exists(OUTPUT_SEGMENT_DIR):
-#         os.mkdir(OUTPUT_SEGMENT_DIR)
-#         print(f'Made dir {OUTPUT_SEGMENT_DIR}')
-#     axis_length = 0.1
-#     axis_points = np.float32([[0,0,0],
-#                             [axis_length,0,0], 
-#                             [0,axis_length,0], 
-#                             [0,0,axis_length]])
-#     intrinsic = np.loadtxt(f"/home/cnets-vision/mengti_ws/BundleSDF/data/cube_{toss_id}/cam_K.txt")
-#     # tagslam_data = np.loadtxt(GT_POSE_DIR+'tagslam.txt')
-#     for frame_id in range(1, frame_num):
-#         output_pose = np.loadtxt(OUTPUT_POSE_DIR + "%04i.txt" % frame_id)
-#         output_pose = math_utils.transform_bundletrack_origin_to_tagslam_origin(
-#             output_pose,
-#             OUTPUT_POSE_DIR,
-#             ODOM_FILE_PATH,
-#             cam_trans,
-#             cam_axis_vec,
-#         ) # camera frame
-#         rvec = output_pose[:3, :3]
-#         tvec = output_pose[:3, 3]
-#         # tagslam_pose = tagslam_data[frame_id, 2:]
-#         # tagslam_mat = math_utils.pos_quat_to_trans_mat(tagslam_pose)
-#         # tagslam_mat = math_utils.world_to_camera(tagslam_mat, cam_trans, cam_axis_vec)
-#         # rvec = tagslam_mat[:3, :3]
-#         # tvec = tagslam_mat[:3, 3]
-#         image_points, _ = cv2.projectPoints(axis_points, rvec, tvec, intrinsic, distCoeffs=np.zeros((5,1)))
-
-#         f = os.path.join(SEGMENT_IMAGE_DIR, "%04i.png" % frame_id)
-#         filename = "%04i.png" % frame_id
-#         print(f'file path: {f}')
-#         image_with_axes = cv2.imread(f)
-#         image_points = image_points.reshape(image_points.shape[0], image_points.shape[-1])
-#         image_points = image_points.astype(int)
-#         print(tuple(image_points[0].ravel()))
-#         print(tuple(image_points[1].ravel()))
-#         cv2.line(image_with_axes, tuple(image_points[0].ravel()), tuple(image_points[1].ravel()), (0,0,255), 5)  # X-axis (Red)
-#         cv2.line(image_with_axes, tuple(image_points[0].ravel()), tuple(image_points[2].ravel()), (0,255,0), 5)  # Y-axis (Green)
-#         cv2.line(image_with_axes, tuple(image_points[0].ravel()), tuple(image_points[3].ravel()), (255,0,0), 5)  # Z-axis (Blue)
-#         cv2.imwrite(OUTPUT_SEGMENT_DIR+filename, image_with_axes)
-#         print(f'Wrote image {OUTPUT_SEGMENT_DIR+filename}')
-
-# # TODO: This should get replaced in rosbag_processor.py or data_preparation.py
-# def save_init_pose():
-#     poses = np.loadtxt(os.path.join(GT_POSE_DIR, "tagslam.txt"))
-#     init_pose = poses[0, 1:]
-#     mat = math_utils.pos_quat_to_trans_mat(init_pose)
-#     mat_cam = math_utils.world_to_camera(mat, cam_trans, cam_axis_vec)
-#     np.savetxt(os.path.join(ODOM_FILE_PATH, "%04i.txt" % 0), mat_cam)
-#     print(f'Initial pose saved to {ODOM_FILE_PATH}')
-    
-# if __name__ == "__main__":
-#     parser = argparse.ArgumentParser()
-#     parser.add_argument(
-#         "toss_id",
-#         type=int,
-#     )
-#     parser.add_argument(
-#         "trial_id",
-#         type=int,
-#     )
-#     parser.add_argument(
-#         "--no_show",
-#         action="store_true"
-#     )
-#     args = parser.parse_args()
-#     toss_id = args.toss_id
-#     trial_id = args.trial_id
-#     print(f'Processing toss {toss_id}, trial {trial_id}')
-#     TOSS_TYPE = 'cube'
-#     bag_num = file_utils.load_rosbag_number_from_yaml(TOSS_TYPE, toss_id)
-#     print(f'bag num: {bag_num}')
-#     depth_bag_file = f"/home/cnets-vision/mengti_ws/robot_filter/rosbags/raw_{bag_num}.bag"
-#     odom_bag_file = f"/home/cnets-vision/mengti_ws/robot_filter/rosbags/odom_{bag_num}.bag"
-#     DEPTH_ROS_TOPIC = "/camera/aligned_depth_to_color/image_raw"
-#     ODOM_ROS_TOPIC = "/tagslam/odom/body_cube"
-#     DATASET=f"cube_{toss_id}"
-#     DATASET_OUT=f"cube_{toss_id}_{trial_id}"
-#     GT_POSE_DIR = f"/home/cnets-vision/mengti_ws/robot_filter/dataset/{DATASET}/tagslam_poses/"
-#     OUTPUT_POSE_DIR = f"/home/cnets-vision/mengti_ws/BundleSDF/results/find_good_case/{DATASET_OUT}/ob_in_cam/"
-#     print(f"{OUTPUT_POSE_DIR=}")
-#     #### Ablation 1 ####
-#     # OUTPUT_POSE_DIR = f"/home/cnets-vision/mengti_ws/robot_filter/ob_in_cams/ob_in_cam_exp_1/"
-    
-#     #### Ablaton 2 ####
-#     # OUTPUT_POSE_DIR = f"/home/cnets-vision/mengti_ws/robot_filter/ob_in_cams/ob_in_cam_exp_2/"
-    
-#     #### Ablation 3 ####
-#     # OUTPUT_POSE_DIR = f"/home/cnets-vision/mengti_ws/robot_filter/ob_in_cam_exp_1/"
-    
-#     #### Ablation 4 ####
-#     # OUTPUT_POSE_DIR = f"/home/cnets-vision/mengti_ws/BundleSDF/results/old_toss_{toss_id}/ob_in_cam_exp_4/"
-    
-#     #### Ablation 5 ####
-#     # OUTPUT_POSE_DIR = f"/home/cnets-vision/mengti_ws/robot_filter/ob_in_cams/ob_in_cam_exp_5/"
-    
-#     #### Ablation 6 ####
-#     # OUTPUT_POSE_DIR = f"/home/cnets-vision/mengti_ws/robot_filter/ob_in_cams/ob_in_cam_exp_6/"
-    
-#     ODOM_FILE_PATH = f"/home/cnets-vision/mengti_ws/BundleSDF/data/{DATASET}/annotated_poses/"
-#     FIG_NAME = f"results/find_good_case/result_poses_bundlesdf_{DATASET_OUT}.png"
-#     if not os.path.exists(os.path.dirname(FIG_NAME)):
-#         os.makedirs(os.path.dirname(FIG_NAME))
-#     CAMERA_EXTRINSICS_FILE = "./assets/realsense_pose_cube.yaml"
-
-#     cam = 'cam0' # realsense camera name
-#     with open(CAMERA_EXTRINSICS_FILE, 'r') as stream:
-#         data_loaded = yaml.safe_load(stream)
-#     print(data_loaded[cam]['pose']['position'])
-#     cam_pos_dict = data_loaded[cam]['pose']['position']
-#     cam_trans = np.array([cam_pos_dict['x'], cam_pos_dict['y'],
-#                           cam_pos_dict['z']]).reshape(-1, 1)
-#     cam_rot_dict = data_loaded[cam]['pose']['rotation']
-#     cam_axis_vec = np.array([cam_rot_dict['x'], cam_rot_dict['y'],
-#                              cam_rot_dict['z']])
-    
-#     frame_num = len([name for name in os.listdir(OUTPUT_POSE_DIR)])
-#     print(f"There are {frame_num} frames in output")
-#     start_time = file_utils.load_toss_time_from_yaml(TOSS_TYPE, toss_id, 'start_time')
-#     end_time = file_utils.load_toss_time_from_yaml(TOSS_TYPE, toss_id, 'end_time')
-#     bundletrack_time = rosbag_processor.extract_time_versus_poses(
-#         start_time,
-#         end_time,
-#         depth_bag_file,
-#         odom_bag_file,
-#         DEPTH_ROS_TOPIC,
-#         ODOM_ROS_TOPIC,
-#         GT_POSE_DIR,
-#         save=True
-#     ).reshape(-1,)
-#     save_init_pose()
-#     data = np.loadtxt(GT_POSE_DIR+'tagslam.txt')
-#     print('tagslam.txt', data.shape)
-#     gt_time = data[:, 0] #N,
-#     tagslam_poses = data[:, 1:] #N,7
-#     print(f"{bundletrack_time.shape=}", f"{gt_time.shape=}",
-#           f"{tagslam_poses.shape=}")
-#     plot_with_time(bundletrack_time, gt_time, OUTPUT_POSE_DIR, tagslam_poses,
-#                    args.no_show)
 
 INERTIA_THETA_KEY = 'multibody_terms.lagrangian_terms.inertial_parameters'
 FRICTION_KEY = 'multibody_terms.contact_terms.friction_params'
@@ -459,6 +82,459 @@ def traverse_run_history(
             history_dict[cycle_key]['bundlesdf_id'] = cycle_info['bundlesdf_id']
 
     return history_dict
+
+
+class TrajectoryPerformanceEvaluator:
+    """Trajectory-related metrics."""
+    def __init__(self, vision_asset: str, history: dict, nerf_bundlesdf_id: str,
+                 bsdf_only: bool):
+        # First decode the system and start/end tosses from the provided asset
+        # directory.
+        self.object = vision_asset.split('_')[0]
+
+        start_toss = int(vision_asset.split('_')[1].split('-')[0])
+        end_toss = start_toss if '-' not in vision_asset else \
+            int(vision_asset.split('-')[1])
+        assert start_toss <= end_toss, f'Invalid toss range: {start_toss} ' + \
+                f'-{end_toss} inferred from {vision_asset=}.'
+        self.start_toss = start_toss
+        self.end_toss = end_toss
+
+        last_bsdf_iteration = 1
+        for cycle in history.keys():
+            cycle_num = cycle.split('_')[-1]
+            if int(cycle_num) > last_bsdf_iteration:
+                last_bsdf_iteration = int(cycle_num)
+        self.last_bsdf_iteration = last_bsdf_iteration
+        self.last_tracking_bsdf_id = history[
+            f'cycle_iteration_{last_bsdf_iteration}']['bundlesdf_id']
+
+        self.vision_asset = vision_asset
+        self.nerf_bundlesdf_id = nerf_bundlesdf_id
+        self.history = history
+        self.bsdf_only = bsdf_only
+
+        self.eval_dir = file_utils.evaluation_subdir(
+            dataset=self.vision_asset, cycle_iteration=self.last_bsdf_iteration,
+            tracking_bundlesdf_id=self.last_tracking_bsdf_id,
+            nerf_bundlesdf_id=self.nerf_bundlesdf_id
+        )
+
+    def get_tracking_trajectories(self):
+        """Creates the following attributes, all of which are dictionaries with
+        keys e.g. 'cycle_iteration_1' and values that are described below:
+            - bundlesdf_full_times:  (N,)
+            - bundlesdf_toss_times:  List of length n of (M_i,) arrays
+            - bsdf_b_full_states:  (N, 13)
+            - bsdf_b_toss_states:  List of length n of (M_i, 13) arrays
+
+        If not self.bsdf_only, also creates the following attributes with the
+        same structure as above:
+            - tagslam_full_times:  (N,)
+            - tagslam_toss_times:  List of length n of (M_i,) arrays
+            - tagslam_full_states:  (N, 13)
+            - bsdf_t_full_states:  (N, 13)
+            - tagslam_toss_states:  List of length n of (M_i, 13) arrays
+            - bsdf_t_toss_states:  List of length n of (M_i, 13) arrays
+        """
+        # Prepare to get the non-TagSLAM-related information.
+        self.bundlesdf_full_times = {}
+        self.bundlesdf_toss_times = {}
+        self.bsdf_b_full_states = {}
+        self.bsdf_b_toss_states = {}
+
+        # Prepare to get the TagSLAM-related information, if available.
+        if not self.bsdf_only:
+            self.tagslam_full_times = {}
+            self.tagslam_toss_times = {}
+            self.tagslam_b_full_states = {}
+            self.tagslam_b_toss_states = {}
+            # self.bsdf_t_full_states = {}
+            # self.bsdf_t_toss_states = {}
+
+        # Go through every cycle iteration and get the trajectory information.
+        for cycle_label, cycle_info in self.history.items():
+            bundlesdf_id = cycle_info['bundlesdf_id']
+            cycle_iteration = int(cycle_label.split('_')[-1])
+
+            # Start times are for the start and end of a BundleSDF trajectory,
+            # which starts with the object unmoving on the table, includes the
+            # toss windup and execution, and ends with the object unmoving on
+            # the table again.
+            start_ros_times = np.array([file_utils.load_toss_time_from_yaml(
+                self.object, toss_i, 'start_time', as_ros_time=True) for \
+                    toss_i in range(self.start_toss, self.end_toss+1)])
+
+            # Start/end frames are the indices of the longer BundleSDF
+            # trajectories that correspond to the ContactNets trajectories,
+            # which include only the autonomous dynamics of the object dropping
+            # under gravity and colliding with the table.
+            relative_start_frames = np.array([file_utils.load_field_from_yaml(
+                self.object, toss_i, 'start_frame') for toss_i in range(
+                    self.start_toss, self.end_toss+1)])
+            relative_end_frames = np.array([file_utils.load_field_from_yaml(
+                self.object, toss_i, 'end_frame') for toss_i in range(
+                    self.start_toss, self.end_toss+1)])
+
+            # Get the table height.  Use the average if using multiple tosses.
+            table_heights = np.array([
+                file_utils.load_table_z_height(self.object, toss) for toss in
+                range(self.start_toss, self.end_toss+1)
+            ])
+            z_table = np.mean(table_heights)
+
+            # Get the camera intrinsics and extrinsics.
+            cam_trans, cam_axis_vec = \
+                file_utils.load_camera_extrinsics(self.object)
+
+            traj_conv = TrajectoryConverterBundleSDFToPLL(
+                tracking_bundlesdf_id=bundlesdf_id,
+                nerf_bundlesdf_id=bundlesdf_id,  # TODO want to change?
+                relative_start_frames=relative_start_frames,
+                relative_end_frames=relative_end_frames,
+                start_ros_times=start_ros_times, start_toss=self.start_toss,
+                end_toss=self.end_toss, object=self.object,
+                cycle_iteration=cycle_iteration, bsdf_only=self.bsdf_only,
+                cam_trans=cam_trans, cam_rot_axis_angle=cam_axis_vec,
+                frame_rate=30, z_table=z_table, plot=False
+            )
+            traj_conv.do_process()
+
+            # Get the non-TagSLAM-related information.
+            self.bundlesdf_full_times[cycle_label] = \
+                traj_conv.bundlesdf_full_times
+            self.bundlesdf_toss_times[cycle_label] = \
+                traj_conv.bundlesdf_toss_times
+            self.bsdf_b_full_states[cycle_label] = \
+                traj_conv.bundlesdf_b_full_processed_states
+            self.bsdf_b_toss_states[cycle_label] = \
+                traj_conv.bundlesdf_b_toss_processed_states
+
+            # Get the TagSLAM-related information, if available.
+            if not self.bsdf_only:
+                self.tagslam_full_times[cycle_label] = \
+                    traj_conv.tagslam_full_times
+                self.tagslam_toss_times[cycle_label] = \
+                    traj_conv.tagslam_toss_times
+                self.tagslam_b_full_states[cycle_label] = \
+                    traj_conv.tagslam_b_full_processed_states
+                self.tagslam_b_toss_states[cycle_label] = \
+                    traj_conv.tagslam_b_toss_processed_states
+                # self.bsdf_t_full_states[cycle_label] = \
+                #     traj_conv.bundlesdf_t_full_processed_states
+                # self.bsdf_t_toss_states[cycle_label] = \
+                #     traj_conv.bundlesdf_t_toss_processed_states
+
+    def _get_learned_pll_system(self):
+        """Get a PLL system with the learned parameters, including geometry."""
+        if not hasattr(self, 'learned_pll_system'):
+            # Create the learned system.
+            dynamics_predictor = DynamicsPredictor(
+                self.vision_asset, self.history, self.nerf_bundlesdf_id,
+                self.bsdf_only)
+            dynamics_predictor._create_pll_sim_system()
+            self.learned_pll_system = dynamics_predictor.pll_system
+
+        return self.learned_pll_system
+
+    def _get_aligned_true_cloud(self):
+        if not hasattr(self, 'aligned_true_cloud'):
+            self._get_true_geometry_pll_system()
+        return self.aligned_true_cloud
+
+    def _write_aligned_true_geometry_obj(self, obj_name: str):
+        """Use the MeshProcessor class to align the ground truth mesh to the
+        BundleSDF-generated mesh."""
+        mesh_processor = mesh_processing.MeshProcessor(
+            vision_asset=self.vision_asset,
+            tracking_bundlesdf_id=self.last_tracking_bsdf_id,
+            nerf_bundlesdf_id=self.nerf_bundlesdf_id,
+            cycle_iteration=self.last_bsdf_iteration
+        )
+        mesh_processor.align_true_to_learned_mesh_with_icp(
+            show=False, save_dir=self.eval_dir, obj_name=obj_name)
+
+        # Store the points sampled on the true aligned geometry.
+        point_cloud_object = mesh_processor.aligned_true_cloud
+        self.aligned_true_cloud = np.asarray(point_cloud_object.points)
+
+    def _get_true_geometry_pll_system(self):
+        """Get a PLL system with the learned parameters but true geometry."""
+        if not hasattr(self, 'true_geom_pll_system'):
+            # Make the true system have the learned friction and inertia from
+            # the last PLL round.
+            assert self.last_bsdf_iteration > 1, f'Cannot look up past PLL ' + \
+                f'experiment to determine friction/inertia parameters: ' + \
+                f'{self.history=}'
+
+            pll_iteration = self.last_bsdf_iteration - 1
+            pll_id = self.history[f'cycle_iteration_{pll_iteration}']['pll_id']
+            pll_results_dir = file_utils.contactnets_output_dir(
+                dataset=self.vision_asset, cycle_iteration=pll_iteration,
+                pll_id=pll_id)
+
+            # First create a URDF.
+            old_urdf_path = op.join(
+                pll_results_dir, 'urdfs', 'with_bundlesdf_mesh.urdf')
+            new_urdf_path = op.join(self.eval_dir, 'bsdf_mesh_pll_params.urdf')
+            os.system(f'cp {old_urdf_path} {new_urdf_path}')
+
+            old_obj_path = file_utils.object_scan_filepath(self.object)
+            new_obj_path = op.join(self.eval_dir, 'true_geom_aligned.obj')
+            os.system(f'cp {old_obj_path} {new_obj_path}')
+
+            # Align the true geometry to the BSDF geometry.
+            self._write_aligned_true_geometry_obj(
+                obj_name='true_geom_aligned.obj')
+
+            # Overwrite the geometry in the URDF to refer to the new obj.
+            eval_utils.overwrite_mesh_name_in_urdf(
+                new_urdf_path, 'true_geom_aligned.obj')
+            print(f'Wrote URDF to {new_urdf_path}')
+
+            # Create the system.
+            self.true_geom_pll_system = \
+                eval_utils.create_multibody_learnable_system(new_urdf_path)
+
+        return self.true_geom_pll_system
+
+    def compute_metrics(self):
+        """Metrics to include:
+            - positional error over trajectory
+            - orientation error over trajectory
+            - ADD (requires mesh)
+            - ADD-S (requires mesh)
+            - penetration, 2 ways (requires mesh)
+
+        Note:  All trajectories are in PLL format, which is:
+        [ qw qx qy qz  x y z  wx wy wz  vx vy vz ]
+
+        Creates the following attributes, all of which are dictionaries with
+        keys e.g. 'cycle_iteration_1' and values that are described below:
+            - bundlesdf_full_times:  (N,)
+            - bundlesdf_toss_times:  List of length n of (M_i,) arrays
+            - bsdf_b_full_states:  (N, 13)
+            - bsdf_b_toss_states:  List of length n of (M_i, 13) arrays
+
+        If not self.bsdf_only, also creates the following attributes with the
+        same structure as above:
+            - tagslam_full_times:  (N,)
+            - tagslam_toss_times:  List of length n of (M_i,) arrays
+            - tagslam_full_states:  (N, 13)
+            - bsdf_t_full_states:  (N, 13)
+            - tagslam_toss_states:  List of length n of (M_i, 13) arrays
+            - bsdf_t_toss_states:  List of length n of (M_i, 13) arrays
+        """
+        # Do a test with bsdf_t_full_states and tagslam_full_states.
+        cycle_key = f'cycle_iteration_{self.last_bsdf_iteration}'
+        target_traj = Tensor(self.tagslam_full_states[cycle_key])
+        pred_traj = Tensor(self.bsdf_t_full_states[cycle_key])
+
+        pos_error = self._compute_pos_error(target_traj, pred_traj)
+        rot_error = self._compute_rot_error(target_traj, pred_traj)
+        pen_true_geom_error = self._compute_pen_error_true_geom_predicted_traj(
+            pred_traj)
+        pen_true_traj_error = self._compute_pen_error_true_geom_predicted_traj(
+            target_traj)
+        add_error = self._compute_add_error(target_traj, pred_traj)
+        adds_error = self._compute_adds_error(target_traj, pred_traj)
+        pdb.set_trace()
+
+        self.visualize_metrics(pos_error, rot_error, pen_true_geom_error,
+                               pen_true_traj_error, add_error, adds_error)
+
+    def _compute_pos_error(self, target_traj: Tensor, pred_traj: Tensor):
+        return TrajectoryMetrics.position_error(target_traj, pred_traj)
+
+    def _compute_rot_error(self, target_traj: Tensor, pred_traj: Tensor):
+        return TrajectoryMetrics.rotation_error(target_traj, pred_traj)
+
+    def _compute_pen_error_true_geom_predicted_traj(self, pred_traj: Tensor):
+        """Returns the mean penetration of the real geometry at each point over
+        the predicted trajectory."""
+        true_geom_system = self._get_true_geometry_pll_system()
+        return TrajectoryMetrics.penetration(pred_traj, true_geom_system)
+
+    def _compute_pen_error_learned_geom_real_traj(self, target_traj: Tensor):
+        """Returns the penetration of the learned geometry at each point over
+        the target trajectory."""
+        pred_geom_system = self._get_learned_pll_system()
+        return TrajectoryMetrics.penetration(target_traj, pred_geom_system)
+
+    def _compute_add_error(self, target_traj: Tensor, pred_traj: Tensor):
+        """Returns the average distance of 1-to-1 mapped object surface points
+        from one pose to another pose, at each point in the trajectories.  These
+        surface points are sampled from the true geometry."""
+        assert hasattr(self, 'aligned_true_cloud'), f'Need to run ' + \
+            f'self._write_aligned_true_geometry_obj() first so ' + \
+            f'aligned_true_cloud attribute exists.'
+
+        return TrajectoryMetrics.add_error(
+            target_traj, pred_traj, self.aligned_true_cloud)
+
+    def _compute_adds_error(self, target_traj: Tensor, pred_traj: Tensor):
+        """Returns the average distance from each point sampled on the true
+        geometry at a predicted pose to the nearest point at a true pose, at
+        each point in the trajectories."""
+        assert hasattr(self, 'aligned_true_cloud'), f'Need to run ' + \
+            f'self._write_aligned_true_geometry_obj() first so ' + \
+            f'aligned_true_cloud attribute exists.'
+
+        return TrajectoryMetrics.adds_error(
+            target_traj, pred_traj, self.aligned_true_cloud)
+
+    def visualize_metrics(self, pos_error, rot_error, pen_true_geom_error,
+                          pen_true_traj_error, add_error, adds_error):
+        """Visualize the metrics."""
+        plt.ion()
+        fig = plt.figure()
+
+        ax = fig.add_subplot(221)
+        ax.plot(pos_error, label='Position error')
+        ax.legend()
+        ax.set_ylabel('Position [m]')
+
+        ax = fig.add_subplot(222)
+        ax.plot(rot_error*180/np.pi, label='Rotation error')
+        ax.legend()
+        ax.set_ylabel('Rotation [deg]')
+
+        ax = fig.add_subplot(223)
+        ax.plot(add_error, label='ADD error')
+        ax.plot(adds_error, label='ADD-S error')
+        ax.legend()
+        ax.set_ylabel('Average distance [m]')
+
+        ax = fig.add_subplot(224)
+        ax.plot(pen_true_geom_error,
+                label='True geometry on predicted trajectory')
+        ax.plot(pen_true_traj_error,
+                label='Learned geometry on true trajectory')
+        ax.legend()
+        ax.set_ylabel('Penetration [m]')
+
+        pdb.set_trace()
+
+    def store_tracking_metrics(self, results: dict) -> None:
+        """Store the tracking metrics in the results dictionary."""
+        cycle_key = f'cycle_iteration_{self.last_bsdf_iteration}'
+
+        # First do everything against BundleSDF.
+        sub_results = results['tracking_metrics']['against_bundlesdf']
+
+        penetration_true_geom = sub_results[
+            'penetration_true_geom_estimated_traj']
+        for toss_key, subsub_results in penetration_true_geom.items():
+            if 'toss' in toss_key:
+                toss_num = int(toss_key.split('_')[1])
+                traj = self.bsdf_b_toss_states[cycle_key][
+                    toss_num - self.start_toss]
+            else:
+                traj = self.bsdf_b_full_states[cycle_key]
+            over_traj = TrajectoryMetrics.penetration(
+                traj, self._get_true_geometry_pll_system())
+            subsub_results['mean'] = over_traj.mean().item()
+            subsub_results['traj'] = over_traj.tolist()
+
+        penetration_learned_geom = sub_results[
+            'penetration_learned_geom_estimated_traj']
+        for toss_key, subsub_results in penetration_learned_geom.items():
+            if 'toss' in toss_key:
+                toss_num = int(toss_key.split('_')[1])
+                traj = self.bsdf_b_toss_states[cycle_key][
+                    toss_num - self.start_toss]
+            else:
+                traj = self.bsdf_b_full_states[cycle_key]
+            over_traj = TrajectoryMetrics.penetration(
+                traj, self._get_learned_pll_system())
+            subsub_results['mean'] = over_traj.mean().item()
+            subsub_results['traj'] = over_traj.tolist()
+
+        # Second do everything against TagSLAM.
+        if not 'against_tagslam' in results['tracking_metrics'].keys():
+            return
+        assert hasattr(self, 'tagslam_b_full_states'), f'Expected to have ' + \
+            f'TagSLAM trajectories stored since {results.keys()=}.'
+
+        sub_results = results['tracking_metrics']['against_tagslam']
+
+        position_results = sub_results['position_error']
+        for toss_key, subsub_results in position_results.items():
+            if 'toss' in toss_key:
+                toss_num = int(toss_key.split('_')[1])
+                bsdf_traj = self.bsdf_b_toss_states[cycle_key][
+                    toss_num - self.start_toss]
+                tagslam_traj = self.tagslam_b_toss_states[cycle_key][
+                    toss_num - self.start_toss]
+            else:
+                bsdf_traj = self.bsdf_b_full_states[cycle_key]
+                tagslam_traj = self.tagslam_b_full_states[cycle_key]
+            over_traj = TrajectoryMetrics.position_error(
+                bsdf_traj, tagslam_traj)
+            subsub_results['mean'] = over_traj.mean().item()
+            subsub_results['traj'] = over_traj.tolist()
+
+        rotation_results = sub_results['rotation_error']
+        for toss_key, subsub_results in rotation_results.items():
+            if 'toss' in toss_key:
+                toss_num = int(toss_key.split('_')[1])
+                bsdf_traj = self.bsdf_b_toss_states[cycle_key][
+                    toss_num - self.start_toss]
+                tagslam_traj = self.tagslam_b_toss_states[cycle_key][
+                    toss_num - self.start_toss]
+            else:
+                bsdf_traj = self.bsdf_b_full_states[cycle_key]
+                tagslam_traj = self.tagslam_b_full_states[cycle_key]
+            over_traj = TrajectoryMetrics.rotation_error(
+                bsdf_traj, tagslam_traj)
+            subsub_results['mean'] = over_traj.mean().item()
+            subsub_results['traj'] = over_traj.tolist()
+
+        add_error = sub_results['add_error']
+        for toss_key, subsub_results in add_error.items():
+            if 'toss' in toss_key:
+                toss_num = int(toss_key.split('_')[1])
+                bsdf_traj = self.bsdf_b_toss_states[cycle_key][
+                    toss_num - self.start_toss]
+                tagslam_traj = self.tagslam_b_toss_states[cycle_key][
+                    toss_num - self.start_toss]
+            else:
+                bsdf_traj = self.bsdf_b_full_states[cycle_key]
+                tagslam_traj = self.tagslam_b_full_states[cycle_key]
+            over_traj = TrajectoryMetrics.add_error(
+                bsdf_traj, tagslam_traj, self._get_aligned_true_cloud())
+            subsub_results['mean'] = over_traj.mean().item()
+            subsub_results['traj'] = over_traj.tolist()
+
+        adds_error = sub_results['adds_error']
+        for toss_key, subsub_results in adds_error.items():
+            if 'toss' in toss_key:
+                toss_num = int(toss_key.split('_')[1])
+                bsdf_traj = self.bsdf_b_toss_states[cycle_key][
+                    toss_num - self.start_toss]
+                tagslam_traj = self.tagslam_b_toss_states[cycle_key][
+                    toss_num - self.start_toss]
+            else:
+                bsdf_traj = self.bsdf_b_full_states[cycle_key]
+                tagslam_traj = self.tagslam_b_full_states[cycle_key]
+            over_traj = TrajectoryMetrics.adds_error(
+                bsdf_traj, tagslam_traj, self._get_aligned_true_cloud())
+            subsub_results['mean'] = over_traj.mean().item()
+            subsub_results['traj'] = over_traj.tolist()
+
+        penetration_learned_geom = sub_results[
+            'penetration_learned_geom_tagslam_traj']
+        for toss_key, subsub_results in penetration_learned_geom.items():
+            if 'toss' in toss_key:
+                toss_num = int(toss_key.split('_')[1])
+                traj = self.tagslam_b_toss_states[cycle_key][
+                    toss_num - self.start_toss]
+            else:
+                traj = self.tagslam_b_full_states[cycle_key]
+            over_traj = TrajectoryMetrics.penetration(
+                traj, self._get_learned_pll_system())
+            subsub_results['mean'] = over_traj.mean().item()
+            subsub_results['traj'] = over_traj.tolist()
 
 
 class DynamicsPredictor:
@@ -722,266 +798,114 @@ class DynamicsPredictor:
         )
         prediction_overlay.make_overlay_video()
 
+    def store_dynamics_metrics(
+            self, results: dict, traj_evaluator: TrajectoryPerformanceEvaluator
+    ) -> None:
+        """Store the dynamics prediction metrics in the results dictionary."""
+        # First do everything against BundleSDF.
+        sub_results = results['dynamics_metrics']['against_bundlesdf']
 
-class TrajectoryPerformanceEvaluator:
-    """Trajectory-related metrics."""
-    def __init__(self, vision_asset: str, history: dict, nerf_bundlesdf_id: str,
-                 bsdf_only: bool):
-        # First decode the system and start/end tosses from the provided asset
-        # directory.
-        self.object = vision_asset.split('_')[0]
+        position_results = sub_results['position_error']
+        for toss_key, subsub_results in position_results.items():
+            toss_num = int(toss_key.split('_')[1])
+            over_traj = TrajectoryMetrics.position_error(
+                self.bundlesdf_trajs[toss_num], self.predicted_trajs[toss_num])
+            subsub_results['mean'] = over_traj.mean().item()
+            subsub_results['traj'] = over_traj.tolist()
 
-        start_toss = int(vision_asset.split('_')[1].split('-')[0])
-        end_toss = start_toss if '-' not in vision_asset else \
-            int(vision_asset.split('-')[1])
-        assert start_toss <= end_toss, f'Invalid toss range: {start_toss} ' + \
-                f'-{end_toss} inferred from {vision_asset=}.'
-        self.start_toss = start_toss
-        self.end_toss = end_toss
+        rotation_error = sub_results['rotation_error']
+        for toss_key, subsub_results in rotation_error.items():
+            toss_num = int(toss_key.split('_')[1])
+            over_traj = TrajectoryMetrics.rotation_error(
+                self.bundlesdf_trajs[toss_num], self.predicted_trajs[toss_num])
+            subsub_results['mean'] = over_traj.mean().item()
+            subsub_results['traj'] = over_traj.tolist()
 
-        last_bsdf_iteration = 1
-        for cycle in history.keys():
-            cycle_num = cycle.split('_')[-1]
-            if int(cycle_num) > last_bsdf_iteration:
-                last_bsdf_iteration = int(cycle_num)
-        self.last_bsdf_iteration = last_bsdf_iteration
-        self.last_tracking_bsdf_id = history[
-            f'cycle_iteration_{last_bsdf_iteration}']['bundlesdf_id']
-        
-        self.vision_asset = vision_asset
-        self.nerf_bundlesdf_id = nerf_bundlesdf_id
-        self.history = history
-        self.bsdf_only = bsdf_only
-
-        self.eval_dir = file_utils.evaluation_subdir(
-            dataset=self.vision_asset, cycle_iteration=self.last_bsdf_iteration,
-            tracking_bundlesdf_id=self.last_tracking_bsdf_id,
-            nerf_bundlesdf_id=self.nerf_bundlesdf_id
-        )
-
-    def get_tracking_trajectories(self):
-        """Creates the following attributes, all of which are dictionaries with
-        keys e.g. 'cycle_iteration_1' and values that are described below:
-            - bundlesdf_full_times:  (N,)
-            - bundlesdf_toss_times:  List of length n of (M_i,) arrays
-            - bsdf_b_full_states:  (N, 13)
-            - bsdf_b_toss_states:  List of length n of (M_i, 13) arrays
-
-        If not self.bsdf_only, also creates the following attributes with the
-        same structure as above:
-            - tagslam_full_times:  (N,)
-            - tagslam_toss_times:  List of length n of (M_i,) arrays
-            - tagslam_full_states:  (N, 13)
-            - bsdf_t_full_states:  (N, 13)
-            - tagslam_toss_states:  List of length n of (M_i, 13) arrays
-            - bsdf_t_toss_states:  List of length n of (M_i, 13) arrays
-        """
-        # Prepare to get the non-TagSLAM-related information.
-        self.bundlesdf_full_times = {}
-        self.bundlesdf_toss_times = {}
-        self.bsdf_b_full_states = {}
-        self.bsdf_b_toss_states = {}
-
-        # Prepare to get the TagSLAM-related information, if available.
-        if not self.bsdf_only:
-            self.tagslam_full_times = {}
-            self.tagslam_toss_times = {}
-            self.tagslam_full_states = {}
-            self.bsdf_t_full_states = {}
-            self.tagslam_toss_states = {}
-            self.bsdf_t_toss_states = {}
-
-        # Go through every cycle iteration and get the trajectory information.
-        for cycle_label, cycle_info in self.history.items():
-            bundlesdf_id = cycle_info['bundlesdf_id']
-            cycle_iteration = int(cycle_label.split('_')[-1])
-
-            # Start times are for the start and end of a BundleSDF trajectory,
-            # which starts with the object unmoving on the table, includes the
-            # toss windup and execution, and ends with the object unmoving on
-            # the table again.
-            start_ros_times = np.array([file_utils.load_toss_time_from_yaml(
-                self.object, toss_i, 'start_time', as_ros_time=True) for \
-                    toss_i in range(self.start_toss, self.end_toss+1)])
-
-            # Start/end frames are the indices of the longer BundleSDF
-            # trajectories that correspond to the ContactNets trajectories,
-            # which include only the autonomous dynamics of the object dropping
-            # under gravity and colliding with the table.
-            relative_start_frames = np.array([file_utils.load_field_from_yaml(
-                self.object, toss_i, 'start_frame') for toss_i in range(
-                    self.start_toss, self.end_toss+1)])
-            relative_end_frames = np.array([file_utils.load_field_from_yaml(
-                self.object, toss_i, 'end_frame') for toss_i in range(
-                    self.start_toss, self.end_toss+1)])
-
-            # Get the table height.  Use the average if using multiple tosses.
-            table_heights = np.array([
-                file_utils.load_table_z_height(self.object, toss) for toss in
-                range(self.start_toss, self.end_toss+1)
-            ])
-            z_table = np.mean(table_heights)
-
-            # Get the camera intrinsics and extrinsics.
-            cam_trans, cam_axis_vec = \
-                file_utils.load_camera_extrinsics(self.object)
-
-            traj_conv = TrajectoryConverterBundleSDFToPLL(
-                tracking_bundlesdf_id=bundlesdf_id,
-                nerf_bundlesdf_id=bundlesdf_id,  # TODO want to change?
-                relative_start_frames=relative_start_frames,
-                relative_end_frames=relative_end_frames,
-                start_ros_times=start_ros_times, start_toss=self.start_toss,
-                end_toss=self.end_toss, object=self.object,
-                cycle_iteration=cycle_iteration, bsdf_only=self.bsdf_only,
-                cam_trans=cam_trans, cam_rot_axis_angle=cam_axis_vec,
-                frame_rate=30, z_table=z_table, plot=False
+        add_error = sub_results['add_error']
+        for toss_key, subsub_results in add_error.items():
+            toss_num = int(toss_key.split('_')[1])
+            over_traj = TrajectoryMetrics.add_error(
+                self.bundlesdf_trajs[toss_num], self.predicted_trajs[toss_num],
+                traj_evaluator._get_aligned_true_cloud()
             )
-            traj_conv.do_process()
+            subsub_results['mean'] = over_traj.mean().item()
+            subsub_results['traj'] = over_traj.tolist()
 
-            # Get the non-TagSLAM-related information.
-            self.bundlesdf_full_times[cycle_label] = \
-                traj_conv.bundlesdf_full_times
-            self.bundlesdf_toss_times[cycle_label] = \
-                traj_conv.bundlesdf_toss_times
-            self.bsdf_b_full_states[cycle_label] = \
-                traj_conv.bundlesdf_b_full_processed_states
-            self.bsdf_b_toss_states[cycle_label] = \
-                traj_conv.bundlesdf_b_toss_processed_states
+        adds_error = sub_results['adds_error']
+        for toss_key, subsub_results in adds_error.items():
+            toss_num = int(toss_key.split('_')[1])
+            over_traj = TrajectoryMetrics.adds_error(
+                self.bundlesdf_trajs[toss_num], self.predicted_trajs[toss_num],
+                traj_evaluator._get_aligned_true_cloud()
+            )
+            subsub_results['mean'] = over_traj.mean().item()
+            subsub_results['traj'] = over_traj.tolist()
 
-            # Get the TagSLAM-related information, if available.
-            if not self.bsdf_only:
-                self.tagslam_full_times[cycle_label] = \
-                    traj_conv.tagslam_full_times
-                self.tagslam_toss_times[cycle_label] = \
-                    traj_conv.tagslam_toss_times
-                self.tagslam_full_states[cycle_label] = \
-                    traj_conv.tagslam_full_processed_states
-                self.bsdf_t_full_states[cycle_label] = \
-                    traj_conv.bundlesdf_t_full_processed_states
-                self.tagslam_toss_states[cycle_label] = \
-                    traj_conv.tagslam_toss_processed_states
-                self.bsdf_t_toss_states[cycle_label] = \
-                    traj_conv.bundlesdf_t_toss_processed_states
+        penetration_true_geom = sub_results[
+            'penetration_true_geom_predicted_traj']
+        for toss_key, subsub_results in penetration_true_geom.items():
+            toss_num = int(toss_key.split('_')[1])
+            over_traj = TrajectoryMetrics.penetration(
+                self.predicted_trajs[toss_num],
+                traj_evaluator._get_true_geometry_pll_system()
+            )
+            subsub_results['mean'] = over_traj.mean().item()
+            subsub_results['traj'] = over_traj.tolist()
 
-    def _get_learned_pll_system(self):
-        """Get a PLL system with the learned parameters, including geometry."""
-        if not hasattr(self, 'learned_pll_system'):
-            # Create the learned system.
-            dynamics_predictor = DynamicsPredictor(
-                self.vision_asset, self.history, self.nerf_bundlesdf_id,
-                self.bsdf_only)
-            dynamics_predictor._create_pll_sim_system()
-            self.learned_pll_system = dynamics_predictor.pll_system
+        # Second do everything against TagSLAM.
+        if not 'against_tagslam' in results['dynamics_metrics'].keys():
+            return
+        assert hasattr(self, 'tagslam_b_trajs'), f'Expected to have ' + \
+            f'TagSLAM trajectories stored since {results.keys()=}.'
 
-        return self.learned_pll_system
+        sub_results = results['dynamics_metrics']['against_tagslam']
 
-    def _write_aligned_true_geometry_obj(self, obj_path: str):
-        """Use the MeshProcessor class to align the ground truth mesh to the
-        BundleSDF-generated mesh."""
-        mesh_processor = mesh_processing.MeshProcessor(
-            vision_asset=self.vision_asset,
-            tracking_bundlesdf_id=self.last_tracking_bsdf_id,
-            nerf_bundlesdf_id=self.nerf_bundlesdf_id,
-            cycle_iteration=self.last_bsdf_iteration
-        )
-        mesh_processor.align_true_to_learned_mesh_with_icp(
-            show=True,
-            save_transform_to=op.join(
-                self.eval_dir, 'true_to_learned_tf.txt'),
-            save_transformed_mesh_to=obj_path
-        )
+        position_results = sub_results['position_error']
+        for toss_key, subsub_results in position_results.items():
+            toss_num = int(toss_key.split('_')[1])
+            over_traj = TrajectoryMetrics.position_error(
+                self.tagslam_b_trajs[toss_num], self.predicted_trajs[toss_num])
+            subsub_results['mean'] = over_traj.mean().item()
+            subsub_results['traj'] = over_traj.tolist()
 
-        # Store the points sampled on the true aligned geometry.
-        point_cloud_object = mesh_processor.aligned_true_cloud
-        self.aligned_true_cloud = np.asarray(point_cloud_object.points)
+        rotation_error = sub_results['rotation_error']
+        for toss_key, subsub_results in rotation_error.items():
+            toss_num = int(toss_key.split('_')[1])
+            over_traj = TrajectoryMetrics.rotation_error(
+                self.tagslam_b_trajs[toss_num], self.predicted_trajs[toss_num])
+            subsub_results['mean'] = over_traj.mean().item()
+            subsub_results['traj'] = over_traj.tolist()
 
-    def _get_true_geometry_pll_system(self):
-        """Get a PLL system with the learned parameters but true geometry."""
-        if not hasattr(self, 'true_geom_pll_system'):
-            # Make the true system have the learned friction and inertia from
-            # the last PLL round.
-            assert self.last_bsdf_iteration > 1, f'Cannot look up past PLL ' + \
-                f'experiment to determine friction/inertia parameters: ' + \
-                f'{self.history=}'
+        add_error = sub_results['add_error']
+        for toss_key, subsub_results in add_error.items():
+            toss_num = int(toss_key.split('_')[1])
+            over_traj = TrajectoryMetrics.add_error(
+                self.tagslam_b_trajs[toss_num], self.predicted_trajs[toss_num],
+                traj_evaluator._get_aligned_true_cloud()
+            )
+            subsub_results['mean'] = over_traj.mean().item()
+            subsub_results['traj'] = over_traj.tolist()
 
-            pll_iteration = self.last_bsdf_iteration - 1
-            pll_id = self.history[f'cycle_iteration_{pll_iteration}']['pll_id']
-            pll_results_dir = file_utils.contactnets_output_dir(
-                dataset=self.vision_asset, cycle_iteration=pll_iteration,
-                pll_id=pll_id)
+        adds_error = sub_results['adds_error']
+        for toss_key, subsub_results in adds_error.items():
+            toss_num = int(toss_key.split('_')[1])
+            over_traj = TrajectoryMetrics.adds_error(
+                self.tagslam_b_trajs[toss_num], self.predicted_trajs[toss_num],
+                traj_evaluator._get_aligned_true_cloud()
+            )
+            subsub_results['mean'] = over_traj.mean().item()
+            subsub_results['traj'] = over_traj.tolist()
 
-            # First create a URDF.
-            old_urdf_path = op.join(
-                pll_results_dir, 'urdfs', 'with_bundlesdf_mesh.urdf')
-            new_urdf_path = op.join(self.eval_dir, 'bsdf_mesh_pll_params.urdf')
-            os.system(f'cp {old_urdf_path} {new_urdf_path}')
 
-            old_obj_path = file_utils.object_scan_filepath(self.object)
-            new_obj_path = op.join(self.eval_dir, 'true_geom_aligned.obj')
-            os.system(f'cp {old_obj_path} {new_obj_path}')
+class TrajectoryMetrics:
+    """Utility class for trajectory metrics."""
 
-            # Align the true geometry to the BSDF geometry.
-            self._write_aligned_true_geometry_obj(new_obj_path)
-
-            # Overwrite the geometry in the URDF to refer to the new obj.
-            eval_utils.overwrite_mesh_name_in_urdf(
-                new_urdf_path, 'true_geom_aligned.obj')
-            print(f'Wrote URDF to {new_urdf_path}')
-
-            # Create the system.
-            self.true_geom_pll_system = \
-                eval_utils.create_multibody_learnable_system(new_urdf_path)
-
-        return self.true_geom_pll_system
-
-    def compute_metrics(self):
-        """Metrics to include:
-            - positional error over trajectory
-            - orientation error over trajectory
-            - ADD (requires mesh)
-            - ADD-S (requires mesh)
-            - penetration, 2 ways (requires mesh)
-
-        Note:  All trajectories are in PLL format, which is:
-        [ qw qx qy qz  x y z  wx wy wz  vx vy vz ]
-
-        Creates the following attributes, all of which are dictionaries with
-        keys e.g. 'cycle_iteration_1' and values that are described below:
-            - bundlesdf_full_times:  (N,)
-            - bundlesdf_toss_times:  List of length n of (M_i,) arrays
-            - bsdf_b_full_states:  (N, 13)
-            - bsdf_b_toss_states:  List of length n of (M_i, 13) arrays
-
-        If not self.bsdf_only, also creates the following attributes with the
-        same structure as above:
-            - tagslam_full_times:  (N,)
-            - tagslam_toss_times:  List of length n of (M_i,) arrays
-            - tagslam_full_states:  (N, 13)
-            - bsdf_t_full_states:  (N, 13)
-            - tagslam_toss_states:  List of length n of (M_i, 13) arrays
-            - bsdf_t_toss_states:  List of length n of (M_i, 13) arrays
-        """
-        # Do a test with bsdf_t_full_states and tagslam_full_states.
-        cycle_key = f'cycle_iteration_{self.last_bsdf_iteration}'
-        target_traj = Tensor(self.tagslam_full_states[cycle_key])
-        pred_traj = Tensor(self.bsdf_t_full_states[cycle_key])
-
-        pos_error = self._compute_pos_error(target_traj, pred_traj)
-        rot_error = self._compute_rot_error(target_traj, pred_traj)
-        pen_true_geom_error = self._compute_pen_error_true_geom_predicted_traj(
-            pred_traj)
-        pen_true_traj_error = self._compute_pen_error_true_geom_predicted_traj(
-            target_traj)
-        add_error = self._compute_add_error(target_traj, pred_traj)
-        adds_error = self._compute_adds_error(target_traj, pred_traj)
-        pdb.set_trace()
-
-        self.visualize_metrics(pos_error, rot_error, pen_true_geom_error,
-                               pen_true_traj_error, add_error, adds_error)
-
-    def _compute_pos_error(self, target_traj: Tensor, pred_traj: Tensor):
+    @staticmethod
+    def position_error(target_traj: Tensor, pred_traj: Tensor) -> Tensor:
         """Returns the positional error at each point over the trajectory."""
+        target_traj = Tensor(target_traj)
+        pred_traj = Tensor(pred_traj)
+
         target_xyz = target_traj[:, 4:7]
         pred_xyz = pred_traj[:, 4:7]
 
@@ -989,47 +913,27 @@ class TrajectoryPerformanceEvaluator:
         pos_errors = torch.linalg.norm(pos_diff, dim=1)
         return pos_errors
 
-    def _compute_rot_error(self, target_traj: Tensor, pred_traj: Tensor):
+    @staticmethod
+    def rotation_error(target_traj: Tensor, pred_traj: Tensor) -> Tensor:
         """Returns the angular error at each point over the trajectory."""
+        target_traj = Tensor(target_traj)
+        pred_traj = Tensor(pred_traj)
+
         target_quat = target_traj[:, :4]
         pred_quat = pred_traj[:, :4]
 
         quat_errors = math_utils.quaternion_errors(target_quat, pred_quat)
         return quat_errors
 
-    def _compute_pen_error_true_geom_predicted_traj(self, pred_traj: Tensor):
-        """Returns the mean penetration of the real geometry at each point over
-        the predicted trajectory."""
-        true_geom_system = self._get_true_geometry_pll_system()
-
-        assert pred_traj.shape[1] == true_geom_system.space.n_x
-
-        phi, _J, _p_BiBc_B = true_geom_system.multibody_terms.contact_terms(
-            pred_traj)
-        phi = phi.detach().clone()
-        smallest_phis = phi.min(dim=1).values
-        return -torch.clamp_max(smallest_phis, 0)
-
-    def _compute_pen_error_learned_geom_real_traj(self, target_traj: Tensor):
-        """Returns the penetration of the learned geometry at each point over
-        the target trajectory."""
-        pred_geom_system = self._get_learned_pll_system()
-
-        assert target_traj.shape[1] == pred_geom_system.space.n_x
-
-        phi, _J, _p_BiBc_B = pred_geom_system.multibody_terms.contact_terms(
-            target_traj)
-        phi = phi.detach().clone()
-        smallest_phis = phi.min(dim=1).values
-        return -torch.clamp_max(smallest_phis, 0)
-
-    def _compute_add_error(self, target_traj: Tensor, pred_traj: Tensor):
+    @staticmethod
+    def add_error(target_traj: Tensor, pred_traj: Tensor, point_cloud: Tensor
+                  ) -> Tensor:
         """Returns the average distance of 1-to-1 mapped object surface points
         from one pose to another pose, at each point in the trajectories.  These
         surface points are sampled from the true geometry."""
-        assert hasattr(self, 'aligned_true_cloud'), f'Need to run ' + \
-            f'self._write_aligned_true_geometry_obj() first so ' + \
-            f'aligned_true_cloud attribute exists.'
+        target_traj = Tensor(target_traj)
+        pred_traj = Tensor(pred_traj)
+        point_cloud = Tensor(point_cloud)
 
         n_steps = target_traj.shape[0]
 
@@ -1047,14 +951,20 @@ class TrajectoryPerformanceEvaluator:
             # Use the points that were already sampled on the aligned true
             # geometry.
             add_errors[i] = eval_utils.compute_add_tracking_error(
-                targ, pred, self.aligned_true_cloud)
+                targ, pred, point_cloud)
 
         return add_errors
 
-    def _compute_adds_error(self, target_traj: Tensor, pred_traj: Tensor):
+    @staticmethod
+    def adds_error(target_traj: Tensor, pred_traj: Tensor, point_cloud: Tensor
+                   ) -> Tensor:
         """Returns the average distance from each point sampled on the true
         geometry at a predicted pose to the nearest point at a true pose, at
         each point in the trajectories."""
+        target_traj = Tensor(target_traj)
+        pred_traj = Tensor(pred_traj)
+        point_cloud = Tensor(point_cloud)
+
         n_steps = target_traj.shape[0]
 
         # Convert the poses to homogeneous transformations.
@@ -1071,41 +981,24 @@ class TrajectoryPerformanceEvaluator:
             # Use the points that were already sampled on the aligned true
             # geometry.
             adds_errors[i] = eval_utils.compute_adds_tracking_error(
-                targ, pred, self.aligned_true_cloud)
+                targ, pred, point_cloud)
 
         return adds_errors
 
-    def visualize_metrics(self, pos_error, rot_error, pen_true_geom_error,
-                          pen_true_traj_error, add_error, adds_error):
-        """Visualize the metrics."""
-        plt.ion()
-        fig = plt.figure()
+    @staticmethod
+    def penetration(traj: Tensor, geometry_system: MultibodyLearnableSystem
+                    ) -> Tensor:
+        """Returns the penetration of the geometry in the provided
+        geometry_system when swept over the provided trajectory."""
+        traj = Tensor(traj)
 
-        ax = fig.add_subplot(221)
-        ax.plot(pos_error, label='Position error')
-        ax.legend()
-        ax.set_ylabel('Position [m]')
+        assert traj.shape[1] == geometry_system.space.n_x
 
-        ax = fig.add_subplot(222)
-        ax.plot(rot_error*180/np.pi, label='Rotation error')
-        ax.legend()
-        ax.set_ylabel('Rotation [deg]')
+        phi, _J, _p_BiBc_B = geometry_system.multibody_terms.contact_terms(traj)
+        phi = phi.detach().clone()
+        smallest_phis = phi.min(dim=1).values
+        return -torch.clamp_max(smallest_phis, 0)
 
-        ax = fig.add_subplot(223)
-        ax.plot(add_error, label='ADD error')
-        ax.plot(adds_error, label='ADD-S error')
-        ax.legend()
-        ax.set_ylabel('Average distance [m]')
-
-        ax = fig.add_subplot(224)
-        ax.plot(pen_true_geom_error,
-                label='True geometry on predicted trajectory')
-        ax.plot(pen_true_traj_error,
-                label='Learned geometry on true trajectory')
-        ax.legend()
-        ax.set_ylabel('Penetration [m]')
-
-        pdb.set_trace()
 
 
 #######################################################################
@@ -1130,7 +1023,7 @@ class TrajectoryPerformanceEvaluator:
                 "means use TagSLAM poses).")
 @click.option('--do-videos/--skip-videos',
               type=bool,
-              default=True,
+              default=False,
               help="whether to generate videos.")
 
 def main_command(vision_asset: str, bundlesdf_id: str, nerf_bundlesdf_id: str,
@@ -1157,28 +1050,38 @@ def main_command(vision_asset: str, bundlesdf_id: str, nerf_bundlesdf_id: str,
     else:
         print(f'Using TagSLAM and BundleSDF: {bsdf_only=}')
 
+    # Obtain the run history.
     history = traverse_run_history(
         vision_asset, tracking_bundlesdf_id, cycle_iteration)
     print(f'Found run history:')
     for key, val in history.items():
         print(f'\t{key} : {val}')
 
+    # Create an empty results dictionary to be stored as a yaml file.
+    results = eval_utils.create_empty_results_dict(vision_asset)
+    results['_overview']['vision_asset'] = vision_asset
+    results['_overview']['history'] = history
+    results['_overview']['nerf_bundlesdf_id'] = nerf_bundlesdf_id
+
+    ### Pose estimation.
+    traj_evaluator = TrajectoryPerformanceEvaluator(
+        vision_asset, history, nerf_bundlesdf_id, bsdf_only)
+    traj_evaluator.get_tracking_trajectories()
+    traj_evaluator.store_tracking_metrics(results)
+
+    ### Dynamics predictions.
     dynamics_predictor = DynamicsPredictor(
         vision_asset, history, nerf_bundlesdf_id, bsdf_only)
     dynamics_predictor.generate_rollout_trajectories()
     dynamics_predictor.save_predictions()
+    dynamics_predictor.store_dynamics_metrics(results, traj_evaluator)
     if do_videos:
         dynamics_predictor.make_prediction_video()
     else:
         print(f'Skipping video generation for {vision_asset=}, ' + \
               f'{bundlesdf_id=}, {nerf_bundlesdf_id=}, {cycle_iteration=}.')
 
-    # traj_evaluator = TrajectoryPerformanceEvaluator(
-    #     vision_asset, history, nerf_bundlesdf_id, bsdf_only)
-    # traj_evaluator.get_tracking_trajectories()
-    # traj_evaluator.compute_metrics()
-
-    pdb.set_trace()
+    file_utils.save_results_to_yaml(results, traj_evaluator.eval_dir)
 
 
 if __name__ == "__main__":

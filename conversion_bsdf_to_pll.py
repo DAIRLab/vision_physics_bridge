@@ -188,7 +188,7 @@ class TrajectoryConverterBundleSDFToPLL:
                 self.tagslam_full_times[1:] - self.tagslam_full_times[:-1]
             )
             print(f'TagSLAM full trajectory information:' + \
-                f'\n\t{self.tagslam_full_poses.shape=}' + \
+                f'\n\t{self.tagslam_t_full_poses.shape=}' + \
                 f'\n\t{self.tagslam_full_times[0]=}' + \
                 f'\n\tAverage frame rate (full): {1/tagslam_full_dts}\n')
 
@@ -213,7 +213,30 @@ class TrajectoryConverterBundleSDFToPLL:
             op.join(self.tagslam_dir, 'synced_tagslam.txt'))
 
         self.tagslam_full_times = tagslam_data[:, 0]
-        self.tagslam_full_poses = tagslam_data[:, 1:]
+        self.tagslam_t_full_poses = tagslam_data[:, 1:]
+
+        # Also convert the TagSLAM poses to the BundleSDF body origin.
+
+        # Get synchronized BundleSDF and TagSLAM poses -- pick the last keyframe
+        # from BundleSDF.
+        b_mat = math_utils.pos_quat_to_trans_mat(
+            self.keyframe_b_full_poses[-1, :7])
+        t_mat = math_utils.pos_quat_to_trans_mat(
+            self.tagslam_t_full_poses[self.keyframe_idx[-1], :7])
+
+        # Do the conversion.
+        tagslam_t_full_states_pll = np.hstack(
+            (math_utils.xyz_xyzw_to_pll_format(self.tagslam_t_full_poses),
+             np.zeros((self.tagslam_t_full_poses.shape[0], 6)))
+        )
+        tagslam_b_full_states_pll = \
+            math_utils.transform_t_origin_to_b_origin_pll_format(
+                full_tagslam_trajectory=tagslam_t_full_states_pll,
+                synced_bsdf_pose=b_mat,
+                synced_tagslam_pose=t_mat
+            )
+        self.tagslam_b_full_poses = math_utils.pll_to_xyz_xyzw_format(
+            tagslam_b_full_states_pll[:, :7])
 
     def _load_bundlesdf_poses(self) -> None:
         """Load all the poses reported by BundleSDF.  Store these in one or two
@@ -526,9 +549,11 @@ class TrajectoryConverterBundleSDFToPLL:
             - self.bundlesdf_toss_times: List[np.ndarray(N,)]
 
         And additionally these, only if not self.bsdf_only:
-            - self.tagslam_full_processed_states
+            - self.tagslam_t_full_processed_states
+            - self.tagslam_b_full_processed_states
             - self.bundlesdf_t_full_processed_states
-            - self.tagslam_toss_processed_states: List[np.ndarray(N, 13)]
+            - self.tagslam_t_toss_processed_states: List[np.ndarray(N, 13)]
+            - self.tagslam_b_toss_processed_states: List[np.ndarray(N, 13)]
             - self.bundlesdf_t_toss_processed_states: List[np.ndarray(N, 13)]
             - self.tagslam_toss_times: List[np.ndarray(N,)]
         """
@@ -548,7 +573,9 @@ class TrajectoryConverterBundleSDFToPLL:
         # Process TagSLAM data.
         if not self.bsdf_only:
             q_ts, p_ts, w_ts, v_ts = self._process_poses(
-                self.tagslam_full_poses, self.tagslam_full_times)
+                self.tagslam_t_full_poses, self.tagslam_full_times)
+            q_ts_b, p_ts_b, w_ts_b, v_ts_b = self._process_poses(
+                self.tagslam_b_full_poses, self.tagslam_full_times)
             q_bsdf_t, p_bsdf_t, w_bsdf_t, v_bsdf_t = self._process_poses(
                 self.bundlesdf_t_full_poses, self.bundlesdf_full_times)
             q_key_t, p_key_t, w_key_t, v_key_t = self._process_poses(
@@ -556,8 +583,10 @@ class TrajectoryConverterBundleSDFToPLL:
                 filter_rot=False, filter_pos=False, filter_lin_vel=False,
                 filter_ang_vel=False)
 
-            self.tagslam_full_processed_states = np.concatenate(
+            self.tagslam_t_full_processed_states = np.concatenate(
                 (q_ts, p_ts, w_ts, v_ts), axis=1)
+            self.tagslam_b_full_processed_states = np.concatenate(
+                (q_ts_b, p_ts_b, w_ts_b, v_ts_b), axis=1)
             self.bundlesdf_t_full_processed_states = np.concatenate(
                 (q_bsdf_t, p_bsdf_t, w_bsdf_t, v_bsdf_t), axis=1)
 
@@ -575,7 +604,7 @@ class TrajectoryConverterBundleSDFToPLL:
                 tagslam_toss_dts = np.mean(self.tagslam_toss_times[i][1:] - \
                                         self.tagslam_toss_times[i][:-1])
                 print(f'TagSLAM toss {toss_i} trajectory information:' + \
-                    f'\n\t{self.tagslam_toss_processed_states[i].shape=}' + \
+                    f'\n\t{self.tagslam_t_toss_processed_states[i].shape=}' + \
                     f'\n\t{self.tagslam_toss_times[i][0]=}' + \
                     f'\n\tAverage frame rate (toss): {1/tagslam_toss_dts}\n')
 
@@ -603,7 +632,8 @@ class TrajectoryConverterBundleSDFToPLL:
             - self.keyframe_toss_times: List[np.ndarray(M,)]
 
         And additionally these, only if not self.bsdf_only:
-            - self.tagslam_toss_processed_states: List[np.ndarray(N, 13)]
+            - self.tagslam_t_toss_processed_states: List[np.ndarray(N, 13)]
+            - self.tagslam_b_toss_processed_states: List[np.ndarray(N, 13)]
             - self.bundlesdf_t_toss_processed_states: List[np.ndarray(N, 13)]
             - self.keyframe_t_toss_processed_states: List[np.ndarray(M, 13)]
             - self.tagslam_toss_times: List[np.ndarray(N,)]
@@ -650,7 +680,8 @@ class TrajectoryConverterBundleSDFToPLL:
         # Trim any TagSLAM-related data.
         if not self.bsdf_only:
             self.bundlesdf_t_toss_processed_states = []
-            self.tagslam_toss_processed_states = []
+            self.tagslam_t_toss_processed_states = []
+            self.tagslam_b_toss_processed_states = []
             self.tagslam_toss_times = []
             self.keyframe_t_toss_processed_states = []
 
@@ -669,8 +700,10 @@ class TrajectoryConverterBundleSDFToPLL:
                     (self.tagslam_full_times - self.bundlesdf_toss_times[i][0]
                      )**2)
                 t_end = t_start + (b_end - b_start)
-                self.tagslam_toss_processed_states.append(
-                    self.tagslam_full_processed_states[t_start:t_end])
+                self.tagslam_t_toss_processed_states.append(
+                    self.tagslam_t_full_processed_states[t_start:t_end])
+                self.tagslam_b_toss_processed_states.append(
+                    self.tagslam_b_full_processed_states[t_start:t_end])
                 self.tagslam_toss_times.append(
                     self.tagslam_full_times[t_start:t_end])
 
@@ -687,7 +720,8 @@ class TrajectoryConverterBundleSDFToPLL:
     def plot_trajectory(self, full_trajectory: bool = True) -> None:
         """Visualize the BundleSDF and TagSLAM trajectories overlayed on a set
         of plots."""
-        def do_plot(q_ts, p_ts, w_ts, v_ts, t_ts,
+        def do_plot(q_ts_t, p_ts_t, w_ts_t, v_ts_t, t_ts_t,
+                    q_ts_b, p_ts_b, w_ts_b, v_ts_b, t_ts_b,
                     q_bsdf_t, p_bsdf_t, w_bsdf_t, v_bsdf_t,
                     q_bsdf_b, p_bsdf_b, w_bsdf_b, v_bsdf_b, t_bsdf,
                     q_key_t, p_key_t, _w_key_t, _v_key_t,
@@ -695,9 +729,9 @@ class TrajectoryConverterBundleSDFToPLL:
                     toss_num, full):
             b_only = self.bsdf_only
 
-            first_t = min(t_bsdf) if b_only else min(min(t_ts), min(t_bsdf))
+            first_t = min(t_bsdf) if b_only else min(min(t_ts_t), min(t_bsdf))
             if not b_only:
-                t_ts -= first_t
+                t_ts_t -= first_t
             t_bsdf -= first_t
             t_key -= first_t
 
@@ -715,11 +749,14 @@ class TrajectoryConverterBundleSDFToPLL:
             make_columns_in_row_share_y(ax, 3, up_to=3)
 
             if not b_only:
-                ax[0, 0].plot(t_ts, p_ts[:, 0], label='TagSLAM')
+                ax[0, 0].plot(t_ts_t, p_ts_t[:, 0], label='TagSLAM, T Origin',
+                              color='orange')
+                ax[0, 0].plot(t_ts_b, p_ts_b[:, 0], label='TagSLAM, B Origin',
+                              linestyle='--', color='orange')
                 ax[0, 0].plot(t_bsdf, p_bsdf_t[:, 0],
-                              label='BundleSDF, T Origin')
+                              label='BundleSDF, T Origin', color='blue')
             ax[0, 0].plot(t_bsdf, p_bsdf_b[:, 0], label='BundleSDF, B Origin',
-                          linestyle='--')
+                          linestyle='--', color='blue')
             if not b_only:
                 ax[0, 0].scatter(t_key, p_key_t[:, 0], c='orange', s=20,
                                 label='Keyframes, T Origin')
@@ -727,11 +764,14 @@ class TrajectoryConverterBundleSDFToPLL:
                              label='Keyframes, B Origin')
             ax[0, 0].set_title('X Position')
             if not b_only:
-                ax[0, 1].plot(t_ts, p_ts[:, 1], label='TagSLAM')
+                ax[0, 1].plot(t_ts_t, p_ts_t[:, 1], label='TagSLAM, T Origin',
+                              color='orange')
+                ax[0, 1].plot(t_ts_b, p_ts_b[:, 1], label='TagSLAM, B Origin',
+                              linestyle='--', color='orange')
                 ax[0, 1].plot(t_bsdf, p_bsdf_t[:, 1],
-                              label='BundleSDF, T Origin')
+                              label='BundleSDF, T Origin', color='blue')
             ax[0, 1].plot(t_bsdf, p_bsdf_b[:, 1], label='BundleSDF, B Origin',
-                          linestyle='--')
+                          linestyle='--', color='blue')
             if not b_only:
                 ax[0, 1].scatter(t_key, p_key_t[:, 1], c='orange', s=20,
                                  label='Keyframes, T Origin')
@@ -739,11 +779,14 @@ class TrajectoryConverterBundleSDFToPLL:
                              label='Keyframes, B Origin')
             ax[0, 1].set_title('Y Position')
             if not b_only:
-                ax[0, 2].plot(t_ts, p_ts[:, 2], label='TagSLAM')
+                ax[0, 2].plot(t_ts_t, p_ts_t[:, 2], label='TagSLAM, T Origin',
+                              color='orange')
+                ax[0, 2].plot(t_ts_b, p_ts_b[:, 2], label='TagSLAM, B Origin',
+                              linestyle='--', color='orange')
                 ax[0, 2].plot(t_bsdf, p_bsdf_t[:, 2],
-                              label='BundleSDF, T Origin')
+                              label='BundleSDF, T Origin', color='blue')
             ax[0, 2].plot(t_bsdf, p_bsdf_b[:, 2], label='BundleSDF, B Origin',
-                          linestyle='--')
+                          linestyle='--', color='blue')
             if not b_only:
                 ax[0, 2].scatter(t_key, p_key_t[:, 2], c='orange', s=20,
                                  label='Keyframes, T Origin')
@@ -752,11 +795,14 @@ class TrajectoryConverterBundleSDFToPLL:
             ax[0, 2].set_title('Z Position')
 
             if not b_only:
-                ax[1, 0].plot(t_ts, q_ts[:, 0], label='TagSLAM')
+                ax[1, 0].plot(t_ts_t, q_ts_t[:, 0], label='TagSLAM, T Origin',
+                              color='orange')
+                ax[1, 0].plot(t_ts_b, q_ts_b[:, 0], label='TagSLAM, B Origin',
+                              linestyle='--', color='orange')
                 ax[1, 0].plot(t_bsdf, q_bsdf_t[:, 0],
-                              label='BundleSDF, T Origin')
+                              label='BundleSDF, T Origin', color='blue')
             ax[1, 0].plot(t_bsdf, q_bsdf_b[:, 0], label='BundleSDF, B Origin',
-                          linestyle='--')
+                          linestyle='--', color='blue')
             if len(t_key) > 0:
                 if not b_only:
                     ax[1, 0].scatter(t_key, q_key_t[:, 0], c='orange', s=20,
@@ -765,11 +811,14 @@ class TrajectoryConverterBundleSDFToPLL:
                                 label='Keyframes, B Origin')
             ax[1, 0].set_title('W Quaternion')
             if not b_only:
-                ax[1, 1].plot(t_ts, q_ts[:, 1], label='TagSLAM')
+                ax[1, 1].plot(t_ts_t, q_ts_t[:, 1], label='TagSLAM, T Origin',
+                              color='orange')
+                ax[1, 1].plot(t_ts_b, q_ts_b[:, 1], label='TagSLAM, B Origin',
+                              linestyle='--', color='orange')
                 ax[1, 1].plot(t_bsdf, q_bsdf_t[:, 1],
-                              label='BundleSDF, T Origin')
+                              label='BundleSDF, T Origin', color='blue')
             ax[1, 1].plot(t_bsdf, q_bsdf_b[:, 1], label='BundleSDF, B Origin',
-                          linestyle='--')
+                          linestyle='--', color='blue')
             if len(t_key) > 0:
                 if not b_only:
                     ax[1, 1].scatter(t_key, q_key_t[:, 1], c='orange', s=20,
@@ -778,11 +827,14 @@ class TrajectoryConverterBundleSDFToPLL:
                                 label='Keyframes, B Origin')
             ax[1, 1].set_title('X Quaternion')
             if not b_only:
-                ax[1, 2].plot(t_ts, q_ts[:, 2], label='TagSLAM')
+                ax[1, 2].plot(t_ts_t, q_ts_t[:, 2], label='TagSLAM, T Origin',
+                              color='orange')
+                ax[1, 2].plot(t_ts_b, q_ts_b[:, 2], label='TagSLAM, B Origin',
+                              linestyle='--', color='orange')
                 ax[1, 2].plot(t_bsdf, q_bsdf_t[:, 2],
-                              label='BundleSDF, T Origin')
+                              label='BundleSDF, T Origin', color='blue')
             ax[1, 2].plot(t_bsdf, q_bsdf_b[:, 2], label='BundleSDF, B Origin',
-                          linestyle='--')
+                          linestyle='--', color='blue')
             if len(t_key) > 0:
                 if not b_only:
                     ax[1, 2].scatter(t_key, q_key_t[:, 2], c='orange', s=20,
@@ -791,11 +843,14 @@ class TrajectoryConverterBundleSDFToPLL:
                                 label='Keyframes, B Origin')
             ax[1, 2].set_title('Y Quaternion')
             if not b_only:
-                ax[1, 3].plot(t_ts, q_ts[:, 3], label='TagSLAM')
+                ax[1, 3].plot(t_ts_t, q_ts_t[:, 3], label='TagSLAM, T Origin',
+                              color='orange')
+                ax[1, 3].plot(t_ts_b, q_ts_b[:, 3], label='TagSLAM, B Origin',
+                              linestyle='--', color='orange')
                 ax[1, 3].plot(t_bsdf, q_bsdf_t[:, 3],
-                              label='BundleSDF, T Origin')
+                              label='BundleSDF, T Origin', color='blue')
             ax[1, 3].plot(t_bsdf, q_bsdf_b[:, 3], label='BundleSDF, B Origin',
-                          linestyle='--')
+                          linestyle='--', color='blue')
             if len(t_key) > 0:
                 if not b_only:
                     ax[1, 3].scatter(t_key, q_key_t[:, 3], c='orange', s=20,
@@ -805,61 +860,79 @@ class TrajectoryConverterBundleSDFToPLL:
             ax[1, 3].set_title('Z Quaternion')
 
             if not b_only:
-                ax[2, 0].plot(t_ts, v_ts[:, 0], label='TagSLAM')
+                ax[2, 0].plot(t_ts_t, v_ts_t[:, 0], label='TagSLAM, T Origin',
+                              color='orange')
+                ax[2, 0].plot(t_ts_b, v_ts_b[:, 0], label='TagSLAM, B Origin',
+                              linestyle='--', color='orange')
                 ax[2, 0].plot(t_bsdf, v_bsdf_t[:, 0],
-                              label='BundleSDF, T Origin')
+                              label='BundleSDF, T Origin', color='blue')
             ax[2, 0].plot(t_bsdf, v_bsdf_b[:, 0], label='BundleSDF, B Origin',
-                          linestyle='--')
+                          linestyle='--', color='blue')
             ax[2, 0].set_title('X Velocity')
             if not b_only:
-                ax[2, 1].plot(t_ts, v_ts[:, 1], label='TagSLAM')
+                ax[2, 1].plot(t_ts_t, v_ts_t[:, 1], label='TagSLAM, T Origin',
+                              color='orange')
+                ax[2, 1].plot(t_ts_b, v_ts_b[:, 1], label='TagSLAM, B Origin',
+                              linestyle='--', color='orange')
                 ax[2, 1].plot(t_bsdf, v_bsdf_t[:, 1],
-                              label='BundleSDF, T Origin')
+                              label='BundleSDF, T Origin', color='blue')
             ax[2, 1].plot(t_bsdf, v_bsdf_b[:, 1], label='BundleSDF, B Origin',
-                          linestyle='--')
+                          linestyle='--', color='blue')
             ax[2, 1].set_title('Y Velocity')
             if not b_only:
-                ax[2, 2].plot(t_ts, v_ts[:, 2], label='TagSLAM')
+                ax[2, 2].plot(t_ts_t, v_ts_t[:, 2], label='TagSLAM, T Origin',
+                              color='orange')
+                ax[2, 2].plot(t_ts_b, v_ts_b[:, 2], label='TagSLAM, B Origin',
+                              linestyle='--', color='orange')
                 ax[2, 2].plot(t_bsdf, v_bsdf_t[:, 2],
-                              label='BundleSDF, T Origin')
+                              label='BundleSDF, T Origin', color='blue')
             ax[2, 2].plot(t_bsdf, v_bsdf_b[:, 2], label='BundleSDF, B Origin',
-                          linestyle='--')
+                          linestyle='--', color='blue')
             ax[2, 2].set_title('Z Velocity')
 
             if not b_only:
-                ax[3, 0].plot(t_ts, w_ts[:, 0], label='TagSLAM')
+                ax[3, 0].plot(t_ts_t, w_ts_t[:, 0], label='TagSLAM, T Origin',
+                              color='orange')
+                ax[3, 0].plot(t_ts_b, w_ts_b[:, 0], label='TagSLAM, B Origin',
+                              linestyle='--', color='orange')
                 ax[3, 0].plot(t_bsdf, w_bsdf_t[:, 0],
-                              label='BundleSDF, T Origin')
+                              label='BundleSDF, T Origin', color='blue')
             ax[3, 0].plot(t_bsdf, w_bsdf_b[:, 0], label='BundleSDF, B Origin',
-                          linestyle='--')
+                          linestyle='--', color='blue')
             ax[3, 0].set_title('X Angular Velocity')
             if not b_only:
-                ax[3, 1].plot(t_ts, w_ts[:, 1], label='TagSLAM')
+                ax[3, 1].plot(t_ts_t, w_ts_t[:, 1], label='TagSLAM, T Origin',
+                              color='orange')
+                ax[3, 1].plot(t_ts_b, w_ts_b[:, 1], label='TagSLAM, B Origin',
+                              linestyle='--', color='orange')
                 ax[3, 1].plot(t_bsdf, w_bsdf_t[:, 1],
-                              label='BundleSDF, T Origin')
+                              label='BundleSDF, T Origin', color='blue')
             ax[3, 1].plot(t_bsdf, w_bsdf_b[:, 1], label='BundleSDF, B Origin',
-                          linestyle='--')
+                          linestyle='--', color='blue')
             ax[3, 1].set_title('Y Angular Velocity')
             if not b_only:
-                ax[3, 2].plot(t_ts, w_ts[:, 2], label='TagSLAM')
+                ax[3, 2].plot(t_ts_t, w_ts_t[:, 2], label='TagSLAM, T Origin',
+                              color='orange')
+                ax[3, 2].plot(t_ts_b, w_ts_b[:, 2], label='TagSLAM, B Origin',
+                              linestyle='--', color='orange')
                 ax[3, 2].plot(t_bsdf, w_bsdf_t[:, 2],
-                              label='BundleSDF, T Origin')
+                              label='BundleSDF, T Origin', color='blue')
             ax[3, 2].plot(t_bsdf, w_bsdf_b[:, 2], label='BundleSDF, B Origin',
-                          linestyle='--')
+                          linestyle='--', color='blue')
             ax[3, 2].set_title('Z Angular Velocity')
 
             # Include an orientation error plot in the empty upper right.
             if not b_only:
-                q_errors = math_utils.quaternion_errors(q_ts, q_bsdf_t)
+                q_errors = math_utils.quaternion_errors(q_ts_t, q_bsdf_t)
                 q_errors *= 180 / np.pi
-                ax[0, 3].plot(t_ts, q_errors, color='r',
+                ax[0, 3].plot(t_ts_t, q_errors, color='r',
                             label='TagSLAM-to-BundleSDF T')
 
                 # Include the orientation error for the keyframes.
                 if len(t_key) > 0:
-                    tagslam_time_idx = [np.argmin((t_ts - t)**2) for t in t_key]
+                    tagslam_time_idx = [np.argmin((t_ts_t-t)**2) for t in t_key]
                     q_key_errors = math_utils.quaternion_errors(
-                        q_ts[tagslam_time_idx], q_key_t)
+                        q_ts_t[tagslam_time_idx], q_key_t)
                     q_key_errors *= 180 / np.pi
                     ax[0, 3].scatter(t_key, q_key_errors, color='r', s=20,
                                     label='TagSLAM-to-Keyframes T')
@@ -921,17 +994,27 @@ class TrajectoryConverterBundleSDFToPLL:
 
         if full_trajectory:
             if not self.bsdf_only:
-                q_ts = self.tagslam_full_processed_states[:, 0:4]
-                p_ts = self.tagslam_full_processed_states[:, 4:7]
-                w_ts = self.tagslam_full_processed_states[:, 7:10]
-                v_ts = self.tagslam_full_processed_states[:, 10:13]
-                t_ts = self.tagslam_full_times
+                q_ts_t = self.tagslam_t_full_processed_states[:, 0:4]
+                p_ts_t = self.tagslam_t_full_processed_states[:, 4:7]
+                w_ts_t = self.tagslam_t_full_processed_states[:, 7:10]
+                v_ts_t = self.tagslam_t_full_processed_states[:, 10:13]
+                t_ts_t = self.tagslam_full_times
+                q_ts_b = self.tagslam_b_full_processed_states[:, 0:4]
+                p_ts_b = self.tagslam_b_full_processed_states[:, 4:7]
+                w_ts_b = self.tagslam_b_full_processed_states[:, 7:10]
+                v_ts_b = self.tagslam_b_full_processed_states[:, 10:13]
+                t_ts_b = self.tagslam_full_times
             else:
-                q_ts = None
-                p_ts = None
-                w_ts = None
-                v_ts = None
-                t_ts = None
+                q_ts_t = None
+                p_ts_t = None
+                w_ts_t = None
+                v_ts_t = None
+                t_ts_t = None
+                q_ts_b = None
+                p_ts_b = None
+                w_ts_b = None
+                v_ts_b = None
+                t_ts_b = None
 
             q_bsdf_b = self.bundlesdf_b_full_processed_states[:, 0:4]
             p_bsdf_b = self.bundlesdf_b_full_processed_states[:, 4:7]
@@ -966,7 +1049,8 @@ class TrajectoryConverterBundleSDFToPLL:
             t_key = self.keyframe_full_times
 
             title='Full Trajectory Results'
-            do_plot(q_ts, p_ts, w_ts, v_ts, t_ts,
+            do_plot(q_ts_t, p_ts_t, w_ts_t, v_ts_t, t_ts_t,
+                    q_ts_b, p_ts_b, w_ts_b, v_ts_b, t_ts_b,
                     q_bsdf_t, p_bsdf_t, w_bsdf_t, v_bsdf_t,
                     q_bsdf_b, p_bsdf_b, w_bsdf_b, v_bsdf_b, t_bsdf,
                     q_key_t, p_key_t, w_key_t, v_key_t,
@@ -976,17 +1060,27 @@ class TrajectoryConverterBundleSDFToPLL:
         else:
             for i in range(len(self.bundlesdf_toss_times)):
                 if not self.bsdf_only:
-                    q_ts = self.tagslam_toss_processed_states[i][:, 0:4]
-                    p_ts = self.tagslam_toss_processed_states[i][:, 4:7]
-                    w_ts = self.tagslam_toss_processed_states[i][:, 7:10]
-                    v_ts = self.tagslam_toss_processed_states[i][:, 10:13]
-                    t_ts = self.tagslam_toss_times[i]
+                    q_ts_t = self.tagslam_t_toss_processed_states[i][:, 0:4]
+                    p_ts_t = self.tagslam_t_toss_processed_states[i][:, 4:7]
+                    w_ts_t = self.tagslam_t_toss_processed_states[i][:, 7:10]
+                    v_ts_t = self.tagslam_t_toss_processed_states[i][:, 10:13]
+                    t_ts_t = self.tagslam_toss_times[i]
+                    q_ts_b = self.tagslam_b_toss_processed_states[i][:, 0:4]
+                    p_ts_b = self.tagslam_b_toss_processed_states[i][:, 4:7]
+                    w_ts_b = self.tagslam_b_toss_processed_states[i][:, 7:10]
+                    v_ts_b = self.tagslam_b_toss_processed_states[i][:, 10:13]
+                    t_ts_b = self.tagslam_toss_times[i]
                 else:
-                    q_ts = None
-                    p_ts = None
-                    w_ts = None
-                    v_ts = None
-                    t_ts = None
+                    q_ts_t = None
+                    p_ts_t = None
+                    w_ts_t = None
+                    v_ts_t = None
+                    t_ts_t = None
+                    q_ts_b = None
+                    p_ts_b = None
+                    w_ts_b = None
+                    v_ts_b = None
+                    t_ts_b = None
 
                 q_bsdf_b = self.bundlesdf_b_toss_processed_states[i][:, 0:4]
                 p_bsdf_b = self.bundlesdf_b_toss_processed_states[i][:, 4:7]
@@ -1021,7 +1115,8 @@ class TrajectoryConverterBundleSDFToPLL:
                 t_key = self.keyframe_toss_times[i]
 
                 title=f'Toss {i + self.start_toss} Trajectory Results'
-                do_plot(q_ts, p_ts, w_ts, v_ts, t_ts,
+                do_plot(q_ts_t, p_ts_t, w_ts_t, v_ts_t, t_ts_t,
+                        q_ts_b, p_ts_b, w_ts_b, v_ts_b, t_ts_b,
                         q_bsdf_t, p_bsdf_t, w_bsdf_t, v_bsdf_t,
                         q_bsdf_b, p_bsdf_b, w_bsdf_b, v_bsdf_b, t_bsdf,
                         q_key_t, p_key_t, w_key_t, v_key_t,
@@ -1079,7 +1174,7 @@ class TrajectoryConverterBundleSDFToPLL:
             full_tagslam_dir = file_utils.contactnets_input_dir_tagslam(
                 dataset=self.dataset, full=True)
             torch.save(
-                torch.tensor(self.tagslam_full_processed_states),
+                torch.tensor(self.tagslam_t_full_processed_states),
                 op.join(full_tagslam_dir, 'tagslam.pt'))
             print(f"\t{op.join(full_tagslam_dir, 'tagslam.pt')}")
 
@@ -1088,7 +1183,7 @@ class TrajectoryConverterBundleSDFToPLL:
                 dataset=self.dataset, full=False)
             for i in range(len(toss_filenames)):
                 torch.save(
-                    torch.tensor(self.tagslam_toss_processed_states[i]),
+                    torch.tensor(self.tagslam_t_toss_processed_states[i]),
                     op.join(toss_tagslam_dir, toss_filenames[i]))
                 print(f'\t{op.join(toss_tagslam_dir, toss_filenames[i])}')
 

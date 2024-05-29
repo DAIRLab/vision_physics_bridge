@@ -415,6 +415,35 @@ def trans_mat_to_pll_config(trans_mat):
     return np.concatenate((quat_wxyz, xyz)).squeeze()
 
 
+def xyz_xyzw_to_pll_format(config):
+    """Convert a configuration from [x y z qx qy qz qw] to [qw qx qy qz x y z].
+    """
+    assert config.ndim == 2, f'Expecting (N, 7) shape but found ' + \
+        f'{config.shape=}.'
+    assert config.shape[1] == 7, f'Expecting (N, 7) shape but found ' + \
+        f'{config.shape=}.'
+
+    xyz = config[:, :3]
+    quat_xyzw = config[:, 3:7]
+    quat_wyxz = xyzw2wxyz(quat_xyzw)
+
+    return np.concatenate((quat_wyxz, xyz), axis=1)
+
+def pll_to_xyz_xyzw_format(config):
+    """Convert a configuration from [qw qx qy qz x y z] to [x y z qx qy qz qw].
+    """
+    assert config.ndim == 2, f'Expecting (N, 7) shape but found ' + \
+        f'{config.shape=}.'
+    assert config.shape[1] == 7, f'Expecting (N, 7) shape but found ' + \
+        f'{config.shape=}.'
+
+    xyz = config[:, 4:7]
+    quat_wxyz = config[:, :4]
+    quat_xyzw = wxyz2xyzw(quat_wxyz)
+
+    return np.concatenate((xyz, quat_xyzw), axis=1)
+
+
 def transform_points_wrt_tagslam_origin_to_bundletrack_origin(
         points_wrt_T, bsdf_output_pose_dir, annotated_poses_dir
 ):
