@@ -181,8 +181,6 @@ class TrajectoryPerformanceEvaluator:
             self.tagslam_toss_times = {}
             self.tagslam_b_full_states = {}
             self.tagslam_b_toss_states = {}
-            # self.bsdf_t_full_states = {}
-            # self.bsdf_t_toss_states = {}
 
         # Go through every cycle iteration and get the trajectory information.
         for cycle_label, cycle_info in self.history.items():
@@ -252,10 +250,6 @@ class TrajectoryPerformanceEvaluator:
                     traj_conv.tagslam_b_full_processed_states
                 self.tagslam_b_toss_states[cycle_label] = \
                     traj_conv.tagslam_b_toss_processed_states
-                # self.bsdf_t_full_states[cycle_label] = \
-                #     traj_conv.bundlesdf_t_full_processed_states
-                # self.bsdf_t_toss_states[cycle_label] = \
-                #     traj_conv.bundlesdf_t_toss_processed_states
 
     def _get_learned_pll_system(self):
         """Get a PLL system with the learned parameters, including geometry from
@@ -773,11 +767,7 @@ class DynamicsPredictor:
         # Export the URDF.
         self.pll_system.generate_updated_urdfs()
 
-    def generate_rollout_trajectories(self):
-        """Generate rollouts for the object using the learned parameters."""
-        # Create the simulation system.
-        self._create_pll_sim_system()
-
+    def _get_tracked_trajectories(self):
         # Get the BundleSDF trajectories for each toss.
         if self.pll_id is not None:
             last_bsdf_id = self.pll_last_tracking_bsdf_id
@@ -823,6 +813,13 @@ class DynamicsPredictor:
                     )
 
             self.tagslam_b_trajs = tagslam_trajs_of_b_origin
+
+    def generate_rollout_trajectories(self):
+        """Generate rollouts for the object using the learned parameters."""
+        # Create the simulation system.
+        self._create_pll_sim_system()       # gets self.pll_system
+        self._get_tracked_trajectories()    # gets self.bundlesdf_trajs,
+                                            # self.tagslam_b_trajs (if exists)
 
         # Get the predictions.
         pred_trajs_of_b_origin = {}

@@ -449,7 +449,6 @@ def evaluation_subdir(
 
     return assure_created(op.join(eval_dir, subdir))
 
-# TODO update references
 def evaluation_toss_prediction_video_filepath(
         dataset: str, cycle_iteration: int, tracking_bundlesdf_id: str = None,
         nerf_bundlesdf_id: str = None, pll_id: str = None) -> str:
@@ -488,6 +487,10 @@ def save_results_to_yaml(results: dict, eval_dir: str) -> None:
     """Save the results dictionary to a yaml file in a provided evaluation
     directory."""
     yaml.dump(results, open(op.join(eval_dir, 'results.yaml'), 'w'))
+
+def start_adjustment_dir() -> str:
+    """Directory for all start adjust results."""
+    return assure_created(op.join(DATA_GEN_DIR, 'start_adjustment'))
 
 
 """Yaml file parsing utilities."""
