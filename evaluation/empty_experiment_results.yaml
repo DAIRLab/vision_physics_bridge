@@ -9,7 +9,7 @@ _overview:
   nerf_bundlesdf_id: null
 
 ##### Performance results for dynamics predictions.
-dynamics_metrics:     # Delete this sub-section for BundleSDF-only baseline.
+dynamics_rollout_metrics:   # Delete sub-section for BundleSDF-only baseline.
   against_bundlesdf:  # Add toss keys for every toss contained in vision asset.
     position_error:
       toss_1:
@@ -159,6 +159,155 @@ dynamics_metrics:     # Delete this sub-section for BundleSDF-only baseline.
         traj: null
         mean: null
 
+dynamics_single_step_metrics: # Delete sub-section for BundleSDF-only baseline.
+  against_bundlesdf:  # Add toss keys for every toss contained in vision asset.
+    position_error:
+      toss_1:
+        traj: null
+        mean: null
+    rotation_error:
+      toss_1:
+        traj: null
+        mean: null
+    add_error:
+      toss_1:
+        traj: null
+        mean: null
+    adds_error:
+      toss_1:
+        traj: null
+        mean: null
+    penetration_true_geom_predicted_traj:
+      toss_1:
+        traj: null
+        mean: null
+
+  # Remove against_tagslam for tagless objects.
+  against_tagslam:    # There should always be every toss key 1 through 10.
+    position_error:
+      toss_1:
+        traj: null
+        mean: null
+      toss_2:
+        traj: null
+        mean: null
+      toss_3:
+        traj: null
+        mean: null
+      toss_4:
+        traj: null
+        mean: null
+      toss_5:
+        traj: null
+        mean: null
+      toss_6:
+        traj: null
+        mean: null
+      toss_7:
+        traj: null
+        mean: null
+      toss_8:
+        traj: null
+        mean: null
+      toss_9:
+        traj: null
+        mean: null
+      toss_10:
+        traj: null
+        mean: null
+    rotation_error:
+      toss_1:
+        traj: null
+        mean: null
+      toss_2:
+        traj: null
+        mean: null
+      toss_3:
+        traj: null
+        mean: null
+      toss_4:
+        traj: null
+        mean: null
+      toss_5:
+        traj: null
+        mean: null
+      toss_6:
+        traj: null
+        mean: null
+      toss_7:
+        traj: null
+        mean: null
+      toss_8:
+        traj: null
+        mean: null
+      toss_9:
+        traj: null
+        mean: null
+      toss_10:
+        traj: null
+        mean: null
+    add_error:
+      toss_1:
+        traj: null
+        mean: null
+      toss_2:
+        traj: null
+        mean: null
+      toss_3:
+        traj: null
+        mean: null
+      toss_4:
+        traj: null
+        mean: null
+      toss_5:
+        traj: null
+        mean: null
+      toss_6:
+        traj: null
+        mean: null
+      toss_7:
+        traj: null
+        mean: null
+      toss_8:
+        traj: null
+        mean: null
+      toss_9:
+        traj: null
+        mean: null
+      toss_10:
+        traj: null
+        mean: null
+    adds_error:
+      toss_1:
+        traj: null
+        mean: null
+      toss_2:
+        traj: null
+        mean: null
+      toss_3:
+        traj: null
+        mean: null
+      toss_4:
+        traj: null
+        mean: null
+      toss_5:
+        traj: null
+        mean: null
+      toss_6:
+        traj: null
+        mean: null
+      toss_7:
+        traj: null
+        mean: null
+      toss_8:
+        traj: null
+        mean: null
+      toss_9:
+        traj: null
+        mean: null
+      toss_10:
+        traj: null
+        mean: null
 
 ##### Performance results for pose estimation.
 tracking_metrics:

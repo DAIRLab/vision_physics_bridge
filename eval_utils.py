@@ -32,6 +32,10 @@ from dair_pll import inertia as pll_inertia
 from dair_pll.multibody_learnable_system import MultibodyLearnableSystem
 
 
+METRICS_BY_TOSS = ['dynamics_rollout_metrics', 'dynamics_single_step_metrics',
+                   'tracking_metrics']
+
+
 
 #================================== METRICS ===================================#
 """ADD and ADD-S (/ADI) metrics:  We found the most information about these at:
@@ -166,7 +170,7 @@ def create_empty_results_dict(
     end_toss = start_toss if '-' not in vision_asset else \
         int(vision_asset.split('-')[1])
 
-    for category_key in ['dynamics_metrics', 'tracking_metrics']:
+    for category_key in METRICS_BY_TOSS:
         sub_results = empty_results[category_key]['against_bundlesdf']
         for metric_key in sub_results.keys():
             sub_results[metric_key] = {
@@ -182,13 +186,14 @@ def create_empty_results_dict(
     # is tagless.
     object = '_'.join(vision_asset.split('_')[:-1])
     if object in file_utils.TAGLESS_OBJECTS:
-        for category_key in ['dynamics_metrics', 'tracking_metrics']:
+        for category_key in METRICS_BY_TOSS:
             del empty_results[category_key]['against_tagslam']
 
     # Third modification:  Get rid of any dynamics predictions if PLL has never
     # been run.
     if cycle_iteration <= 1 and last_run_was_bsdf:
-        del empty_results['dynamics_metrics']
+        del empty_results['dynamics_rollout_metrics']
+        del empty_results['dynamics_single_step_metrics']
 
     # Fourth modification:  Get rid of any tracking metrics if the last run was
     # PLL instead of BundleSDF.
@@ -312,6 +317,9 @@ def get_pll_rollout_trajectory(
     rollout from a different beginning.  A start adjust of i means preserve the
     first i steps of the trajectory, then simulate starting from the ith index.
     """
+    assert target_traj.ndim == 2, f'Invalid {target_traj.shape=}.'
+    assert target_traj.shape[1] == 13, f'Invalid {target_traj.shape=}.'
+
     # Use the input argument structure of system.simulate().
     x_pre = target_traj[..., :start_adjust, :]
     x_0 = target_traj[..., start_adjust:start_adjust+1, :]
@@ -324,6 +332,28 @@ def get_pll_rollout_trajectory(
     full_traj = torch.concatenate((x_pre, prediction), dim=0)
 
     return full_traj.detach().clone()
+
+def get_pll_single_step_predictions_and_targets(
+        system: MultibodyLearnableSystem, full_traj: Tensor,
+        start_adjust: int = 0) -> Tensor:
+    """Get single step predictions and targets from a ground truth trajectory.
+    A start adjust can be given to ignore some of the starting states."""
+    assert full_traj.ndim == 2, f'Invalid {full_traj.shape=}.'
+    assert full_traj.shape[1] == 13, f'Invalid {full_traj.shape=}.'
+
+    # Use the input argument structure of system.simulate() -- this can be
+    # batched as (n_batch, n_step, n_state).
+    initial_states = full_traj[start_adjust:-1, :].reshape(-1, 1, 13)
+    end_states = full_traj[start_adjust+1:, :].reshape(-1, 1, 13)
+
+    carry_0 = system.carry_callback()
+    simulated_states, _ = system.simulate(initial_states, carry_0, 1)
+
+    # Return as (N-1-start_adjust, 13) tensors.  Need to drop the initial
+    # condition from the simulated states.
+    simulated_states = simulated_states[:, 0].detach().clone().squeeze()
+    end_states = end_states.squeeze()
+    return simulated_states, end_states
 
 
 class PredictionOverlayGenerator(OverlayVideoGenerator):

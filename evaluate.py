@@ -841,6 +841,48 @@ class DynamicsPredictor:
         # Store the targets and predictions.
         self.predicted_trajs = pred_trajs_of_b_origin
 
+    def generate_single_step_predictions(self):
+        """Generate single-step predictions for the object using the learned
+        parameters."""
+        # Get the predictions.
+        pred_bsdf_steps = {}
+        target_bsdf_steps = {}
+        bundlesdf_trajs = self.bundlesdf_trajs
+
+        for toss_key, target_bsdf_traj in bundlesdf_trajs.items():
+            start_adjust = file_utils.load_field_from_yaml(
+                object=self.object, toss_number=toss_key, key='start_adjust')
+            pred_bsdf_steps[toss_key], target_bsdf_steps[toss_key] = \
+                eval_utils.get_pll_single_step_predictions_and_targets(
+                    system=self.pll_system, full_traj=Tensor(target_bsdf_traj),
+                    start_adjust=start_adjust
+                )
+
+        # Store the targets and predictions.
+        self.single_step_bsdf_predictions = pred_bsdf_steps
+        self.single_step_bsdf_targets = target_bsdf_steps
+
+        # Do the same thing against TagSLAM, if available.
+        if not hasattr(self, 'tagslam_b_trajs'):
+            return
+
+        pred_tagslam_steps = {}
+        target_tagslam_steps = {}
+        bundlesdf_trajs = self.tagslam_b_trajs
+
+        for toss_key, target_bsdf_traj in bundlesdf_trajs.items():
+            start_adjust = file_utils.load_field_from_yaml(
+                object=self.object, toss_number=toss_key, key='start_adjust')
+            pred_tagslam_steps[toss_key], target_tagslam_steps[toss_key] = \
+                eval_utils.get_pll_single_step_predictions_and_targets(
+                    system=self.pll_system, full_traj=Tensor(target_bsdf_traj),
+                    start_adjust=start_adjust
+                )
+
+        # Store the targets and predictions.
+        self.single_step_tagslam_predictions = pred_tagslam_steps
+        self.single_step_tagslam_targets = target_tagslam_steps
+
     def save_predictions(self):
         """Save the target and prediction trajectories to the evaluation
         directory."""
@@ -856,10 +898,32 @@ class DynamicsPredictor:
             torch.save(target_traj, op.join(self.eval_dir, filename))
             print(f'\t{filename}')
 
+        for toss_num, step_targets in self.single_step_bsdf_targets.items():
+            filename = f'step_target_bsdf_toss_{toss_num}.pt'
+            torch.save(step_targets, op.join(self.eval_dir, filename))
+            print(f'\t{filename}')
+
+        for toss_num, step_preds in self.single_step_bsdf_predictions.items():
+            filename = f'step_prediction_bsdf_toss_{toss_num}.pt'
+            torch.save(step_preds, op.join(self.eval_dir, filename))
+            print(f'\t{filename}')
+
         if hasattr(self, 'tagslam_b_trajs'):
             for toss_num, target_traj in self.tagslam_b_trajs.items():
                 filename = f'tagslam_b_toss_{toss_num}.pt'
                 torch.save(target_traj, op.join(self.eval_dir, filename))
+                print(f'\t{filename}')
+
+            for toss_num, step_targets in \
+                self.single_step_tagslam_targets.items():
+                filename = f'step_target_tagslam_toss_{toss_num}.pt'
+                torch.save(step_targets, op.join(self.eval_dir, filename))
+                print(f'\t{filename}')
+
+            for toss_num, step_preds in \
+                self.single_step_tagslam_predictions.items():
+                filename = f'step_prediction_tagslam_toss_{toss_num}.pt'
+                torch.save(step_preds, op.join(self.eval_dir, filename))
                 print(f'\t{filename}')
 
     def make_prediction_video(self):
@@ -875,7 +939,8 @@ class DynamicsPredictor:
     ) -> None:
         """Store the dynamics prediction metrics in the results dictionary."""
         # First do everything against BundleSDF.
-        sub_results = results['dynamics_metrics']['against_bundlesdf']
+        ### Rollout metrics.
+        sub_results = results['dynamics_rollout_metrics']['against_bundlesdf']
 
         position_results = sub_results['position_error']
         for toss_key, subsub_results in position_results.items():
@@ -924,13 +989,69 @@ class DynamicsPredictor:
             subsub_results['mean'] = over_traj.mean().item()
             subsub_results['traj'] = over_traj.tolist()
 
+        ### Single-step metrics.
+        sub_results = results['dynamics_single_step_metrics'][
+            'against_bundlesdf']
+
+        position_results = sub_results['position_error']
+        for toss_key, subsub_results in position_results.items():
+            toss_num = int(toss_key.split('_')[1])
+            over_traj = TrajectoryMetrics.position_error(
+                self.single_step_bsdf_targets[toss_num],
+                self.single_step_bsdf_predictions[toss_num])
+            subsub_results['mean'] = over_traj.mean().item()
+            subsub_results['traj'] = over_traj.tolist()
+
+        rotation_error = sub_results['rotation_error']
+        for toss_key, subsub_results in rotation_error.items():
+            toss_num = int(toss_key.split('_')[1])
+            over_traj = TrajectoryMetrics.rotation_error(
+                self.single_step_bsdf_targets[toss_num],
+                self.single_step_bsdf_predictions[toss_num])
+            subsub_results['mean'] = over_traj.mean().item()
+            subsub_results['traj'] = over_traj.tolist()
+
+        add_error = sub_results['add_error']
+        for toss_key, subsub_results in add_error.items():
+            toss_num = int(toss_key.split('_')[1])
+            over_traj = TrajectoryMetrics.add_error(
+                self.single_step_bsdf_targets[toss_num],
+                self.single_step_bsdf_predictions[toss_num],
+                traj_evaluator._get_aligned_true_cloud()
+            )
+            subsub_results['mean'] = over_traj.mean().item()
+            subsub_results['traj'] = over_traj.tolist()
+
+        adds_error = sub_results['adds_error']
+        for toss_key, subsub_results in adds_error.items():
+            toss_num = int(toss_key.split('_')[1])
+            over_traj = TrajectoryMetrics.adds_error(
+                self.single_step_bsdf_targets[toss_num],
+                self.single_step_bsdf_predictions[toss_num],
+                traj_evaluator._get_aligned_true_cloud()
+            )
+            subsub_results['mean'] = over_traj.mean().item()
+            subsub_results['traj'] = over_traj.tolist()
+
+        penetration_true_geom = sub_results[
+            'penetration_true_geom_predicted_traj']
+        for toss_key, subsub_results in penetration_true_geom.items():
+            toss_num = int(toss_key.split('_')[1])
+            over_traj = TrajectoryMetrics.penetration(
+                self.single_step_bsdf_predictions[toss_num],
+                traj_evaluator._get_true_geometry_pll_system()
+            )
+            subsub_results['mean'] = over_traj.mean().item()
+            subsub_results['traj'] = over_traj.tolist()
+
         # Second do everything against TagSLAM.
-        if not 'against_tagslam' in results['dynamics_metrics'].keys():
+        if not 'against_tagslam' in results['dynamics_rollout_metrics'].keys():
             return
         assert hasattr(self, 'tagslam_b_trajs'), f'Expected to have ' + \
             f'TagSLAM trajectories stored since {results.keys()=}.'
 
-        sub_results = results['dynamics_metrics']['against_tagslam']
+        ### Rollout metrics.
+        sub_results = results['dynamics_rollout_metrics']['against_tagslam']
 
         position_results = sub_results['position_error']
         for toss_key, subsub_results in position_results.items():
@@ -963,6 +1084,49 @@ class DynamicsPredictor:
             toss_num = int(toss_key.split('_')[1])
             over_traj = TrajectoryMetrics.adds_error(
                 self.tagslam_b_trajs[toss_num], self.predicted_trajs[toss_num],
+                traj_evaluator._get_aligned_true_cloud()
+            )
+            subsub_results['mean'] = over_traj.mean().item()
+            subsub_results['traj'] = over_traj.tolist()
+
+        ### Single-step metrics.
+        sub_results = results['dynamics_single_step_metrics']['against_tagslam']
+
+        position_results = sub_results['position_error']
+        for toss_key, subsub_results in position_results.items():
+            toss_num = int(toss_key.split('_')[1])
+            over_traj = TrajectoryMetrics.position_error(
+                self.single_step_tagslam_targets[toss_num],
+                self.single_step_tagslam_predictions[toss_num])
+            subsub_results['mean'] = over_traj.mean().item()
+            subsub_results['traj'] = over_traj.tolist()
+
+        rotation_error = sub_results['rotation_error']
+        for toss_key, subsub_results in rotation_error.items():
+            toss_num = int(toss_key.split('_')[1])
+            over_traj = TrajectoryMetrics.rotation_error(
+                self.single_step_tagslam_targets[toss_num],
+                self.single_step_tagslam_predictions[toss_num])
+            subsub_results['mean'] = over_traj.mean().item()
+            subsub_results['traj'] = over_traj.tolist()
+
+        add_error = sub_results['add_error']
+        for toss_key, subsub_results in add_error.items():
+            toss_num = int(toss_key.split('_')[1])
+            over_traj = TrajectoryMetrics.add_error(
+                self.single_step_tagslam_targets[toss_num],
+                self.single_step_tagslam_predictions[toss_num],
+                traj_evaluator._get_aligned_true_cloud()
+            )
+            subsub_results['mean'] = over_traj.mean().item()
+            subsub_results['traj'] = over_traj.tolist()
+
+        adds_error = sub_results['adds_error']
+        for toss_key, subsub_results in adds_error.items():
+            toss_num = int(toss_key.split('_')[1])
+            over_traj = TrajectoryMetrics.adds_error(
+                self.single_step_tagslam_targets[toss_num],
+                self.single_step_tagslam_predictions[toss_num],
                 traj_evaluator._get_aligned_true_cloud()
             )
             subsub_results['mean'] = over_traj.mean().item()
@@ -1175,6 +1339,7 @@ def main_command(vision_asset: str, bundlesdf_id: str, nerf_bundlesdf_id: str,
         dynamics_predictor = DynamicsPredictor(
             vision_asset, history, nerf_bundlesdf_id, bsdf_only)
         dynamics_predictor.generate_rollout_trajectories()
+        dynamics_predictor.generate_single_step_predictions()
         dynamics_predictor.save_predictions()
         dynamics_predictor.store_dynamics_metrics(results, traj_evaluator)
         if do_videos:
