@@ -617,8 +617,8 @@ class DynamicsPredictor:
             self.last_nerf_bsdf_id = None
 
         learned_params = self._look_up_latest_pll_results()
-        # learned_params.update(self._look_up_latest_bundlesdf_results())
-        # self.learned_params = learned_params
+        learned_params.update(self._look_up_latest_bundlesdf_results())
+        self.learned_params = learned_params
 
         self.eval_dir = file_utils.evaluation_subdir(
             dataset=self.vision_asset, cycle_iteration=self.last_bsdf_iteration,
@@ -661,6 +661,9 @@ class DynamicsPredictor:
 
     def _look_up_latest_bundlesdf_results(self):
         """Also stores self.nerf_results_dir."""
+        if self.pll_id is not None:
+            return {}
+
         self.nerf_results_dir = file_utils.bundlesdf_nerf_results_dir(
             dataset=self.vision_asset, cycle_iteration=self.last_bsdf_iteration,
             tracking_bundlesdf_id=self.last_tracking_bsdf_id,
