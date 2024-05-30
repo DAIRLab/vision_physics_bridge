@@ -729,8 +729,10 @@ class DynamicsPredictor:
         learned_params['I_yz'] = inertia_pi_cm[9].item()
 
         # =========== GEOMETRY: Extract the geometry from the obj file.
-        learned_params['pll_geometry'] = trimesh.load(
-            op.join(pll_results_dir, 'urdfs', 'test.obj'), force='mesh')
+        obj_path = op.join(pll_results_dir, 'urdfs', 'test.obj')
+        if not op.exists(obj_path):
+            obj_path = op.join(pll_results_dir, 'urdfs', 'test_best.obj')
+        learned_params['pll_geometry'] = trimesh.load(obj_path, force='mesh')
 
         return learned_params
 
