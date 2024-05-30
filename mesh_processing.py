@@ -3,6 +3,7 @@
 import click
 import numpy as np
 import open3d as o3d
+import os
 import os.path as op
 import pdb
 import trimesh
@@ -19,7 +20,8 @@ class MeshProcessor:
     """Mesh processing to align ground truth and learned meshes.  For shapes
     that are already relatively accurate, ICP works very well.
     
-    TODO:  Needs to be tested on partial/bad mesh estimates.
+    TODO:  Needs to be tested on partial/bad mesh estimates, shapes from PLL
+    only.
     """
     def __init__(self, vision_asset: str, tracking_bundlesdf_id: str,
                  nerf_bundlesdf_id: str, cycle_iteration: int):
@@ -36,6 +38,7 @@ class MeshProcessor:
 
         # Get the meshes.
         self._load_meshes()
+        self.did_alignment_to_bundlesdf = False
         
     def _load_meshes(self):
         true_obj_file = file_utils.object_scan_filepath(self.object)
@@ -93,8 +96,11 @@ class MeshProcessor:
         # Save the transformation matrix.
         print(f'Solved transformation matrix:\n{reg_p2p.transformation}')
         self.true_to_learned_transform = reg_p2p.transformation
-        np.savetxt(
-            op.join(save_dir, 'true_to_learned_tf.txt'), reg_p2p.transformation)
+        if save_dir is not None:
+            np.savetxt(
+                op.join(save_dir, 'true_to_learned_tf.txt'),
+                reg_p2p.transformation
+            )
 
         # Transform the true mesh's point cloud by the solved transform and view
         # the results.
@@ -116,13 +122,171 @@ class MeshProcessor:
                 o3d.geometry.Image((255 * np.asarray(image)).astype(np.uint8))
             )
             vis.destroy_window()
-            
+
         # Save the transformed mesh to file.
         self.true_mesh.transform(self.true_to_learned_transform)
-        o3d.io.write_triangle_mesh(
-            op.join(save_dir, obj_name), self.true_mesh)
+        self.did_alignment_to_bundlesdf = True
+        if save_dir is not None:
+            o3d.io.write_triangle_mesh(
+                op.join(save_dir, obj_name), self.true_mesh,
+                write_triangle_uvs=False
+            )
+            print(f'Saved ground truth mesh transformed to align with ' + \
+                f'BundleSDF mesh, as {obj_name} in {save_dir}.')
+
+            material_filepath = op.join(
+                save_dir, f'{obj_name.split(".")[0]}.mtl'
+            )
+            if op.exists(material_filepath):
+                os.system(f'rm {material_filepath}')
+
+
+class UnscaledMeshProcessor(MeshProcessor):
+    """Do the same thing as MeshProcessor but from filepaths."""
+    def __init__(self, object: str):
+        self.object = object
+        self._load_meshes()
+
+    def _load_meshes(self):
+        bundlesdf_obj_file = op.join(
+            file_utils.object_scan_dir(), 'from_bundlesdf',
+            f'{self.object}.obj'
+        )
+        self.bundlesdf_mesh = icp.load_mesh_from_obj(bundlesdf_obj_file)
+
+        wrong_scaling_obj_file = op.join(
+            file_utils.object_scan_dir(), 'wrong_scaling', f'{self.object}.obj')
+        self.wrong_scaling_mesh = icp.load_mesh_from_obj(wrong_scaling_obj_file)
+
+    def scale_and_align_wrong_to_bundlesdf(self, show=False):
+        def compute_scale_factor(mesh1, mesh2):
+            bbox1 = mesh1.get_axis_aligned_bounding_box()
+            bbox2 = mesh2.get_axis_aligned_bounding_box()
+
+            diagonal1 = np.linalg.norm(bbox1.get_max_bound() - \
+                                       bbox1.get_min_bound())
+            diagonal2 = np.linalg.norm(bbox2.get_max_bound() - \
+                                       bbox2.get_min_bound())
+
+            scale_factor = diagonal1 / diagonal2
+            return scale_factor
+
+        inspection_dir = op.join(
+            file_utils.object_scan_dir(), 'corrected_scaling')
+
+        last_inlier_rmse = 2.0
+        inlier_rmse = 1.0
+        round = 1
+        while last_inlier_rmse - inlier_rmse > 1e-4:
+            print(f'Round {round} Inlier RMSE: {inlier_rmse} (improvement ' + \
+                  f'by {last_inlier_rmse-inlier_rmse})')
+
+            # Show initial scaling/alignment.
+            if show:
+                bsdf_cloud = self.bundlesdf_mesh.sample_points_poisson_disk(2000)
+                wrong_cloud = self.wrong_scaling_mesh.sample_points_poisson_disk(2000)
+                o3d.visualization.draw_geometries(
+                    [bsdf_cloud, wrong_cloud],
+                    window_name=f'Before Scaling/ICP, {round=}'
+                )
+
+            # Save the before image.
+            if round==1:
+                bsdf_cloud = self.bundlesdf_mesh.sample_points_poisson_disk(2000)
+                wrong_cloud = self.wrong_scaling_mesh.sample_points_poisson_disk(2000)
+                vis = o3d.visualization.Visualizer()
+                vis.create_window(visible=False)
+                vis.add_geometry(wrong_cloud)
+                vis.add_geometry(bsdf_cloud)
+                vis.poll_events()
+                vis.update_renderer()
+                image = vis.capture_screen_float_buffer(do_render=True)
+                o3d.io.write_image(
+                    op.join(inspection_dir, f'{self.object}_before.png'),
+                    o3d.geometry.Image((255 * np.asarray(image)).astype(np.uint8))
+                )
+                vis.destroy_window()
+
+            # First deal with the fact that the mesh is improperly scaled.
+            scale_factor = compute_scale_factor(
+                self.bundlesdf_mesh, self.wrong_scaling_mesh)
+            self.wrong_scaling_mesh.scale(
+                scale_factor, center=self.wrong_scaling_mesh.get_center())
+
+            # Need to do ICP on 3D points instead of the mesh directly.
+            bsdf_cloud = self.bundlesdf_mesh.sample_points_poisson_disk(2000)
+            wrong_cloud = self.wrong_scaling_mesh.sample_points_poisson_disk(2000)
+
+            # Show initial alignment.
+            if show:
+                o3d.visualization.draw_geometries(
+                    [bsdf_cloud, wrong_cloud],
+                    window_name=f'Before ICP, {round=}'
+                )
+
+            # Coarse initial alignment to get the true mesh's cloud centroid to the
+            # same location as the learned mesh's cloud centroid.
+            initial_transformation = np.eye(4)
+            initial_transformation[:3, 3] = bsdf_cloud.get_center() - \
+                wrong_cloud.get_center()
+
+            # Apply ICP.
+            reg_p2p = o3d.pipelines.registration.registration_icp(
+                wrong_cloud, bsdf_cloud, ICP_THRESHOLD, initial_transformation,
+                o3d.pipelines.registration.TransformationEstimationPointToPoint(),
+                o3d.pipelines.registration.ICPConvergenceCriteria(max_iteration=2000)
+            )
+
+            # Save the transformation matrix.
+            self.wrong_to_bundlesdf_transform = reg_p2p.transformation
+
+            # Transform the wrong mesh's point cloud by the solved transform and
+            # view the results.
+            wrong_cloud.transform(reg_p2p.transformation)
+            if show:
+                o3d.visualization.draw_geometries(
+                    [wrong_cloud, bsdf_cloud],
+                    window_name=f'After ICP, {round=}'
+                )
+
+            # Transform the mesh.
+            self.wrong_scaling_mesh.transform(self.wrong_to_bundlesdf_transform)
+
+            round += 1
+            last_inlier_rmse = inlier_rmse
+            inlier_rmse = reg_p2p.inlier_rmse
+
+        # Save the after image.
+        vis = o3d.visualization.Visualizer()
+        vis.create_window(visible=False)
+        vis.add_geometry(wrong_cloud)
+        vis.add_geometry(bsdf_cloud)
+        vis.poll_events()
+        vis.update_renderer()
+        image = vis.capture_screen_float_buffer(do_render=True)
+        o3d.io.write_image(
+            op.join(inspection_dir, f'{self.object}_after.png'),
+            o3d.geometry.Image((255 * np.asarray(image)).astype(np.uint8))
+        )
+        vis.destroy_window()
+
+        print(f'Finished with {round-1} rounds with inlier RMSE ' + \
+              f'{inlier_rmse} (improvement by {last_inlier_rmse-inlier_rmse}).')
+
+        # Save the result.
+        corrected_filepath = op.join(
+            file_utils.object_scan_dir(), 'corrected_scaling',
+            f'{self.object}.obj'
+        )
+        o3d.io.write_triangle_mesh(corrected_filepath, self.wrong_scaling_mesh)
         print(f'Saved ground truth mesh transformed to align with ' + \
-              f'BundleSDF mesh, as {obj_name} in {save_dir}.')
+              f'BundleSDF mesh, as {self.object}.obj in corrected_scaling.')
+        material_filepath = op.join(
+            file_utils.object_scan_dir(), 'corrected_scaling',
+            f'{self.object}.mtl'
+        )
+        if op.exists(material_filepath):
+            os.system(f'rm {material_filepath}')
 
 
 #######################################################################
@@ -165,29 +329,16 @@ def main_command(vision_asset: str, bundlesdf_id: str, nerf_bundlesdf_id: str,
 
 
 if __name__ == '__main__':
+    # for object in ['bakingbox', 'gallon', 'greencan', 'crushedcan', 'stapler',
+    #                'styrofoam']:
+    # for object in ['gallon', 'crushedcan']:
+    #     mesh_processor = UnscaledMeshProcessor(object=object)
+    #     mesh_processor.scale_and_align_wrong_to_bundlesdf(show=True)
 
-    # Load a mesh.
-    # mesh_file = f'/home/bibit/vision/bundlenets/cnets-data-generation/assets/object_scans/oatly_top_low_res/mesh_lowpoly.obj'
-
-    # trimesh_obj = trimesh.load(mesh_file, force='mesh')
-
-    # # trimesh_obj.show()
-
-    # trimesh_obj.fill_holes()
-    # trimesh_obj.update_faces(trimesh_obj.nondegenerate_faces())
-    # trimesh_obj.update_faces(trimesh_obj.unique_faces())
-    # trimesh_obj.remove_infinite_values()
-    # trimesh_obj.remove_unreferenced_vertices()
-
-    # # Optionally, run additional repair steps to fix normals and winding
-    # trimesh_obj.fix_normals()
-    # trimesh.repair.fix_winding(trimesh_obj)
-
-    # trimesh_obj.show()
-
-    # repaired_mesh_file = mesh_file.replace('.obj', '_repaired.obj')
-    # trimesh_obj.export(repaired_mesh_file)
-
+    # Looks good but maybe axis of symmetry misalignments:  bakingbox, greencan
+    # Bad ones:  gallon (tried 00, no 01), crushedcan (01 better than 00)
+    # Mostly ok:  stapler
+    # Great:  styrofoam
 
 
     main_command()  # pylint: disable=no-value-for-parameter

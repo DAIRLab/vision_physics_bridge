@@ -149,7 +149,9 @@ def create_multibody_learnable_system(
         output_urdfs_dir = output_urdf_dir
     ).eval()
 
-def create_empty_results_dict(vision_asset: str, cycle_iteration: int) -> dict:
+def create_empty_results_dict(
+        vision_asset: str, cycle_iteration: int, last_run_was_bsdf: bool = True
+) -> dict:
     """Create an empty results dictionary for a given vision asset.  It contains
     the structure of the results yaml file, modified to only include metric keys
     for metrics relevant to the vision asset -- i.e. TagSLAM-related metrics
@@ -182,10 +184,15 @@ def create_empty_results_dict(vision_asset: str, cycle_iteration: int) -> dict:
         for category_key in ['dynamics_metrics', 'tracking_metrics']:
             del empty_results[category_key]['against_tagslam']
 
-    # Third modification:  Get rid of any dynamics predictions if the cycle
-    # iteration is 1.
-    if cycle_iteration <= 1:
+    # Third modification:  Get rid of any dynamics predictions if PLL has never
+    # been run.
+    if cycle_iteration <= 1 and last_run_was_bsdf:
         del empty_results['dynamics_metrics']
+
+    # Fourth modification:  Get rid of any tracking metrics if the last run was
+    # PLL instead of BundleSDF.
+    if not last_run_was_bsdf:
+        del empty_results['tracking_metrics']
 
     return empty_results
 
@@ -321,29 +328,52 @@ def get_pll_rollout_trajectory(
 class PredictionOverlayGenerator(OverlayVideoGenerator):
     """Make an overlay video showing the tracked BundleSDF poses and the
     dynamics predictions during the tosses."""
-    def __init__(self, vision_asset: str, tracking_bundlesdf_id: str,
-                 nerf_bundlesdf_id: str, cycle_iteration: int,
-                 prediction_tosses: list, bsdf_only: bool = False,
-                 remote: bool = False):
+    def __init__(self, vision_asset: str, history: dict, nerf_bundlesdf_id: str,
+                 bsdf_only: bool = False, remote: bool = False):
+        # Extract the relevant tracking, NeRF, and PLL IDs.
+        last_bsdf_iteration = 1
+        for cycle in history.keys():
+            cycle_num = cycle.split('_')[-1]
+            if int(cycle_num) > last_bsdf_iteration:
+                last_bsdf_iteration = int(cycle_num)
+        last_tracking_bsdf_id = history[
+            f'cycle_iteration_{last_bsdf_iteration}']['bundlesdf_id']
+        last_pll_id = history[
+            f'cycle_iteration_{last_bsdf_iteration}']['pll_id']
+
         super().__init__(
             vision_asset=vision_asset,
-            tracking_bundlesdf_id=tracking_bundlesdf_id,
+            tracking_bundlesdf_id=last_tracking_bsdf_id,
             nerf_bundlesdf_id=nerf_bundlesdf_id,
-            cycle_iteration=cycle_iteration,
+            cycle_iteration=last_bsdf_iteration,
             bsdf_only=bsdf_only, remote=remote
         )
 
         # Overwrite the output file so it gets written to evaluation directory.
+        if last_pll_id is not None:
+            last_tracking_bsdf_id = None
+            nerf_bundlesdf_id = None
+        else:
+            last_tracking_bsdf_id = self.tracking_bundlesdf_id
+            nerf_bundlesdf_id = self.nerf_bundlesdf_id
         self.output_file = file_utils.evaluation_toss_prediction_video_filepath(
-            dataset=vision_asset, tracking_bundlesdf_id=tracking_bundlesdf_id,
-            nerf_bundlesdf_id=nerf_bundlesdf_id, cycle_iteration=cycle_iteration
+            dataset=vision_asset, tracking_bundlesdf_id=last_tracking_bsdf_id,
+            nerf_bundlesdf_id=nerf_bundlesdf_id, pll_id=last_pll_id,
+            cycle_iteration=last_bsdf_iteration
         )
+
+        # Overwrite the mesh file if last run was PLL.
+        if last_pll_id is not None:
+            pll_output_dir = file_utils.contactnets_output_dir(
+                self.vision_asset, self.cycle_iteration, last_pll_id)
+            self.mesh_file = op.join(pll_output_dir, 'urdfs', 'test.obj')
 
         # Get the path to the evaluation directory.
         self.evaluation_dir = file_utils.evaluation_subdir(
             dataset=self.vision_asset,
-            tracking_bundlesdf_id=self.tracking_bundlesdf_id,
-            nerf_bundlesdf_id=self.nerf_bundlesdf_id,
+            tracking_bundlesdf_id=last_tracking_bsdf_id,
+            nerf_bundlesdf_id=nerf_bundlesdf_id,
+            pll_id=last_pll_id,
             cycle_iteration=self.cycle_iteration
         )
 

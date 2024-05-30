@@ -420,33 +420,44 @@ def evaluation_dir() -> str:
     return assure_created(op.join(DATA_GEN_DIR, 'evaluation'))
 
 def evaluation_subdir(
-        dataset: str, tracking_bundlesdf_id: str, nerf_bundlesdf_id: str,
-        cycle_iteration: int) -> str:
+        dataset: str, cycle_iteration: int, tracking_bundlesdf_id: str = None,
+        nerf_bundlesdf_id: str = None, pll_id: str = None) -> str:
     """Subdirectory for a particular experiment's evaluation."""
     eval_dir = evaluation_dir()
 
-    if tracking_bundlesdf_id.startswith('bundlesdf_id_'):
-        tracking_bundlesdf_id = tracking_bundlesdf_id[13:]
-    if nerf_bundlesdf_id.startswith('bundlesdf_id_'):
-        nerf_bundlesdf_id = nerf_bundlesdf_id[13:]
+    if tracking_bundlesdf_id is not None:
+        assert pll_id is None and nerf_bundlesdf_id is not None, \
+            f'Provided {tracking_bundlesdf_id=} but also got ' + \
+            f'{pll_id=} and {nerf_bundlesdf_id=}.'
+        if tracking_bundlesdf_id.startswith('bundlesdf_id_'):
+            tracking_bundlesdf_id = tracking_bundlesdf_id[13:]
+        if nerf_bundlesdf_id.startswith('bundlesdf_id_'):
+            nerf_bundlesdf_id = nerf_bundlesdf_id[13:]
 
-    # now = datetime.datetime.now()
-    # date_str = now.strftime('%m%d')
-    # subdir = \
-    #     f'{date_str}_{dataset}_{tracking_bundlesdf_id}_' + \
-    #         f'{nerf_bundlesdf_id}_{cycle_iteration}'
-    subdir = \
-        f'{dataset}_{tracking_bundlesdf_id}_{nerf_bundlesdf_id}_' + \
-        f'{cycle_iteration}'
+        subdir = \
+            f'{dataset}_{tracking_bundlesdf_id}_{nerf_bundlesdf_id}_' + \
+            f'{cycle_iteration}'
+
+    else:
+        assert pll_id is not None and nerf_bundlesdf_id is None, \
+            f'Provided {pll_id=} but also got {tracking_bundlesdf_id=} and ' + \
+            f'{nerf_bundlesdf_id=}.'
+        if pll_id.startswith('pll_id_'):
+            pll_id = pll_id[7:]
+
+        subdir = f'{dataset}_pll_{pll_id}_{cycle_iteration}'
 
     return assure_created(op.join(eval_dir, subdir))
 
+# TODO update references
 def evaluation_toss_prediction_video_filepath(
-        dataset: str, tracking_bundlesdf_id: str, nerf_bundlesdf_id: str,
-        cycle_iteration: int) -> str:
+        dataset: str, cycle_iteration: int, tracking_bundlesdf_id: str = None,
+        nerf_bundlesdf_id: str = None, pll_id: str = None) -> str:
     """Overlay video filename for a particular toss prediction."""
     run_eval_dir = evaluation_subdir(
-        dataset, tracking_bundlesdf_id, nerf_bundlesdf_id, cycle_iteration)
+        dataset, cycle_iteration, tracking_bundlesdf_id=tracking_bundlesdf_id,
+        nerf_bundlesdf_id=nerf_bundlesdf_id, pll_id=pll_id
+    )
     return op.join(run_eval_dir, f'predicted_tosses.mp4')
 
 def object_scan_dir() -> str:

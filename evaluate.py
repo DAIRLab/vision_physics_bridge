@@ -22,7 +22,7 @@ INERTIA_THETA_KEY = 'multibody_terms.lagrangian_terms.inertial_parameters'
 FRICTION_KEY = 'multibody_terms.contact_terms.friction_params'
 
 
-def traverse_run_history(
+def traverse_run_history_from_bsdf(
         vision_asset: str, bundlesdf_id: str, cycle_iteration: int) -> dict:
     """Return a dictionary of of the run history of a given run of BundleSDF.
     The dictionary will initially have keys of cycle_iteration_{i} for the given
@@ -68,7 +68,7 @@ def traverse_run_history(
         vision_asset, cycle_iteration=cycle_iteration-1, pll_id=pll_id)
     former_bundlesdf_id = file_utils.load_bundlesdf_id_from_pll_json(
         pll_output_dir)
-    former_history_dict = traverse_run_history(
+    former_history_dict = traverse_run_history_from_bsdf(
         vision_asset, former_bundlesdf_id, cycle_iteration-1)
 
     # Take care to update the history dictionary.
@@ -80,6 +80,31 @@ def traverse_run_history(
                 f'Found a BundleSDF ID for {cycle_key=} in {vision_asset=} ' + \
                 f'with {cycle_iteration=}.'
             history_dict[cycle_key]['bundlesdf_id'] = cycle_info['bundlesdf_id']
+
+    return history_dict
+
+def traverse_run_history_from_pll(
+        vision_asset: str, pll_id: str, cycle_iteration: int) -> dict:
+    """From a PLL ID, create run history dictionary with same format as from
+    traverse_run_history_from_bsdf.  The highest cycle iteration of PLL will
+    have the provided PLL ID."""
+    # Get the BundleSDF ID associated with the PLL run.
+    pll_output_dir = file_utils.contactnets_output_dir(
+        vision_asset, cycle_iteration=cycle_iteration, pll_id=pll_id)
+    bundlesdf_id = file_utils.load_bundlesdf_id_from_pll_json(
+        pll_output_dir)
+
+    # If at lowest cycle iteration, history only includes the BundleSDF ID used
+    # to provide PLL with trajectories.
+    if cycle_iteration == 1:
+        history_dict = {f'cycle_iteration_{cycle_iteration}': {
+            'bundlesdf_id': bundlesdf_id, 'pll_id': pll_id}}
+
+    # Otherwise, use the BundleSDF ID to traverse lower.
+    else:
+        history_dict = traverse_run_history_from_bsdf(
+            vision_asset, bundlesdf_id, cycle_iteration)
+        history_dict[f'cycle_iteration_{cycle_iteration}']['pll_id'] = pll_id
 
     return history_dict
 
@@ -114,10 +139,17 @@ class TrajectoryPerformanceEvaluator:
         self.history = history
         self.bsdf_only = bsdf_only
 
+        self.pll_id = history[
+            f'cycle_iteration_{last_bsdf_iteration}']['pll_id']
+        if self.pll_id is not None:
+            self.pll_last_tracking_bsdf_id = self.last_tracking_bsdf_id
+            self.last_tracking_bsdf_id = None
+            self.nerf_bundlesdf_id = None
+
         self.eval_dir = file_utils.evaluation_subdir(
             dataset=self.vision_asset, cycle_iteration=self.last_bsdf_iteration,
             tracking_bundlesdf_id=self.last_tracking_bsdf_id,
-            nerf_bundlesdf_id=self.nerf_bundlesdf_id
+            nerf_bundlesdf_id=self.nerf_bundlesdf_id, pll_id=self.pll_id
         )
 
     def get_tracking_trajectories(self):
@@ -226,7 +258,8 @@ class TrajectoryPerformanceEvaluator:
                 #     traj_conv.bundlesdf_t_toss_processed_states
 
     def _get_learned_pll_system(self):
-        """Get a PLL system with the learned parameters, including geometry."""
+        """Get a PLL system with the learned parameters, including geometry from
+        BundleSDF."""
         if not hasattr(self, 'learned_pll_system'):
             # Create the learned system.
             dynamics_predictor = DynamicsPredictor(
@@ -245,10 +278,17 @@ class TrajectoryPerformanceEvaluator:
     def _write_aligned_true_geometry_obj(self, obj_name: str):
         """Use the MeshProcessor class to align the ground truth mesh to the
         BundleSDF-generated mesh."""
+        if self.pll_id is None:
+            tracking_bundlesdf_id = self.last_tracking_bsdf_id
+            nerf_bundlesdf_id = self.nerf_bundlesdf_id
+        else:
+            tracking_bundlesdf_id = self.pll_last_tracking_bsdf_id
+            nerf_bundlesdf_id = self.pll_last_tracking_bsdf_id
+
         mesh_processor = mesh_processing.MeshProcessor(
             vision_asset=self.vision_asset,
-            tracking_bundlesdf_id=self.last_tracking_bsdf_id,
-            nerf_bundlesdf_id=self.nerf_bundlesdf_id,
+            tracking_bundlesdf_id=tracking_bundlesdf_id,
+            nerf_bundlesdf_id=nerf_bundlesdf_id,
             cycle_iteration=self.last_bsdf_iteration
         )
         mesh_processor.align_true_to_learned_mesh_with_icp(
@@ -569,20 +609,32 @@ class DynamicsPredictor:
             f'cycle_iteration_{last_bsdf_iteration}']['bundlesdf_id']
         self.last_nerf_bsdf_id = nerf_bundlesdf_id
 
-        learned_params = self._look_up_latest_pll_results()
-        learned_params.update(self._look_up_latest_bundlesdf_results())
+        self.pll_id = history[
+            f'cycle_iteration_{last_bsdf_iteration}']['pll_id']
+        if self.pll_id is not None:
+            self.pll_last_tracking_bsdf_id = self.last_tracking_bsdf_id
+            self.last_tracking_bsdf_id = None
+            self.last_nerf_bsdf_id = None
 
-        self.learned_params = learned_params
+        learned_params = self._look_up_latest_pll_results()
+        # learned_params.update(self._look_up_latest_bundlesdf_results())
+        # self.learned_params = learned_params
 
         self.eval_dir = file_utils.evaluation_subdir(
             dataset=self.vision_asset, cycle_iteration=self.last_bsdf_iteration,
             tracking_bundlesdf_id=self.last_tracking_bsdf_id,
-            nerf_bundlesdf_id=self.last_nerf_bsdf_id
+            nerf_bundlesdf_id=self.last_nerf_bsdf_id, pll_id=self.pll_id
         )
 
     def _look_up_latest_pll_results(self):
         """Also stores self.pll_results_dir."""
         if self.last_bsdf_iteration == 1:
+            self.pll_results_dir = file_utils.contactnets_output_dir(
+                dataset=self.vision_asset,
+                cycle_iteration=self.last_bsdf_iteration,
+                pll_id=self.pll_id
+            )
+
             print(f'No prior PLL results to look up for {self.vision_asset=}' +\
                   f' with {self.history=}.')
             return {}
@@ -684,8 +736,9 @@ class DynamicsPredictor:
 
     def _create_pll_sim_system(self):
         """Create a PLL MultibodyLearnableSystem, which can be simulated."""
-        # First create a URDF.  This should be the same as the last PLL URDF but
-        # with the geometry replaced by the new BSDF geometry.
+        # First create a URDF.  This should be the same as the last PLL URDF,
+        # possibly with the geometry replaced by the new BSDF geometry if the
+        # last run was BundleSDF and not PLL.
         if self.last_bsdf_iteration > 1:
             old_urdf_path = op.join(
                 self.pll_results_dir, 'urdfs', 'with_bundlesdf_mesh.urdf')
@@ -695,12 +748,17 @@ class DynamicsPredictor:
         new_urdf_path = op.join(self.eval_dir, 'bsdf_mesh_pll_params.urdf')
         os.system(f'cp {old_urdf_path} {new_urdf_path}')
 
-        old_obj_path = op.join(self.nerf_results_dir, 'textured_mesh.obj')
-        new_obj_path = op.join(self.eval_dir, 'bsdf_mesh.obj')
+        if self.pll_id is None:
+            old_obj_path = op.join(self.nerf_results_dir, 'textured_mesh.obj')
+            new_mesh_name = 'bsdf_mesh.obj'
+        else:
+            old_obj_path = op.join(self.pll_results_dir, 'urdfs', 'test.obj')
+            new_mesh_name = 'pll_mesh.obj'
+        new_obj_path = op.join(self.eval_dir, new_mesh_name)
         os.system(f'cp {old_obj_path} {new_obj_path}')
 
         # Overwrite the geometry in the URDF to refer to the new obj.
-        eval_utils.overwrite_mesh_name_in_urdf(new_urdf_path, 'bsdf_mesh.obj')
+        eval_utils.overwrite_mesh_name_in_urdf(new_urdf_path, new_mesh_name)
         print(f'Wrote URDF to {new_urdf_path}')
 
         # Create the system.
@@ -716,44 +774,50 @@ class DynamicsPredictor:
         self._create_pll_sim_system()
 
         # Get the BundleSDF trajectories for each toss.
+        if self.pll_id is not None:
+            last_bsdf_id = self.pll_last_tracking_bsdf_id
+        else:
+            last_bsdf_id = self.last_tracking_bsdf_id
         self.bundlesdf_trajs = eval_utils.get_bundlesdf_trajectories_pll_format(
-            self.vision_asset, self.last_bsdf_iteration,
-            self.last_tracking_bsdf_id)
+            self.vision_asset, cycle_iteration=self.last_bsdf_iteration,
+            bundlesdf_id=last_bsdf_id
+        )
 
         # Get ground truth trajectories from TagSLAM.
         tagslam_trajs = eval_utils.get_pll_tagslam_trajectories_pll_format(
             object=self.object)
 
-        # Convert the TagSLAM trajectories to be represented with respect to
-        # the BundleSDF body origin.
-        tagslam_trajs_of_b_origin = {}
-        for toss_key, tagslam_traj in tagslam_trajs.items():
-            # Get synchronized BundleSDF and TagSLAM poses.
-            if toss_key in self.bundlesdf_trajs.keys():
-                print(f'Can synchronize toss {toss_key} with BundleSDF poses.')
-                b_mat = math_utils.pll_format_to_trans_mat(
-                    self.bundlesdf_trajs[toss_key][0])
-                t_mat = math_utils.pll_format_to_trans_mat(tagslam_traj[0])
+        if tagslam_trajs is not None:
+            # Convert the TagSLAM trajectories to be represented with respect to
+            # the BundleSDF body origin.
+            tagslam_trajs_of_b_origin = {}
+            for toss_key, tagslam_traj in tagslam_trajs.items():
+                # Get synchronized BundleSDF and TagSLAM poses.
+                if toss_key in self.bundlesdf_trajs.keys():
+                    print(f'Can synchronize toss {toss_key} with BundleSDF.')
+                    b_mat = math_utils.pll_format_to_trans_mat(
+                        self.bundlesdf_trajs[toss_key][0])
+                    t_mat = math_utils.pll_format_to_trans_mat(tagslam_traj[0])
 
-            else:
-                print(f'Need to synchronize at beginning for toss {toss_key}.')
-                b_mat, t_mat = \
-                    eval_utils.get_synced_bsdf_tagslam_toss_poses(
-                        vision_asset=self.vision_asset,
-                        bundlesdf_id=self.last_tracking_bsdf_id,
-                        cycle_iteration=self.last_bsdf_iteration,
-                        desired_toss_num=toss_key
+                else:
+                    print(f'Need to synchronize at start for toss {toss_key}.')
+                    b_mat, t_mat = \
+                        eval_utils.get_synced_bsdf_tagslam_toss_poses(
+                            vision_asset=self.vision_asset,
+                            bundlesdf_id=last_bsdf_id,
+                            cycle_iteration=self.last_bsdf_iteration,
+                            desired_toss_num=toss_key
+                        )
+
+                # Do the conversion.
+                tagslam_trajs_of_b_origin[toss_key] = \
+                    math_utils.transform_t_origin_to_b_origin_pll_format(
+                        full_tagslam_trajectory=tagslam_traj,
+                        synced_bsdf_pose=b_mat,
+                        synced_tagslam_pose=t_mat
                     )
 
-            # Do the conversion.
-            tagslam_trajs_of_b_origin[toss_key] = \
-                math_utils.transform_t_origin_to_b_origin_pll_format(
-                    full_tagslam_trajectory=tagslam_traj,
-                    synced_bsdf_pose=b_mat,
-                    synced_tagslam_pose=t_mat
-                )
-
-        self.tagslam_b_trajs = tagslam_trajs_of_b_origin
+            self.tagslam_b_trajs = tagslam_trajs_of_b_origin
 
         # Get the predictions.
         pred_trajs_of_b_origin = {}
@@ -794,13 +858,10 @@ class DynamicsPredictor:
                 print(f'\t{filename}')
 
     def make_prediction_video(self):
-        prediction_tosses = [i for i in range(self.start_toss, self.end_toss+1)]
         prediction_overlay = eval_utils.PredictionOverlayGenerator(
             vision_asset=self.vision_asset,
-            tracking_bundlesdf_id=self.last_tracking_bsdf_id,
-            nerf_bundlesdf_id=self.last_nerf_bsdf_id,
-            cycle_iteration=self.last_bsdf_iteration,
-            prediction_tosses=prediction_tosses
+            history=self.history,
+            nerf_bundlesdf_id=self.last_nerf_bsdf_id
         )
         prediction_overlay.make_overlay_video()
 
@@ -1022,6 +1083,11 @@ class TrajectoryMetrics:
               type=str,
               default=None,
               help="what BundleSDF run ID associated with NeRF outputs to use.")
+@click.option('--pll-id',
+              type=str,
+              default=None,
+              help="what PLL run ID to look up -- only include if want to " + \
+                "evaluate PLL-only baseline.")
 @click.option('--cycle-iteration',
               type=int,
               default=1,
@@ -1033,18 +1099,39 @@ class TrajectoryMetrics:
               help="whether to generate videos.")
 
 def main_command(vision_asset: str, bundlesdf_id: str, nerf_bundlesdf_id: str,
-                 cycle_iteration: int, do_videos: bool):
+                 pll_id: str, cycle_iteration: int, do_videos: bool):
     assert cycle_iteration > 0, f'Invalid {cycle_iteration=}.'
     assert '_' in vision_asset, f'Invalid {vision_asset=}.'
 
-    # Decode the BundleSDF run ID.
-    tracking_bundlesdf_id = bundlesdf_id
-    if tracking_bundlesdf_id[:13] != 'bundlesdf_id_':
-        tracking_bundlesdf_id = f'bundlesdf_id_{tracking_bundlesdf_id}'
-    if nerf_bundlesdf_id is None:
-        nerf_bundlesdf_id = tracking_bundlesdf_id
-    elif nerf_bundlesdf_id[:13] != 'bundlesdf_id_':
-        nerf_bundlesdf_id = f'bundlesdf_id_{nerf_bundlesdf_id}'
+    if pll_id is None:
+        assert bundlesdf_id is not None, f'Need {bundlesdf_id=} if not ' + \
+            f'{pll_id=}.'
+
+        # Decode the BundleSDF run ID.
+        tracking_bundlesdf_id = bundlesdf_id
+        if tracking_bundlesdf_id[:13] != 'bundlesdf_id_':
+            tracking_bundlesdf_id = f'bundlesdf_id_{tracking_bundlesdf_id}'
+        if nerf_bundlesdf_id is None:
+            nerf_bundlesdf_id = tracking_bundlesdf_id
+        elif nerf_bundlesdf_id[:13] != 'bundlesdf_id_':
+            nerf_bundlesdf_id = f'bundlesdf_id_{nerf_bundlesdf_id}'
+
+        # Obtain the run history.
+        history = traverse_run_history_from_bsdf(
+            vision_asset, tracking_bundlesdf_id, cycle_iteration)
+
+    else:
+        assert bundlesdf_id is None and nerf_bundlesdf_id is None, f'Can ' + \
+            f'only have {pll_id=} if not {bundlesdf_id=} or ' + \
+            f'{nerf_bundlesdf_id=}.'
+
+        # Decode the PLL run ID.
+        if pll_id[:7] != 'pll_id_':
+            pll_id = f'pll_id_{pll_id}'
+
+        # Obtain the run history.
+        history = traverse_run_history_from_pll(
+            vision_asset, pll_id, cycle_iteration)
 
     # Automatically detect if BundleSDF-only is necessary based on if the object
     # is a tagless one.
@@ -1056,28 +1143,30 @@ def main_command(vision_asset: str, bundlesdf_id: str, nerf_bundlesdf_id: str,
     else:
         print(f'Using TagSLAM and BundleSDF: {bsdf_only=}')
 
-    # Obtain the run history.
-    history = traverse_run_history(
-        vision_asset, tracking_bundlesdf_id, cycle_iteration)
+
     print(f'Found run history:')
     for key, val in history.items():
         print(f'\t{key} : {val}')
 
     # Create an empty results dictionary to be stored as a yaml file.
+    last_run_was_bsdf = True if pll_id is None else False
     results = eval_utils.create_empty_results_dict(
-        vision_asset, cycle_iteration)
+        vision_asset, cycle_iteration, last_run_was_bsdf=last_run_was_bsdf)
     results['_overview']['vision_asset'] = vision_asset
     results['_overview']['history'] = history
     results['_overview']['nerf_bundlesdf_id'] = nerf_bundlesdf_id
 
     ### Pose estimation.
+    # Compute tracking metrics if last run was BundleSDF (so PLL ID is None).
     traj_evaluator = TrajectoryPerformanceEvaluator(
         vision_asset, history, nerf_bundlesdf_id, bsdf_only)
     traj_evaluator.get_tracking_trajectories()
-    traj_evaluator.store_tracking_metrics(results)
+    if pll_id is None:
+        traj_evaluator.store_tracking_metrics(results)
 
     ### Dynamics predictions.
-    if cycle_iteration > 1:
+    # Compute dynamics metrics if last run was PLL or PLL was never run.
+    if pll_id is not None or cycle_iteration > 1:
         dynamics_predictor = DynamicsPredictor(
             vision_asset, history, nerf_bundlesdf_id, bsdf_only)
         dynamics_predictor.generate_rollout_trajectories()
