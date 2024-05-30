@@ -127,7 +127,8 @@ def overwrite_mesh_name_in_urdf(urdf_path: str, new_obj_name: str) -> None:
         with open(urdf_path, 'r') as read_file:
             line = read_file.read(
                 ).replace('"test.obj"', f'"{new_obj_name}"'
-                ).replace('"bundlesdf_mesh.obj"', f'"{new_obj_name}"')
+                ).replace('"bundlesdf_mesh.obj"', f'"{new_obj_name}"'
+                ).replace('"test_best.obj"', f'"{new_obj_name}"')
             write_file.write(line)
 
     os.system(f'mv {urdf_path}.tmp {urdf_path}')
