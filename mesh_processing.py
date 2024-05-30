@@ -15,6 +15,19 @@ import file_utils, icp
 ICP_THRESHOLD = 0.02    # Maximum distance threshold for a point to be
                         # considered during alignment.
 
+# Mesh scaling
+CAD_MM = 'mm_in_cad'
+REAL_INCHES = 'inches_in_real'
+SCALING = {
+    'bakingbox':    {CAD_MM: 907.717, REAL_INCHES: 9 + 9/16},
+    'cardboard':    {CAD_MM: 832.803, REAL_INCHES: 7 + 1/16},
+    'crushedcan':   {CAD_MM: 736.847, REAL_INCHES: 4 + 9/16},
+    'gallon':       {CAD_MM: 1028.132, REAL_INCHES: 9 + 13/16},
+    'greencan':     {CAD_MM: 470.909, REAL_INCHES: 4 + 11/16},
+    'stapler':      {CAD_MM: 407.748, REAL_INCHES: 3 + 1/8},
+    'styrofoam':    {CAD_MM: 952.224, REAL_INCHES: 9 + 7/32}
+}
+
 
 class MeshProcessor:
     """Mesh processing to align ground truth and learned meshes.  For shapes
@@ -172,7 +185,7 @@ class UnscaledMeshProcessor(MeshProcessor):
             return scale_factor
 
         inspection_dir = op.join(
-            file_utils.object_scan_dir(), 'corrected_scaling')
+            file_utils.object_scan_dir(), 'ICP_scaling')
 
         last_inlier_rmse = 2.0
         inlier_rmse = 1.0
@@ -275,18 +288,95 @@ class UnscaledMeshProcessor(MeshProcessor):
 
         # Save the result.
         corrected_filepath = op.join(
-            file_utils.object_scan_dir(), 'corrected_scaling',
+            file_utils.object_scan_dir(), 'ICP_scaling',
             f'{self.object}.obj'
         )
         o3d.io.write_triangle_mesh(corrected_filepath, self.wrong_scaling_mesh)
         print(f'Saved ground truth mesh transformed to align with ' + \
-              f'BundleSDF mesh, as {self.object}.obj in corrected_scaling.')
+              f'BundleSDF mesh, as {self.object}.obj in ICP_scaling.')
         material_filepath = op.join(
-            file_utils.object_scan_dir(), 'corrected_scaling',
+            file_utils.object_scan_dir(), 'ICP_scaling',
             f'{self.object}.mtl'
         )
         if op.exists(material_filepath):
             os.system(f'rm {material_filepath}')
+
+
+class MeshScalingProcessor(UnscaledMeshProcessor):
+    def __init__(self, object: str):
+        super().__init__(object)
+
+    def scale_manually(self, show=True):
+        scalings = SCALING[self.object]
+        true_length_meters = scalings[REAL_INCHES] * 2.54 / 100
+        current_length_meters = scalings[CAD_MM] * 0.001
+
+        scale_factor = true_length_meters / current_length_meters
+
+        inspection_dir = op.join(
+            file_utils.object_scan_dir(), 'CAD_scaling')
+
+        # Show initial scaling.
+        bsdf_cloud = self.bundlesdf_mesh.sample_points_poisson_disk(2000)
+        wrong_cloud = self.wrong_scaling_mesh.sample_points_poisson_disk(2000)
+        if show:
+            o3d.visualization.draw_geometries(
+                [bsdf_cloud, wrong_cloud], window_name='Before Scaling')
+
+        # Save the before image.
+        vis = o3d.visualization.Visualizer()
+        vis.create_window(visible=False)
+        vis.add_geometry(wrong_cloud)
+        vis.add_geometry(bsdf_cloud)
+        vis.poll_events()
+        vis.update_renderer()
+        image = vis.capture_screen_float_buffer(do_render=True)
+        o3d.io.write_image(
+            op.join(inspection_dir, f'{self.object}_before.png'),
+            o3d.geometry.Image((255 * np.asarray(image)).astype(np.uint8))
+        )
+        vis.destroy_window()
+
+        # Apply the scale factor.
+        self.wrong_scaling_mesh.scale(
+            scale_factor, center=self.wrong_scaling_mesh.get_center())
+
+        # Visualize the result.
+        bsdf_cloud = self.bundlesdf_mesh.sample_points_poisson_disk(2000)
+        wrong_cloud = self.wrong_scaling_mesh.sample_points_poisson_disk(2000)
+        if show:
+            o3d.visualization.draw_geometries(
+                [bsdf_cloud, wrong_cloud], window_name='After Scaling')
+
+        # Save the after image.
+        vis = o3d.visualization.Visualizer()
+        vis.create_window(visible=False)
+        vis.add_geometry(wrong_cloud)
+        vis.add_geometry(bsdf_cloud)
+        vis.poll_events()
+        vis.update_renderer()
+        image = vis.capture_screen_float_buffer(do_render=True)
+        o3d.io.write_image(
+            op.join(inspection_dir, f'{self.object}_after.png'),
+            o3d.geometry.Image((255 * np.asarray(image)).astype(np.uint8))
+        )
+        vis.destroy_window()
+
+        # Save the result.
+        corrected_filepath = op.join(
+            file_utils.object_scan_dir(), 'CAD_scaling',
+            f'{self.object}.obj'
+        )
+        o3d.io.write_triangle_mesh(corrected_filepath, self.wrong_scaling_mesh)
+        print(f'Saved ground truth mesh scaled to match CAD as ' + \
+              f'{self.object}.obj in CAD_scaling.')
+        material_filepath = op.join(
+            file_utils.object_scan_dir(), 'CAD_scaling',
+            f'{self.object}.mtl'
+        )
+        if op.exists(material_filepath):
+            os.system(f'rm {material_filepath}')
+
 
 
 #######################################################################
@@ -331,7 +421,7 @@ def main_command(vision_asset: str, bundlesdf_id: str, nerf_bundlesdf_id: str,
 if __name__ == '__main__':
     # for object in ['bakingbox', 'gallon', 'greencan', 'crushedcan', 'stapler',
     #                'styrofoam']:
-    # for object in ['gallon', 'crushedcan']:
+    # for object in ['cardboard']:
     #     mesh_processor = UnscaledMeshProcessor(object=object)
     #     mesh_processor.scale_and_align_wrong_to_bundlesdf(show=True)
 
@@ -339,6 +429,10 @@ if __name__ == '__main__':
     # Bad ones:  gallon (tried 00, no 01), crushedcan (01 better than 00)
     # Mostly ok:  stapler
     # Great:  styrofoam
+
+    # for object in SCALING.keys():
+    #     mesh_processor = MeshScalingProcessor(object=object)
+    #     mesh_processor.scale_manually(show=True)
 
 
     main_command()  # pylint: disable=no-value-for-parameter
