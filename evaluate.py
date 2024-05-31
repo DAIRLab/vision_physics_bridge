@@ -1370,9 +1370,14 @@ class TrajectoryMetrics:
               type=bool,
               default=False,
               help="whether to generate videos.")
+@click.option('--overwrite',
+              type=str,
+              default='none',
+              help="whether to overwrite or keep previously generated results")
 
 def main_command(vision_asset: str, bundlesdf_id: str, nerf_bundlesdf_id: str,
-                 pll_id: str, cycle_iteration: int, do_videos: bool):
+                 pll_id: str, cycle_iteration: int, do_videos: bool,
+                 overwrite: str):
     assert cycle_iteration > 0, f'Invalid {cycle_iteration=}.'
     assert '_' in vision_asset, f'Invalid {vision_asset=}.'
 
@@ -1410,6 +1415,42 @@ def main_command(vision_asset: str, bundlesdf_id: str, nerf_bundlesdf_id: str,
     for key, val in history.items():
         print(f'\t{key} : {val}')
 
+    # Check if results already exist.
+    tracking_only = False
+    eval_dir = file_utils.evaluation_subdir(
+        dataset=vision_asset, cycle_iteration=cycle_iteration,
+        tracking_bundlesdf_id=bundlesdf_id,
+        nerf_bundlesdf_id=nerf_bundlesdf_id, pll_id=pll_id
+    )
+    if op.exists(op.join(eval_dir, 'results.yaml')):
+        if overwrite == 'none':
+            print(f'Found results.yaml in {eval_dir} -- skipping.  Use ' + \
+                  f'--overwrite to overwrite next time if desired.')
+            exit()
+        elif overwrite == 'all':
+            print(f'Overwriting results in {eval_dir}.')
+        elif overwrite == 'tracking':
+            print(f'Overwriting only tracking results in {eval_dir}.')
+            tracking_only = True
+        else:
+            raise ValueError(f'Invalid {overwrite=}.  Choose none, all, or ' + \
+                'tracking.')
+
+    # Create an empty results dictionary to be stored as a yaml file.
+    last_run_was_bsdf = True if pll_id is None else False
+    results = eval_utils.create_empty_results_dict(
+        vision_asset, cycle_iteration, last_run_was_bsdf=last_run_was_bsdf)
+    results['_overview']['vision_asset'] = vision_asset
+    results['_overview']['history'] = history
+    results['_overview']['nerf_bundlesdf_id'] = nerf_bundlesdf_id
+
+    # Respect the previously generated other results.
+    if tracking_only:
+        old_results = file_utils.load_results_yaml_in_subdir(
+            op.basename(eval_dir))
+        old_results['tracking_metrics'] = results['tracking_metrics']
+        results = old_results
+
     # Automatically detect if BundleSDF-only is necessary based on if the object
     # is a tagless one.
     bsdf_only = False
@@ -1419,14 +1460,6 @@ def main_command(vision_asset: str, bundlesdf_id: str, nerf_bundlesdf_id: str,
         print(f'Automatically setting {bsdf_only=} for tagless {object=}.')
     else:
         print(f'Using TagSLAM and BundleSDF: {bsdf_only=}')
-
-    # Create an empty results dictionary to be stored as a yaml file.
-    last_run_was_bsdf = True if pll_id is None else False
-    results = eval_utils.create_empty_results_dict(
-        vision_asset, cycle_iteration, last_run_was_bsdf=last_run_was_bsdf)
-    results['_overview']['vision_asset'] = vision_asset
-    results['_overview']['history'] = history
-    results['_overview']['nerf_bundlesdf_id'] = nerf_bundlesdf_id
 
     ### Pose estimation.
     # Compute tracking metrics if last run was BundleSDF (so PLL ID is None).
@@ -1438,7 +1471,7 @@ def main_command(vision_asset: str, bundlesdf_id: str, nerf_bundlesdf_id: str,
 
     ### Dynamics predictions.
     # Compute dynamics metrics if last run was PLL or PLL was ever run.
-    if pll_id is not None or cycle_iteration > 1:
+    if (pll_id is not None or cycle_iteration > 1) and not tracking_only:
         dynamics_predictor = DynamicsPredictor(
             vision_asset, history, nerf_bundlesdf_id, bsdf_only)
         dynamics_predictor.generate_rollout_trajectories()
@@ -1452,13 +1485,14 @@ def main_command(vision_asset: str, bundlesdf_id: str, nerf_bundlesdf_id: str,
                 f'{bundlesdf_id=}, {nerf_bundlesdf_id=}, {cycle_iteration=}.')
 
     ### Geometry evaluation.
-    geometry_evaluator = GeometryEvaluator(
-        vision_asset, history, nerf_bundlesdf_id)
-    geometry_evaluator.compute_metrics()
-    geometry_evaluator.store_geometry_metrics(results)
+    if not tracking_only:
+        geometry_evaluator = GeometryEvaluator(
+            vision_asset, history, nerf_bundlesdf_id)
+        geometry_evaluator.compute_metrics()
+        geometry_evaluator.store_geometry_metrics(results)
 
     ### Save the results.
-    file_utils.save_results_to_yaml(results, geometry_evaluator.eval_dir)
+    file_utils.save_results_to_yaml(results, eval_dir)
 
 
 if __name__ == "__main__":
