@@ -484,6 +484,17 @@ def load_empty_results_yaml() -> dict:
         empty_results = yaml.safe_load(stream)
     return empty_results
 
+def load_results_yaml_in_subdir(eval_subdir_name: str) -> dict:
+    """Load the results yaml from an evaluation directory."""
+    results_yaml_path = op.join(
+        evaluation_dir(), eval_subdir_name, 'results.yaml')
+    assert op.exists(results_yaml_path), f'No results found at ' + \
+        f'{results_yaml_path}.'
+
+    with open(results_yaml_path, 'r') as stream:
+        results = yaml.safe_load(stream)
+    return results
+
 def save_results_to_yaml(results: dict, eval_dir: str) -> None:
     """Save the results dictionary to a yaml file in a provided evaluation
     directory."""

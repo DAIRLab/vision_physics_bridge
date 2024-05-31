@@ -38,6 +38,10 @@ from dair_pll.system import MeshSummary
 METRICS_BY_TOSS = ['dynamics_rollout_metrics', 'dynamics_single_step_metrics',
                    'tracking_metrics']
 
+POSITION_AUC_THRESHOLD = 0.1
+ORIENTATION_AUC_THRESHOLD = np.pi / 2
+PENETRATION_AUC_THRESHOLD = 0.01
+
 
 
 #================================== METRICS ===================================#
@@ -197,6 +201,49 @@ def convex_volume_error(vertices_learned: Tensor,
             intersection_halfspace_convex.intersections).volume
 
     return Tensor([sum_volume - 2 * intersection_volume]).abs() / true_volume
+
+def compute_auc(array_of_errors, max_val):
+    """Compute the Area Under the Curve (AUC) error for a given trajectory with
+    respect to a provided maximum value of tolerated error."""
+    if len(array_of_errors) == 0:
+        return 0
+
+    array_of_errors = np.sort(np.array(array_of_errors))
+    n = len(array_of_errors)
+
+    prec = np.arange(1,n+1) / float(n)
+    array_of_errors = array_of_errors.reshape(-1)
+    prec = prec.reshape(-1)
+
+    index = np.where(array_of_errors<max_val)[0]
+    array_of_errors = array_of_errors[index]
+    prec = prec[index]
+
+    mrec=[0, *list(array_of_errors), max_val]
+    mpre=[0, *list(prec), prec[-1]]
+
+    for i in range(1,len(mpre)):
+        mpre[i] = max(mpre[i], mpre[i-1])
+    mpre = np.array(mpre)
+    mrec = np.array(mrec)
+    i = np.where(mrec[1:]!=mrec[0:len(mrec)-1])[0] + 1
+    ap = np.sum((mrec[i] - mrec[i-1]) * mpre[i]) / max_val
+
+    return ap.item()
+
+def compute_position_auc_error(array_of_errors):
+    """Compute the Area Under the Curve (AUC) error for a given trajectory.
+    Computed identically to BundleSDF's implementation."""
+    return compute_auc(array_of_errors, max_val=POSITION_AUC_THRESHOLD)
+
+def compute_orientation_auc_error(array_of_errors):
+    """This is the same as position AUC error, but with a different max_val
+    corresponding to 90 degrees of orientation error."""
+    return compute_auc(array_of_errors, max_val=ORIENTATION_AUC_THRESHOLD)
+
+def compute_penetration_auc_error(array_of_errors):
+    """Compute the Area Under the Curve (AUC) error for a given trajectory."""
+    return compute_auc(array_of_errors, max_val=PENETRATION_AUC_THRESHOLD)
 
 
 #============================= RESULTS GATHERING ==============================#
