@@ -40,7 +40,7 @@ METRICS_BY_TOSS = ['dynamics_rollout_metrics', 'dynamics_single_step_metrics',
 
 POSITION_AUC_THRESHOLD = 0.1
 ORIENTATION_AUC_THRESHOLD = np.pi / 2
-PENETRATION_AUC_THRESHOLD = 0.01
+PENETRATION_AUC_THRESHOLD = 0.02
 
 
 

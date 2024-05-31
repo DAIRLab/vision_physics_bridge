@@ -495,10 +495,11 @@ def load_results_yaml_in_subdir(eval_subdir_name: str) -> dict:
         results = yaml.safe_load(stream)
     return results
 
-def save_results_to_yaml(results: dict, eval_dir: str) -> None:
+def save_results_to_yaml(
+        results: dict, eval_dir: str, filename: str = 'results.yaml') -> None:
     """Save the results dictionary to a yaml file in a provided evaluation
     directory."""
-    yaml.dump(results, open(op.join(eval_dir, 'results.yaml'), 'w'))
+    yaml.dump(results, open(op.join(eval_dir, filename), 'w'))
 
 def start_adjustment_dir() -> str:
     """Directory for all start adjust results."""
