@@ -434,8 +434,9 @@ def evaluation_subdir(
         if nerf_bundlesdf_id.startswith('bundlesdf_id_'):
             nerf_bundlesdf_id = nerf_bundlesdf_id[13:]
 
-        subdir = \
-            f'{dataset}_{tracking_bundlesdf_id}_{nerf_bundlesdf_id}_' + \
+        subdir = f'{dataset}'
+        subdir += '_bsdf' if cycle_iteration <= 1 else ''
+        subdir += f'_{tracking_bundlesdf_id}_{nerf_bundlesdf_id}_' + \
             f'{cycle_iteration}'
 
     else:

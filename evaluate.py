@@ -623,12 +623,6 @@ class DynamicsPredictor:
     def _look_up_latest_pll_results(self):
         """Also stores self.pll_results_dir."""
         if self.last_bsdf_iteration == 1:
-            self.pll_results_dir = file_utils.contactnets_output_dir(
-                dataset=self.vision_asset,
-                cycle_iteration=self.last_bsdf_iteration,
-                pll_id=self.pll_id
-            )
-
             print(f'No prior PLL results to look up for {self.vision_asset=}' +\
                   f' with {self.history=}.')
             return {}
@@ -1412,6 +1406,10 @@ def main_command(vision_asset: str, bundlesdf_id: str, nerf_bundlesdf_id: str,
         history = traverse_run_history_from_pll(
             vision_asset, pll_id, cycle_iteration)
 
+    print(f'Found run history:')
+    for key, val in history.items():
+        print(f'\t{key} : {val}')
+
     # Automatically detect if BundleSDF-only is necessary based on if the object
     # is a tagless one.
     bsdf_only = False
@@ -1421,11 +1419,6 @@ def main_command(vision_asset: str, bundlesdf_id: str, nerf_bundlesdf_id: str,
         print(f'Automatically setting {bsdf_only=} for tagless {object=}.')
     else:
         print(f'Using TagSLAM and BundleSDF: {bsdf_only=}')
-
-
-    print(f'Found run history:')
-    for key, val in history.items():
-        print(f'\t{key} : {val}')
 
     # Create an empty results dictionary to be stored as a yaml file.
     last_run_was_bsdf = True if pll_id is None else False
