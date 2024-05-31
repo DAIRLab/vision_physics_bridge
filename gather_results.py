@@ -82,13 +82,6 @@ only have results for tosses 1-3.
                                 metric_2: ...
                                 metric_3: ...
                                 ...
-                            against_tagslam:
-                                metric_1:
-                                    mean: XXX
-                                    mean_auc: XXX
-                                metric_2: ...
-                                metric_3: ...
-                                ...
                         full: ...
                     dynamics_rollout_metrics:
                         metric_1:         <-- all of these from training tosses
@@ -116,7 +109,54 @@ import os
 import os.path as op
 import pdb
 
+from matplotlib import rc, rcParams
+import matplotlib.pyplot as plt
+from matplotlib.ticker import FormatStrFormatter, NullFormatter
+
 import eval_utils, file_utils
+
+# Some settings on the plot generation.
+rc('legend', fontsize=30)
+plt.rc('axes', titlesize=40)    # fontsize of the axes title
+plt.rc('axes', labelsize=40)    # fontsize of the x and y labels
+
+
+ERROR_LABELS = {
+    'position_error': 'Position Error [m]',
+    'rotation_error': 'Rotation Error [deg]',
+    'add_error': 'ADD Error [m]',
+    'adds_error': 'ADD-S Error [m]',
+    'penetration_learned_geom_tagslam_traj': \
+        'Learned Geometry Penetration [m]',
+}
+AUC_LABELS = {
+    'position_error': \
+        f'Position Error AUC (<{eval_utils.POSITION_AUC_THRESHOLD}m)',
+    'rotation_error': \
+        f'Rotation Error AUC (<{eval_utils.ORIENTATION_AUC_THRESHOLD/np.pi*180} deg)',
+    'add_error': f'ADD AUC (<{eval_utils.POSITION_AUC_THRESHOLD})',
+    'adds_error': f'ADD-S AUC (<{eval_utils.POSITION_AUC_THRESHOLD})',
+    'penetration_learned_geom_tagslam_traj': \
+        f'Learned Geometry Penetration (<{eval_utils.POSITION_AUC_THRESHOLD}m)',
+}
+NUM_TOSSES_LABEL = 'Number of Training Tosses'
+
+METRIC_SCALING = {
+    'auc': 100,                                 # [%]
+    'position_error': 1,                        # [m]
+    'rotation_error': 180/np.pi,                # [deg]
+    'add_error': 1,                             # [m]
+    'adds_error': 1,                            # [m]
+    'penetration_learned_geom_tagslam_traj': 1  # [m]
+}
+
+BSDF_PLL_COLOR = '#01256e'
+BSDF_ONLY_COLOR = '#398537'
+PLL_ONLY_COLOR = '#95001a'
+BSDF_PLL_LABEL = 'BundleSDF-PLL'
+BSDF_ONLY_LABEL = 'BundleSDF Only'
+PLL_ONLY_LABEL = 'PLL Only'
+LINEWIDTH = 5
 
 
 def compute_auc_by_metric(errors_over_traj, metric: str):
@@ -301,11 +341,160 @@ def add_experiment_to_overall_results(experiment_results, add_to_results):
                         'mean_auc']
                     )
 
+class ResultsPlotter:
+    """TODO"""
+    def __init__(self, bsdf_pll_results: dict, bsdf_only_results: dict,
+                 pll_only_results: dict):
+        # Store the results dictionaries.
+        self.bsdf_pll_results = bsdf_pll_results
+        self.bsdf_only_results = bsdf_only_results
+        self.pll_only_results = pll_only_results
+
+        # Get a plotting directory.
+        self.plot_dir = file_utils.plot_dir()
+        print(f'Preparing to store to {self.plot_dir}')
+
+        # Extract all the objects.
+        self.tagged_objects = [
+            key for key in bsdf_pll_results['tagged_objects'].keys()]
+        self.tagless_objects = [
+            key for key in bsdf_pll_results['tagless_objects'].keys()]
+
+    def plot_tagslam_tracking_error_vs_data(
+            self, full_or_toss: str, tracking_metric: str):
+        """Tracking metrics against TagSLAM.  Only doable for tagged objects and
+        not for PLL-only."""
+        for obj in self.tagged_objects:
+            scale = METRIC_SCALING[tracking_metric]
+            auc_scale = METRIC_SCALING[tracking_metric] * \
+                METRIC_SCALING['auc']
+
+            # Get the BundleSDF-PLL results.  Store as a 2D array [[xs], [ys]].
+            bsdf_pll_mean = [[], []]
+            bsdf_pll_auc = [[], []]
+            for tosses, results in self.bsdf_pll_results['tagged_objects'][obj
+                ].items():
+                tosses = tosses.split('trained_on_toss_')[-1]
+                start_toss = int(tosses.split('-')[0])
+                end_toss = int(tosses.split('-')[-1])
+                n_tosses = end_toss - start_toss + 1
+
+                error = results['tracking_metrics'][full_or_toss][
+                    'against_tagslam'][tracking_metric]['mean'] * scale
+                auc = results['tracking_metrics'][full_or_toss][
+                    'against_tagslam'][tracking_metric]['mean_auc'] * auc_scale
+
+                bsdf_pll_mean[0].append(n_tosses)
+                bsdf_pll_auc[0].append(n_tosses)
+                bsdf_pll_mean[1].append(error)
+                bsdf_pll_auc[1].append(auc)
+
+            # Get the BundleSDF only results.
+            bsdf_only_mean = [[], []]
+            bsdf_only_auc = [[], []]
+            for tosses, results in self.bsdf_only_results['tagged_objects'][obj
+                ].items():
+                tosses = tosses.split('trained_on_toss_')[-1]
+                start_toss = int(tosses.split('-')[0])
+                end_toss = int(tosses.split('-')[-1])
+                n_tosses = end_toss - start_toss + 1
+
+                error = results['tracking_metrics'][full_or_toss][
+                    'against_tagslam'][tracking_metric]['mean'] * scale
+                auc = results['tracking_metrics'][full_or_toss][
+                    'against_tagslam'][tracking_metric]['mean_auc'] * auc_scale
+
+                bsdf_only_mean[0].append(n_tosses)
+                bsdf_only_auc[0].append(n_tosses)
+                bsdf_only_mean[1].append(error)
+                bsdf_only_auc[1].append(auc)
+
+            # Generate the plots.
+            self._do_plot(
+                bp_data=bsdf_pll_mean, bo_data=bsdf_only_mean,
+                ylabel=ERROR_LABELS[tracking_metric], xlabel=NUM_TOSSES_LABEL,
+                title=f'{obj.capitalize()} Full Trajectory',
+                filename=f'{obj}_{tracking_metric}_v_data_{full_or_toss}.png')
+            self._do_plot(
+                bp_data=bsdf_pll_auc, bo_data=bsdf_only_auc,
+                ylabel=AUC_LABELS[tracking_metric], xlabel=NUM_TOSSES_LABEL,
+                title=f'{obj.capitalize()} Full Trajectory',
+                filename=f'{obj}_{tracking_metric}_v_data_{full_or_toss}_auc.png')
+
+    def _do_plot(self, bp_data: list = None, bo_data: list = None,
+                 to_data: list = None, ylabel: str = '', xlabel: str = '',
+                 title: str = None, filename: str = None):
+        fig = plt.figure()
+        ax = plt.gca()
+
+        if bp_data is not None:
+            ax.plot(bp_data[0], bp_data[1], linewidth=LINEWIDTH,
+                    color=BSDF_PLL_COLOR, label=BSDF_PLL_LABEL)
+        if bo_data is not None:
+            ax.plot(bo_data[0], bo_data[1], linewidth=LINEWIDTH,
+                    color=BSDF_ONLY_COLOR, label=BSDF_ONLY_LABEL)
+        if to_data is not None:
+            ax.plot(to_data[0], to_data[1], linewidth=LINEWIDTH,
+                    color=PLL_ONLY_COLOR, label=PLL_ONLY_LABEL)
+
+        ax.set_xlim(0.5, np.max(bp_data[0])+0.5)
+        x_markers = bp_data[0]
+        ax.set_ylim(0, None)
+
+        plt.xlabel(xlabel)
+        plt.ylabel(ylabel)
+        plt.title(title)
+
+        self._beautify_plot(fig, ax, x_markers, auc='auc' in filename)
+
+        filename += '.png' if not filename.endswith('.png') else ''
+        fig_path = op.join(self.plot_dir, filename)
+        fig.savefig(fig_path, dpi=100)
+        plt.close()
+
+    def _beautify_plot(self, fig, ax, x_markers, auc: bool):
+        """Perform all the nice formatting on a plot."""
+
+        ax.xaxis.set_major_formatter(NullFormatter())
+        ax.xaxis.set_minor_formatter(NullFormatter())
+        ax.yaxis.set_minor_formatter(NullFormatter())
+        ax.yaxis.set_major_formatter(NullFormatter())
+
+        ax.set_xticks([])
+        ax.set_xticklabels([])
+        ax.set_xticks(x_markers)
+        ax.set_xticklabels(x_markers)
+
+        ax.tick_params(axis='x', which='minor', bottom=False, labelsize=20)
+        ax.tick_params(axis='x', which='major', bottom=False, labelsize=20)
+
+        ax.tick_params(axis='y', which='minor', labelsize=20)
+        ax.tick_params(axis='y', which='major', labelsize=20)
+
+        if auc:
+            ax.yaxis.set_major_formatter(FormatStrFormatter("%.0f"))
+            ax.yaxis.set_minor_formatter(FormatStrFormatter("%.0f"))
+            ax.set_ylim(0, 110)
+        else:
+            ax.yaxis.set_major_formatter(FormatStrFormatter("%.3f"))
+            ax.yaxis.set_minor_formatter(FormatStrFormatter("%.3f"))
+        ax.xaxis.set_major_formatter(FormatStrFormatter("%.0f"))
+
+        ax.yaxis.grid(True, which='both')
+        ax.xaxis.grid(True, which='major')
+
+        handles, labels = plt.gca().get_legend_handles_labels()
+
+        plt.legend(handles, labels)
+        plt.legend(prop=dict(weight='bold'))
+
+        fig.set_size_inches(13, 13)
+
+
 #######################################################################
 @click.group()
 def cli():
     pass
-
 
 # Use 'auc' command to scrub through the results and calculate the AUC for
 # tracking-related metrics.
@@ -378,6 +567,25 @@ def process_gather_command():
     file_utils.save_results_to_yaml(
         pll_only_results, file_utils.evaluation_dir(), filename='pll_only.yaml')
 
+
+# Use 'plot' command to load the previously generated yaml files with results
+# and to generate plots with them.
+@cli.command('plot')
+def process_plot_command():
+    bsdf_pll_results = file_utils.load_gathered_results_yaml('bsdf_pll.yaml')
+    bsdf_only_results = file_utils.load_gathered_results_yaml('bsdf_only.yaml')
+    pll_only_results = file_utils.load_gathered_results_yaml('pll_only.yaml')
+
+    results_plotter = ResultsPlotter(
+        bsdf_pll_results=bsdf_pll_results,
+        bsdf_only_results=bsdf_only_results,
+        pll_only_results=pll_only_results
+    )
+
+    for tagslam_tracking_metric in ERROR_LABELS.keys():
+        results_plotter.plot_tagslam_tracking_error_vs_data(
+            'full', tagslam_tracking_metric)
+    pdb.set_trace()
 
 
 if __name__ == '__main__':

@@ -505,6 +505,26 @@ def start_adjustment_dir() -> str:
     """Directory for all start adjust results."""
     return assure_created(op.join(DATA_GEN_DIR, 'start_adjustment'))
 
+def load_gathered_results_yaml(yaml_name: str) -> dict:
+    """Load the results yaml from an evaluation directory."""
+    yaml_path = op.join(evaluation_dir(), yaml_name)
+    assert op.exists(yaml_path), f'No gathered results found at {yaml_path}.'
+
+    with open(yaml_path, 'r') as stream:
+        results = yaml.safe_load(stream)
+    return results
+
+def plot_dir() -> str:
+    """Directory for all evaluation results."""
+    now = datetime.datetime.now()
+    date_str = now.strftime('%m%d')
+
+    plot_dir = op.join(DATA_GEN_DIR, 'plots', date_str)
+    if op.exists(plot_dir):
+        print(f'WARNING: Found existing plot dir at {plot_dir}.')
+
+    return assure_created(op.join(DATA_GEN_DIR, 'plots', date_str))
+
 
 """Yaml file parsing utilities."""
 def load_camera_extrinsics(object: str) -> Tuple[np.ndarray, np.ndarray]:
