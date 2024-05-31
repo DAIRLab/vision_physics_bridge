@@ -752,6 +752,9 @@ class DynamicsPredictor:
             new_mesh_name = 'bsdf_mesh.obj'
         else:
             old_obj_path = op.join(self.pll_results_dir, 'urdfs', 'test.obj')
+            if not op.exists(old_obj_path):
+                old_obj_path = op.join(
+                    self.pll_results_dir, 'urdfs', 'test_best.obj')
             new_mesh_name = 'pll_mesh.obj'
         new_obj_path = op.join(self.eval_dir, new_mesh_name)
         os.system(f'cp {old_obj_path} {new_obj_path}')
@@ -1133,8 +1136,8 @@ class DynamicsPredictor:
 class GeometryEvaluator:
     """Evaluate the learned geometry.  This requires the following to already be
     present in the evaluation directory:
-        - bsdf_mesh.obj
         - true_geom_aligned.obj
+        - bsdf_mesh.obj if last run was BundleSDF, else pll_mesh.obj
     """
     def __init__(self, vision_asset: str, history: dict,
                  nerf_bundlesdf_id: str):
@@ -1159,6 +1162,8 @@ class GeometryEvaluator:
             nerf_bundlesdf_id=nerf_bundlesdf_id, pll_id=pll_id
         )
 
+        self.pll_id = pll_id
+
         # Get the meshes.
         self._get_meshes()
 
@@ -1166,13 +1171,20 @@ class GeometryEvaluator:
         """Loads the learned and ground truth meshes from the evaluation
         directory."""
         # Learned mesh.
-        learned_mesh_path = op.join(self.eval_dir, 'bsdf_mesh.obj')
+        if self.pll_id is None:
+            learned_mesh_path = op.join(self.eval_dir, 'bsdf_mesh.obj')
+        else:
+            learned_mesh_path = op.join(
+                self.eval_dir, 'pll_urdf', 'test.obj')
+            if not op.exists(learned_mesh_path):
+                learned_mesh_path = op.join(
+                self.eval_dir, 'pll_urdf', 'test_best.obj')
         assert op.exists(learned_mesh_path), f'GeometryEvaluator requires ' + \
             f'{learned_mesh_path=} to exist, but does not exist.'
         self.learned_mesh = icp.load_mesh_from_obj(learned_mesh_path)
 
         # Ground truth mesh.
-        true_mesh_path = op.join(self.eval_dir, 'bsdf_mesh.obj')
+        true_mesh_path = op.join(self.eval_dir, 'true_geom_aligned.obj')
         assert op.exists(true_mesh_path), f'GeometryEvaluator requires ' + \
             f'{true_mesh_path=} to exist, but does not exist.'
         self.true_mesh = icp.load_mesh_from_obj(true_mesh_path)
