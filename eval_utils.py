@@ -219,6 +219,9 @@ def compute_auc(array_of_errors, max_val):
     array_of_errors = array_of_errors[index]
     prec = prec[index]
 
+    if len(index) == 0:
+        return 0.0
+
     mrec=[0, *list(array_of_errors), max_val]
     mpre=[0, *list(prec), prec[-1]]
 
@@ -492,7 +495,7 @@ def get_pll_rollout_trajectory(
     prediction, carry = system.simulate(x_0, carry_0, steps)
     del carry
 
-    full_traj = torch.concatenate((x_pre, prediction), dim=0)
+    full_traj = torch.cat((x_pre, prediction), dim=0)
 
     return full_traj.detach().clone()
 
