@@ -1,26 +1,26 @@
 """A script to help with adjusting the start frames for dynamics predictions.
 
 Still to be adjusted:                           Not to be adjusted:
- - bakingbox                                     - burger
- - cardboard                                     - chocolate
+ X bakingbox                                     - burger
+ X cardboard                                     - chocolate
  - croc                                          - cream
- - crushedcan                                    - duck
- - gallon                                        - hotdog
- - greencan                                      - toothpaste
- - icetray                                       - box
- - mug
- - oatly
- - pinkcan
- - stapler
- - styrofoam
- - cube
- - bottle
- - napkin
- - toblerone
- - half
- - milk
- - prism
- - egg
+ X crushedcan                                    - duck
+ X gallon                                        - hotdog
+ X greencan                                      - toothpaste
+ X icetray                                       - box
+ X mug
+ X oatly
+ X pinkcan
+ X stapler
+ X styrofoam
+ X cube
+ X bottle
+ - napkin --> has some trajectory issues to look into
+ X toblerone
+ X half
+ X milk
+ X prism
+ X egg
 """
 
 import click

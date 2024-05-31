@@ -21,9 +21,11 @@ REAL_INCHES = 'inches_in_real'
 SCALING = {
     'bakingbox':    {CAD_MM: 907.717, REAL_INCHES: 9 + 9/16},
     'cardboard':    {CAD_MM: 832.803, REAL_INCHES: 7 + 1/16},
+    'croc':         {CAD_MM: 1482.842, REAL_INCHES: 6 + 1/2},
     'crushedcan':   {CAD_MM: 736.847, REAL_INCHES: 4 + 9/16},
     'gallon':       {CAD_MM: 1028.132, REAL_INCHES: 9 + 13/16},
     'greencan':     {CAD_MM: 470.909, REAL_INCHES: 4 + 11/16},
+    'oatly':        {CAD_MM: 2186.932, REAL_INCHES: 9 + 5/8},
     'stapler':      {CAD_MM: 407.748, REAL_INCHES: 3 + 1/8},
     'styrofoam':    {CAD_MM: 952.224, REAL_INCHES: 9 + 7/32}
 }
@@ -431,6 +433,7 @@ if __name__ == '__main__':
     # Great:  styrofoam
 
     # for object in SCALING.keys():
+    # for object in ['croc']:
     #     mesh_processor = MeshScalingProcessor(object=object)
     #     mesh_processor.scale_manually(show=True)
 
