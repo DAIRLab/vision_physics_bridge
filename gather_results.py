@@ -31,23 +31,23 @@
                                 ...
                         full: ...
                     dynamics_rollout_metrics:
-                        against_bundlesdf:
-                            metric_1:     <-- all of these from training tosses
-                                mean: XXX
-                                mean_auc: XXX
-                            metric_2: ...
-                            metric_3: ...
-                            ...
-                        against_tagslam:
-                            training_tosses:
+                        training_tosses:
+                            against_bundlesdf:
+                                metric_1:  <-- all of these from training tosses
+                                    mean: XXX
+                                    mean_auc: XXX
+                                metric_2: ...
+                                metric_3: ...
+                                ...
+                            against_tagslam:
                                 metric_1:
                                     mean: XXX
                                     mean_auc: XXX
                                 metric_2: ...
                                 metric_3: ...
                                 ...
-                            unseen_tosses: ...
-                            all_tosses: ...
+                        unseen_tosses: ...
+                        all_tosses: ...
                     dynamics_single_step_metrics:
                         against_bundlesdf: ...
                         against_tagslam: ...
@@ -164,9 +164,9 @@ def add_experiment_to_overall_results(experiment_results, add_to_results):
     tag_key = 'tagless_objects' if object in file_utils.TAGLESS_OBJECTS else \
         'tagged_objects'
 
-    start_toss = vision_asset.split('_')[-1].split('-')[0]
+    start_toss = int(vision_asset.split('_')[-1].split('-')[0])
     end_toss = start_toss if '-' not in vision_asset else \
-        vision_asset.split('-')[1]
+        int(vision_asset.split('-')[1])
     trained_on_key = f'trained_on_toss_{start_toss}'
     trained_on_key += f'-{end_toss}' if start_toss != end_toss else ''
 
@@ -185,46 +185,107 @@ def add_experiment_to_overall_results(experiment_results, add_to_results):
                 d=subresults, val=exp_subresults, keys=[category])
             continue
 
+        elif category == 'tracking_metrics':
+            # Tracking and dynamics metrics need to be conglomerated by toss.
+            # Iterate over every comparison against, e.g. against_bundlesdf.
+            for against, subsubresults in exp_subresults.items():
+                # Iterate over every metric, e.g. position_error.
+                for metric, traj_results in subsubresults.items():
+
+                    # Iterate over every trajectory, e.g. toss_1.
+                    toss_means = []
+                    toss_aucs = []
+                    for traj_name, reported_errors in traj_results.items():
+                        # If full trajectory, can use the mean and AUC directly.
+                        if traj_name == 'full':
+                            subresults = recursive_dict_add(
+                                d=subresults,
+                                val=reported_errors['mean'],
+                                keys=[category, 'full', against, metric, 'mean']
+                            )
+                            subresults = recursive_dict_add(
+                                d=subresults,
+                                val=reported_errors['auc'],
+                                keys=[category, 'full', against, metric,
+                                      'mean_auc']
+                            )
+                            continue
+
+                        # Otherwise, need to conglomerate by toss.
+                        toss_means.append(reported_errors['mean'])
+                        toss_aucs.append(reported_errors['auc'])
+
+                    # Add the mean and AUC for the tosses.
+                    subresults = recursive_dict_add(
+                        d=subresults,
+                        val=np.mean(toss_means).item(),
+                        keys=[category, 'toss', against, metric, 'mean']
+                    )
+                    subresults = recursive_dict_add(
+                        d=subresults,
+                        val=np.mean(toss_aucs).item(),
+                        keys=[category, 'toss', against, metric, 'mean_auc']
+                    )
+            continue
+
+        # Dynamics metrics need to be split by training and evaluation tosses.
         # Tracking and dynamics metrics need to be conglomerated by toss.
         # Iterate over every comparison against, e.g. against_bundlesdf.
         for against, subsubresults in exp_subresults.items():
             # Iterate over every metric, e.g. position_error.
-            for metric, trajectory_results in subsubresults.items():
+            for metric, traj_results in subsubresults.items():
 
                 # Iterate over every trajectory, e.g. toss_1.
-                toss_means = []
-                toss_aucs = []
-                for traj_name, reported_errors in trajectory_results.items():
-                    # If full trajectory, can use the mean and AUC directly.
-                    if traj_name == 'full':
-                        subresults = recursive_dict_add(
-                            d=subresults,
-                            val=reported_errors['mean'],
-                            keys=[category, 'full', against, metric, 'mean']
-                        )
-                        subresults = recursive_dict_add(
-                            d=subresults,
-                            val=reported_errors['auc'],
-                            keys=[category, 'full', against, metric, 'mean_auc']
-                        )
-                        continue
-
-                    # Otherwise, need to conglomerate by toss.
-                    toss_means.append(reported_errors['mean'])
-                    toss_aucs.append(reported_errors['auc'])
+                training_toss_means = []
+                training_toss_aucs = []
+                test_toss_means = []
+                test_toss_aucs = []
+                for traj_name, reported_errors in traj_results.items():
+                    toss_num = int(traj_name.split('toss_')[-1])
+                    if toss_num in range(start_toss, end_toss + 1):
+                        training_toss_means.append(reported_errors['mean'])
+                        training_toss_aucs.append(reported_errors['auc'])
+                    else:
+                        test_toss_means.append(reported_errors['mean'])
+                        test_toss_aucs.append(reported_errors['auc'])
 
                 # Add the mean and AUC for the tosses.
                 subresults = recursive_dict_add(
                     d=subresults,
-                    val=np.mean(toss_means).item(),
-                    keys=[category, 'toss', against, metric, 'mean']
+                    val=np.mean(training_toss_means).item(),
+                    keys=[category, 'training_tosses', against, metric,
+                    'mean']
                 )
                 subresults = recursive_dict_add(
                     d=subresults,
-                    val=np.mean(toss_aucs).item(),
-                    keys=[category, 'toss', against, metric, 'mean_auc']
+                    val=np.mean(training_toss_aucs).item(),
+                    keys=[category, 'training_tosses', against, metric,
+                    'mean_auc']
                 )
-
+                subresults = recursive_dict_add(
+                    d=subresults,
+                    val=np.mean(test_toss_means).item(),
+                    keys=[category, 'unseen_tosses', against, metric,
+                    'mean']
+                )
+                subresults = recursive_dict_add(
+                    d=subresults,
+                    val=np.mean(test_toss_aucs).item(),
+                    keys=[category, 'unseen_tosses', against, metric,
+                    'mean_auc']
+                )
+                subresults = recursive_dict_add(
+                    d=subresults,
+                    val=np.mean(training_toss_means + test_toss_means).item(),
+                    keys=[category, 'all_tosses', against, metric,
+                    'mean']
+                )
+                subresults = recursive_dict_add(
+                    d=subresults,
+                    val=np.mean(training_toss_aucs + test_toss_aucs).item(),
+                    keys=[category, 'all_tosses', against, metric,
+                    'mean_auc']
+                )
 
 #######################################################################
 @click.group()
@@ -240,7 +301,7 @@ def process_auc_command():
     for subdir in os.listdir(file_utils.evaluation_dir()):
         eval_subdir = op.join(file_utils.evaluation_dir(), subdir)
         if not op.exists(op.join(eval_subdir, 'results.yaml')):
-            print(f'Skipping {subdir}.')
+            print(f'  Skipping {subdir}.')
             continue
 
         print(f'Found {subdir}...', end='')
@@ -302,8 +363,6 @@ def process_gather_command():
         filename='bsdf_only.yaml')
     file_utils.save_results_to_yaml(
         pll_only_results, file_utils.evaluation_dir(), filename='pll_only.yaml')
-
-
 
 
 
