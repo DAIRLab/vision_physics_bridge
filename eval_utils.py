@@ -40,7 +40,7 @@ METRICS_BY_TOSS = ['dynamics_rollout_metrics', 'dynamics_single_step_metrics',
 
 POSITION_AUC_THRESHOLD = 0.1
 ORIENTATION_AUC_THRESHOLD = np.pi / 2
-PENETRATION_AUC_THRESHOLD = 0.02
+PENETRATION_AUC_THRESHOLD = 0.02    # TODO BIBIT the results seem really low
 
 
 
@@ -340,6 +340,10 @@ def create_empty_results_dict(
         sub_results[metric_key] = {
             f'toss_{i}': {'traj': None, 'mean': None} for i in range(
                 start_toss, end_toss+1)}
+        sub_results[metric_key]['full'] = {'traj': None, 'mean': None}
+    sub_results = empty_results['tracking_metrics']['against_bundlesdf']
+    for metric_key in sub_results.keys():
+        sub_results[metric_key]['full'] = {'traj': None, 'mean': None}
 
     # Second modification:  Get rid of any against_tagslam entries if the object
     # is tagless.
