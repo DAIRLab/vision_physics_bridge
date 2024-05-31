@@ -11,7 +11,7 @@ import torch
 from torch import Tensor
 import trimesh
 
-import eval_utils, file_utils, math_utils, mesh_processing
+import eval_utils, file_utils, icp, math_utils, mesh_processing
 
 from conversion_bsdf_to_pll import TrajectoryConverterBundleSDFToPLL
 from eval_utils import MultibodyLearnableSystem
@@ -1130,6 +1130,107 @@ class DynamicsPredictor:
             subsub_results['traj'] = over_traj.tolist()
 
 
+class GeometryEvaluator:
+    """Evaluate the learned geometry.  This requires the following to already be
+    present in the evaluation directory:
+        - bsdf_mesh.obj
+        - true_geom_aligned.obj
+    """
+    def __init__(self, vision_asset: str, history: dict,
+                 nerf_bundlesdf_id: str):
+        # First decode the latest BundleSDF or PLL run IDs to set up the
+        # evaluation directory.
+        last_bsdf_iteration = 1
+        for cycle in history.keys():
+            cycle_num = cycle.split('_')[-1]
+            if int(cycle_num) > last_bsdf_iteration:
+                last_bsdf_iteration = int(cycle_num)
+        last_tracking_bsdf_id = history[
+            f'cycle_iteration_{last_bsdf_iteration}']['bundlesdf_id']
+
+        pll_id = history[f'cycle_iteration_{last_bsdf_iteration}']['pll_id']
+        if pll_id is not None:
+            last_tracking_bsdf_id = None
+            nerf_bundlesdf_id = None
+
+        self.eval_dir = file_utils.evaluation_subdir(
+            dataset=vision_asset, cycle_iteration=last_bsdf_iteration,
+            tracking_bundlesdf_id=last_tracking_bsdf_id,
+            nerf_bundlesdf_id=nerf_bundlesdf_id, pll_id=pll_id
+        )
+
+        # Get the meshes.
+        self._get_meshes()
+
+    def _get_meshes(self):
+        """Loads the learned and ground truth meshes from the evaluation
+        directory."""
+        # Learned mesh.
+        learned_mesh_path = op.join(self.eval_dir, 'bsdf_mesh.obj')
+        assert op.exists(learned_mesh_path), f'GeometryEvaluator requires ' + \
+            f'{learned_mesh_path=} to exist, but does not exist.'
+        self.learned_mesh = icp.load_mesh_from_obj(learned_mesh_path)
+
+        # Ground truth mesh.
+        true_mesh_path = op.join(self.eval_dir, 'bsdf_mesh.obj')
+        assert op.exists(true_mesh_path), f'GeometryEvaluator requires ' + \
+            f'{true_mesh_path=} to exist, but does not exist.'
+        self.true_mesh = icp.load_mesh_from_obj(true_mesh_path)
+
+        # Get each of their convex hulls too.
+        self.learned_hull, _ = self.learned_mesh.compute_convex_hull()
+        self.true_hull, _ = self.true_mesh.compute_convex_hull()
+
+    def compute_metrics(self):
+        self._compute_chamfer_distance()
+        self._compute_f_score()
+        self._compute_volume_error()
+
+    def _compute_chamfer_distance(self):
+        # Sample point clouds on both meshes.
+        true_cloud = Tensor(np.asarray(
+            self.true_mesh.sample_points_poisson_disk(2000).points))
+        learned_cloud = Tensor(np.asarray(
+            self.learned_mesh.sample_points_poisson_disk(2000).points))
+
+        # Compute chamfer distance on these clouds.
+        self.chamfer_distance = eval_utils.chamfer_distance(
+            true_cloud, learned_cloud).item()
+
+        # Do the same thing for the convex hull.
+        true_hull_cloud = Tensor(np.asarray(
+            self.true_hull.sample_points_poisson_disk(2000).points))
+        learned_hull_cloud = Tensor(np.asarray(
+            self.learned_hull.sample_points_poisson_disk(2000).points))
+        self.hull_chamfer_distance = eval_utils.chamfer_distance(
+            true_hull_cloud, learned_hull_cloud).item()
+
+    # TODO BIBIT implement F-score
+    def _compute_f_score(self):
+        self.f_score = None
+        self.hull_f_score = None
+
+    def _compute_volume_error(self):
+        # Get the vertices of each mesh.
+        true_hull_vertices = Tensor(np.asarray(self.true_hull.vertices))
+        learned_hull_vertices = Tensor(np.asarray(self.learned_hull.vertices))
+
+        # Compute convex volume error on these vertices.
+        self.convex_volume_error = eval_utils.convex_volume_error(
+            true_hull_vertices, learned_hull_vertices).item()
+
+    def store_geometry_metrics(self, results: dict):
+        """Store the geometry metrics in the results dictionary."""
+        full_geometry_results = results['geometry_metrics']['full_geometry']
+        full_geometry_results['chamfer_distance'] = self.chamfer_distance
+        full_geometry_results['f_score'] = self.f_score
+
+        hull_geometry_results = results['geometry_metrics']['convex_hull']
+        hull_geometry_results['chamfer_distance'] = self.hull_chamfer_distance
+        hull_geometry_results['f_score'] = self.hull_f_score
+        hull_geometry_results['volume_error'] = self.convex_volume_error
+
+
 class TrajectoryMetrics:
     """Utility class for trajectory metrics."""
 
@@ -1331,7 +1432,7 @@ def main_command(vision_asset: str, bundlesdf_id: str, nerf_bundlesdf_id: str,
         traj_evaluator.store_tracking_metrics(results)
 
     ### Dynamics predictions.
-    # Compute dynamics metrics if last run was PLL or PLL was never run.
+    # Compute dynamics metrics if last run was PLL or PLL was ever run.
     if pll_id is not None or cycle_iteration > 1:
         dynamics_predictor = DynamicsPredictor(
             vision_asset, history, nerf_bundlesdf_id, bsdf_only)
@@ -1345,7 +1446,14 @@ def main_command(vision_asset: str, bundlesdf_id: str, nerf_bundlesdf_id: str,
             print(f'Skipping video generation for {vision_asset=}, ' + \
                 f'{bundlesdf_id=}, {nerf_bundlesdf_id=}, {cycle_iteration=}.')
 
-    file_utils.save_results_to_yaml(results, traj_evaluator.eval_dir)
+    ### Geometry evaluation.
+    geometry_evaluator = GeometryEvaluator(
+        vision_asset, history, nerf_bundlesdf_id)
+    geometry_evaluator.compute_metrics()
+    geometry_evaluator.store_geometry_metrics(results)
+
+    ### Save the results.
+    file_utils.save_results_to_yaml(results, geometry_evaluator.eval_dir)
 
 
 if __name__ == "__main__":

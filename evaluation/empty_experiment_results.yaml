@@ -367,6 +367,11 @@ tracking_metrics:
 
 
 ##### Performance results for geometry estimation.
-geometry_metrics:   # TODO these still TBD.
-  chamfer_distance: null
-  f_score: null
+geometry_metrics:
+  convex_hull:
+    volume_error: null
+    chamfer_distance: null
+    f_score: null
+  full_geometry:
+    chamfer_distance: null
+    f_score: null

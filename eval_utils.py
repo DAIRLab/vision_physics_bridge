@@ -6,7 +6,8 @@ import os
 import os.path as op
 import pdb
 import pickle
-from scipy.spatial import cKDTree
+from scipy.optimize import linprog
+from scipy.spatial import ConvexHull, HalfspaceIntersection, cKDTree
 import sys
 import torch
 from torch import Tensor
@@ -29,7 +30,9 @@ if PLL_DIR not in sys.path:
     sys.path.append(PLL_DIR)    # For importing dair_pll.
 
 from dair_pll import inertia as pll_inertia
+from dair_pll import deep_support_function as pll_dsf
 from dair_pll.multibody_learnable_system import MultibodyLearnableSystem
+from dair_pll.system import MeshSummary
 
 
 METRICS_BY_TOSS = ['dynamics_rollout_metrics', 'dynamics_single_step_metrics',
@@ -85,6 +88,115 @@ def compute_adds_tracking_error(predicted_pose, true_pose, surface_vertices):
     nn_dists, _ = nn_index.query(gt_pts, k=1, workers=-1)
     e = nn_dists.mean()
     return e
+
+def chamfer_distance(point_cloud_1, point_cloud_2):
+    """Chamfer distance between two point clouds, computed identically to how
+    BundleSDF computed it.
+
+    NOTE should not be mean of all, see:
+    https://pdal.io/en/stable/apps/chamfer.html
+    """
+    kdtree1 = cKDTree(point_cloud_1)
+    dists1, _indices1 = kdtree1.query(point_cloud_2)
+    kdtree2 = cKDTree(point_cloud_2)
+    dists2, _indices2 = kdtree2.query(point_cloud_1)
+    return 0.5*(dists1.mean()+dists2.mean())
+
+def extract_mesh_from_support_points(support_points: Tensor):
+    """Given a set of convex polytope vertices, extracts a vertex/face mesh.
+
+    Args:
+        support_points: ``(*, 3)`` polytope vertices.
+
+    Returns:
+        Object vertices and face indices.
+    """
+    support_point_hashes = set()
+    unique_support_points = []
+
+    # remove duplicate vertices
+    for vertex in support_points:
+        vertex_hash = hash(vertex.numpy().tobytes())
+        if vertex_hash in support_point_hashes:
+            continue
+        support_point_hashes.add(vertex_hash)
+        unique_support_points.append(vertex)
+
+    vertices = torch.stack(unique_support_points)
+    hull = ConvexHull(vertices.numpy())
+    faces = Tensor(hull.simplices).to(torch.long)  # type: ignore
+
+    _, backwards, _ = pll_dsf.extract_outward_normal_hyperplanes(
+        vertices.unsqueeze(0), faces.unsqueeze(0))
+    backwards = backwards.squeeze(0)
+    faces[backwards] = faces[backwards].flip(-1)
+
+    return MeshSummary(vertices=support_points, faces=faces)
+
+def _get_mesh_interior_point(halfspaces: np.ndarray) -> Tuple[np.ndarray,float]:
+    norm_vector = np.reshape(np.linalg.norm(halfspaces[:, :-1], axis=1),
+                             (halfspaces.shape[0], 1))
+    objective_coefficients = np.zeros((halfspaces.shape[1],))
+    objective_coefficients[-1] = -1
+    A = np.hstack((halfspaces[:, :-1], norm_vector))
+    b = -halfspaces[:, -1:]
+    res = linprog(objective_coefficients, A_ub=A, b_ub=b, bounds=(None, None))
+    interior_point = res.x[:-1]
+    interior_point_gap = res.x[-1]
+    return interior_point, interior_point_gap
+
+def convex_volume_error(vertices_learned: Tensor,
+                        vertices_true: Tensor) -> Tensor:
+    """Relative error between two convex hulls of provided vertices.  This
+    definition comes from:
+    https://github.com/ebianchi/dair_pll/blob/main/helpers/corl_plot.py#L428
+
+    Use the identity that the area of the non-overlapping region is the sum of
+    the areas of the two polygons minus twice the area of their intersection.
+
+    Args:
+        vertices_learned: (N, 3) tensor of vertices of the learned geometry.
+        vertices_true: (N, 3) tensor of vertices of the true geometry.
+    """
+    # pylint: disable=too-many-locals
+    true_volume = ConvexHull(vertices_true.numpy()).volume
+    sum_volume = ConvexHull(vertices_learned.numpy()).volume + true_volume
+
+    mesh_learned = extract_mesh_from_support_points(vertices_learned)
+    mesh_true = extract_mesh_from_support_points(vertices_true)
+
+    normal_learned, _, extent_learned = \
+        pll_dsf.extract_outward_normal_hyperplanes(
+            mesh_learned.vertices.unsqueeze(0), mesh_learned.faces.unsqueeze(0))
+    normal_true, _, extent_true = pll_dsf.extract_outward_normal_hyperplanes(
+        mesh_true.vertices.unsqueeze(0), mesh_true.faces.unsqueeze(0))
+
+    halfspaces_true = torch.cat(
+        [normal_true.squeeze(), -extent_true.squeeze().unsqueeze(-1)],
+        dim=1)
+
+    halfspaces_learned = torch.cat(
+        [normal_learned.squeeze(), -extent_learned.squeeze().unsqueeze(-1)],
+        dim=1)
+
+    intersection_halfspaces = torch.cat(
+        [halfspaces_true, halfspaces_learned], dim=0).numpy()
+
+    # find interior point of intersection
+    interior_point, interior_point_gap = _get_mesh_interior_point(
+        intersection_halfspaces)
+
+    intersection_volume = 0.
+
+    if interior_point_gap > 0.:
+        # intersection is non-empty
+        intersection_halfspace_convex = HalfspaceIntersection(
+            intersection_halfspaces, interior_point)
+
+        intersection_volume = ConvexHull(
+            intersection_halfspace_convex.intersections).volume
+
+    return Tensor([sum_volume - 2 * intersection_volume]).abs() / true_volume
 
 
 #============================= RESULTS GATHERING ==============================#
