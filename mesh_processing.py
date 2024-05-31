@@ -144,7 +144,7 @@ class MeshProcessor:
         if save_dir is not None:
             o3d.io.write_triangle_mesh(
                 op.join(save_dir, obj_name), self.true_mesh,
-                write_triangle_uvs=False
+                write_triangle_uvs=False, write_vertex_colors=False
             )
             print(f'Saved ground truth mesh transformed to align with ' + \
                 f'BundleSDF mesh, as {obj_name} in {save_dir}.')
@@ -293,7 +293,8 @@ class UnscaledMeshProcessor(MeshProcessor):
             file_utils.object_scan_dir(), 'ICP_scaling',
             f'{self.object}.obj'
         )
-        o3d.io.write_triangle_mesh(corrected_filepath, self.wrong_scaling_mesh)
+        o3d.io.write_triangle_mesh(corrected_filepath, self.wrong_scaling_mesh,
+                write_triangle_uvs=False, write_vertex_colors=False)
         print(f'Saved ground truth mesh transformed to align with ' + \
               f'BundleSDF mesh, as {self.object}.obj in ICP_scaling.')
         material_filepath = op.join(
@@ -369,7 +370,8 @@ class MeshScalingProcessor(UnscaledMeshProcessor):
             file_utils.object_scan_dir(), 'CAD_scaling',
             f'{self.object}.obj'
         )
-        o3d.io.write_triangle_mesh(corrected_filepath, self.wrong_scaling_mesh)
+        o3d.io.write_triangle_mesh(corrected_filepath, self.wrong_scaling_mesh,
+                write_triangle_uvs=False, write_vertex_colors=False)
         print(f'Saved ground truth mesh scaled to match CAD as ' + \
               f'{self.object}.obj in CAD_scaling.')
         material_filepath = op.join(

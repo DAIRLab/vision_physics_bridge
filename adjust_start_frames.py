@@ -25,7 +25,9 @@ Still to be adjusted:                           Not to be adjusted:
 
 import click
 import matplotlib.pyplot as plt
+import numpy as np
 import os.path as op
+import pdb
 import torch
 from torch import Tensor
 
@@ -48,6 +50,8 @@ class DynamicsStartAdjuster(DynamicsPredictor):
         # Obtain the run history -- use BundleSDF 02 from cycle 2.
         bundlesdf_id = 'bundlesdf_id_02'
         nerf_bundlesdf_id = 'bundlesdf_id_02'
+        # bundlesdf_id = 'bundlesdf_id_00'
+        # nerf_bundlesdf_id = 'bundlesdf_id_00'
         cycle_iteration = 2
         history = evaluate.traverse_run_history_from_bsdf(
             vision_asset, bundlesdf_id, cycle_iteration)
@@ -78,8 +82,8 @@ class DynamicsStartAdjuster(DynamicsPredictor):
         start_adjusts_by_toss = {}
 
         # Get the predictions.
-        trajs = self.bundlesdf_trajs if not hasattr(self, 'tagslam_b_trajs') \
-            else self.tagslam_b_trajs
+        trajs = self.bundlesdf_trajs #if not hasattr(self, 'tagslam_b_trajs') \
+            # else self.tagslam_b_trajs
 
         for toss_key, target_traj in trajs.items():
             # Grab just the first portion of the trajectory.
@@ -99,10 +103,10 @@ class DynamicsStartAdjuster(DynamicsPredictor):
                 self.visualize_and_set_start_adjust_rollouts(
                     toss_key, target_traj, rollouts_by_start_adjust)
 
-        self.start_adjusts_by_toss = start_adjusts_by_toss
-        print(f'Start adjusts by toss:')
-        for k, v in start_adjusts_by_toss.items():
-            print(f'\tToss {k}: {v}')
+        # self.start_adjusts_by_toss = start_adjusts_by_toss
+        # print(f'Start adjusts by toss:')
+        # for k, v in start_adjusts_by_toss.items():
+        #     print(f'\tToss {k}: {v}')
             
     def visualize_and_set_start_adjust_rollouts(
             self, toss_key: str, target_traj: Tensor,
@@ -123,23 +127,26 @@ class DynamicsStartAdjuster(DynamicsPredictor):
         make_columns_in_row_share_y(ax, 3, up_to=3)
 
         def plot_trajectory(ax, traj, label):
-            # Positions.
-            ax[0,0].plot(traj[:, 4], color=COLOR_BY_LABEL[label], label=label)
-            ax[0,1].plot(traj[:, 5], color=COLOR_BY_LABEL[label], label=label)
-            ax[0,2].plot(traj[:, 6], color=COLOR_BY_LABEL[label], label=label)
-            # Quaternions.
-            ax[1,0].plot(traj[:, 0], color=COLOR_BY_LABEL[label], label=label)
-            ax[1,1].plot(traj[:, 1], color=COLOR_BY_LABEL[label], label=label)
-            ax[1,2].plot(traj[:, 2], color=COLOR_BY_LABEL[label], label=label)
-            ax[1,3].plot(traj[:, 3], color=COLOR_BY_LABEL[label], label=label)
-            # Linear velocities.
-            ax[2,0].plot(traj[:, 10], color=COLOR_BY_LABEL[label], label=label)
-            ax[2,1].plot(traj[:, 11], color=COLOR_BY_LABEL[label], label=label)
-            ax[2,2].plot(traj[:, 12], color=COLOR_BY_LABEL[label], label=label)
-            # Angular velocities.
-            ax[3,0].plot(traj[:, 7], color=COLOR_BY_LABEL[label], label=label)
-            ax[3,1].plot(traj[:, 8], color=COLOR_BY_LABEL[label], label=label)
-            ax[3,2].plot(traj[:, 9], color=COLOR_BY_LABEL[label], label=label)
+            if type(ax) == np.ndarray:
+                # Positions.
+                ax[0,0].plot(traj[:, 4], color=COLOR_BY_LABEL[label], label=label)
+                ax[0,1].plot(traj[:, 5], color=COLOR_BY_LABEL[label], label=label)
+                ax[0,2].plot(traj[:, 6], color=COLOR_BY_LABEL[label], label=label)
+                # Quaternions.
+                ax[1,0].plot(traj[:, 0], color=COLOR_BY_LABEL[label], label=label)
+                ax[1,1].plot(traj[:, 1], color=COLOR_BY_LABEL[label], label=label)
+                ax[1,2].plot(traj[:, 2], color=COLOR_BY_LABEL[label], label=label)
+                ax[1,3].plot(traj[:, 3], color=COLOR_BY_LABEL[label], label=label)
+                # Linear velocities.
+                ax[2,0].plot(traj[:, 10], color=COLOR_BY_LABEL[label], label=label)
+                ax[2,1].plot(traj[:, 11], color=COLOR_BY_LABEL[label], label=label)
+                ax[2,2].plot(traj[:, 12], color=COLOR_BY_LABEL[label], label=label)
+                # Angular velocities.
+                ax[3,0].plot(traj[:, 7], color=COLOR_BY_LABEL[label], label=label)
+                ax[3,1].plot(traj[:, 8], color=COLOR_BY_LABEL[label], label=label)
+                ax[3,2].plot(traj[:, 9], color=COLOR_BY_LABEL[label], label=label)
+            else:
+                ax.plot(traj[:, 6], color=COLOR_BY_LABEL[label], label=label)
 
         # Plot the trajectories.
         plot_trajectory(ax, target_traj, 'target')
@@ -160,10 +167,9 @@ class DynamicsStartAdjuster(DynamicsPredictor):
         ax[3, 0].set_title('X Angular Velocity')
         ax[3, 1].set_title('Y Angular Velocity')
         ax[3, 2].set_title('Z Angular Velocity')
-        ax[0, 0].set_ylabel('Position [m]')
         
         # More formatting.
-        ax[0, 3].set_ylabel('Angular error [deg]')
+        ax[0, 0].set_ylabel('Position [m]')
         ax[1, 0].set_ylabel('Orientation')
         ax[2, 0].set_ylabel('Linear Velocity [m/s]')
         ax[3, 0].set_ylabel('Angular Velocity [rad/s]')
@@ -190,12 +196,29 @@ class DynamicsStartAdjuster(DynamicsPredictor):
         fig.suptitle(f'Start Adjust for {toss_key}')
         plt.savefig(op.join(
             file_utils.start_adjustment_dir(), f'{self.object}_{toss_key}.png'))
-        plt.show()
+        # plt.show()
+        plt.close()
+
+        # Do a close-up of the z plot.
+        fig, ax = plt.subplots(1, 1, figsize=(15, 15))
+        plot_trajectory(ax, target_traj, 'target')
+        for i in rollouts_by_start_adjust.keys():
+            plot_trajectory(ax, rollouts_by_start_adjust[i], f'start_adjust {i}')
+        ax.set_ylabel('Position [m]')
+        ax.set_title('Z Position')
+        fig.suptitle(f'Start Adjust for {toss_key}')
+        fig.legend(handles, labels, loc='lower center')
+        plt.savefig(op.join(
+            file_utils.start_adjustment_dir(), f'{self.object}_{toss_key}_zoom.png'))
+        # plt.show()
+        plt.close()
+
 
         # Set the start adjust.
-        start_adjust = input(f'Select start adjust for {toss_key}: ')
-        while not start_adjust.isdigit():
-            start_adjust = input(f'\tUse number: ')
+        # start_adjust = input(f'Select start adjust for {toss_key}: ')
+        # while not start_adjust.isdigit():
+        #     start_adjust = input(f'\tUse number: ')
+        start_adjust = 0
 
         return int(start_adjust)
 
@@ -215,13 +238,7 @@ def main_command(vision_asset: str, do_videos: bool):
     assert '_' in vision_asset, f'Invalid {vision_asset=}.'
 
     start_adjuster = DynamicsStartAdjuster(vision_asset)
-
-    ### Dynamics predictions.
     start_adjuster.inspect_start_adjust()
-    # if do_videos:
-    #     start_adjuster.make_prediction_video()
-    # else:
-    #     print(f'Skipping start adjust videos for {vision_asset=}.')
 
 
 if __name__ == "__main__":

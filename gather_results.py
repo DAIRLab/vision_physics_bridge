@@ -262,30 +262,33 @@ def add_experiment_to_overall_results(experiment_results, add_to_results):
                     keys=[category, 'training_tosses', against, metric,
                     'mean_auc']
                 )
-                subresults = recursive_dict_add(
-                    d=subresults,
-                    val=np.mean(test_toss_means).item(),
-                    keys=[category, 'unseen_tosses', against, metric,
-                    'mean']
-                )
-                subresults = recursive_dict_add(
-                    d=subresults,
-                    val=np.mean(test_toss_aucs).item(),
-                    keys=[category, 'unseen_tosses', against, metric,
-                    'mean_auc']
-                )
-                subresults = recursive_dict_add(
-                    d=subresults,
-                    val=np.mean(training_toss_means + test_toss_means).item(),
-                    keys=[category, 'all_tosses', against, metric,
-                    'mean']
-                )
-                subresults = recursive_dict_add(
-                    d=subresults,
-                    val=np.mean(training_toss_aucs + test_toss_aucs).item(),
-                    keys=[category, 'all_tosses', against, metric,
-                    'mean_auc']
-                )
+                if against == 'against_tagslam':
+                    subresults = recursive_dict_add(
+                        d=subresults,
+                        val=np.mean(test_toss_means).item(),
+                        keys=[category, 'unseen_tosses', against, metric,
+                        'mean']
+                    )
+                    subresults = recursive_dict_add(
+                        d=subresults,
+                        val=np.mean(test_toss_aucs).item(),
+                        keys=[category, 'unseen_tosses', against, metric,
+                        'mean_auc']
+                    )
+                    subresults = recursive_dict_add(
+                        d=subresults,
+                        val=np.mean(
+                            training_toss_means + test_toss_means).item(),
+                        keys=[category, 'all_tosses', against, metric,
+                        'mean']
+                    )
+                    subresults = recursive_dict_add(
+                        d=subresults,
+                        val=np.mean(
+                            training_toss_aucs + test_toss_aucs).item(),
+                        keys=[category, 'all_tosses', against, metric,
+                        'mean_auc']
+                    )
 
 #######################################################################
 @click.group()
