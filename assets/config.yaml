@@ -1954,7 +1954,7 @@ tosses:
         nsecs: 537804000
       start_frame: 39
       end_frame: 77
-      start_adjust: 0
+      start_adjust: 2
     - toss: 3
       start_time:
         secs: 1716134027
@@ -1974,7 +1974,7 @@ tosses:
         nsecs: 028280000
       start_frame: 42
       end_frame: 79
-      start_adjust: 0
+      start_adjust: 1
     - toss: 5
       start_time:
         secs: 1716134034
@@ -2047,7 +2047,7 @@ tosses:
         nsecs: 691240000
       start_frame: 39
       end_frame: 81
-      start_adjust: 0
+      start_adjust: 2
     - toss: 2
       start_time:
         secs: 1716134750
@@ -2057,7 +2057,7 @@ tosses:
         nsecs: 567758000
       start_frame: 34
       end_frame: 82
-      start_adjust: 0
+      start_adjust: 4
     - toss: 3
       start_time:
         secs: 1716134753
@@ -2067,7 +2067,7 @@ tosses:
         nsecs: 860622000
       start_frame: 69
       end_frame: 123
-      start_adjust: 0
+      start_adjust: 2
     - toss: 4
       start_time:
         secs: 1716134757
@@ -2077,7 +2077,7 @@ tosses:
         nsecs: 417616000
       start_frame: 52
       end_frame: 96
-      start_adjust: 0
+      start_adjust: 1
     - toss: 5
       start_time:
         secs: 1716134761
@@ -2087,7 +2087,7 @@ tosses:
         nsecs: 186151000
       start_frame: 57
       end_frame: 103
-      start_adjust: 0
+      start_adjust: 1
     - toss: 6
       start_time:
         secs: 1716134765
@@ -2170,7 +2170,7 @@ tosses:
         nsecs: 779543000
       start_frame: 8
       end_frame: 43
-      start_adjust: 0
+      start_adjust: 1
     - toss: 2
       start_time:
         secs: 1716134891
@@ -2190,7 +2190,7 @@ tosses:
         nsecs: 889406000
       start_frame: 51
       end_frame: 85
-      start_adjust: 0
+      start_adjust: 2
     - toss: 4
       start_time:
         secs: 1716134898
@@ -2210,7 +2210,7 @@ tosses:
         nsecs: 226505000
       start_frame: 67
       end_frame: 101
-      start_adjust: 0
+      start_adjust: 1
     - toss: 6
       start_time:
         secs: 1716134907
@@ -2303,7 +2303,7 @@ tosses:
         nsecs: 535948000
       start_frame: 51
       end_frame: 96
-      start_adjust: 0
+      start_adjust: 1
     - toss: 4
       start_time:
         secs: 1716134084
@@ -2313,7 +2313,7 @@ tosses:
         nsecs: 330238000
       start_frame: 55
       end_frame: 84
-      start_adjust: 0
+      start_adjust: 0  #3
     - toss: 5
       start_time:
         secs: 1716134087
@@ -2323,7 +2323,7 @@ tosses:
         nsecs: 966451000
       start_frame: 69
       end_frame: 99
-      start_adjust: 0
+      start_adjust: 0  #3
     - toss: 6
       start_time:
         secs: 1716134090
