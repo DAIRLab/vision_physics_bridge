@@ -150,6 +150,16 @@ METRIC_SCALING = {
     'penetration_learned_geom_tagslam_traj': 1  # [m]
 }
 
+# The following are t values for 95% confidence interval.
+T_SCORE_PER_DOF = {1: 12.71, 2: 4.303, 3: 3.182, 4: 2.776,
+                   5: 2.571, 6: 2.447, 7: 2.365, 8: 2.306,
+                   9: 2.262, 10: 2.228, 11: 2.201, 12: 2.179,
+                   13: 2.160, 14: 2.145, 15: 2.131, 16: 2.120,
+                   17: 2.110, 18: 2.101, 19: 2.093, 20: 2.086,
+                   21: 2.080, 22: 2.074, 23: 2.069, 24: 2.064,
+                   25: 2.060, 26: 2.056, 27: 2.052, 28: 2.048,
+                   29: 2.045, 30: 2.042}
+
 BSDF_PLL_COLOR = '#01256e'
 BSDF_ONLY_COLOR = '#398537'
 PLL_ONLY_COLOR = '#95001a'
@@ -158,6 +168,37 @@ BSDF_ONLY_LABEL = 'BundleSDF Only'
 PLL_ONLY_LABEL = 'PLL Only'
 LINEWIDTH = 5
 
+
+def xs_and_ys_to_x_mean_lower_upper(mixed_xs, mixed_ys):
+    mixed_xs = np.array(mixed_xs)
+    mixed_ys = np.array(mixed_ys)
+
+    # Get the unique xs.  This also puts them in increasing order.
+    xs = np.unique(mixed_xs).tolist()
+
+    # Combine the ys.
+    ys, lowers, uppers = [], [], []
+    for x in xs:
+        idx = np.where(mixed_xs == x)[0]
+        mean, lower, upper = set_of_vals_to_t_confidence_interval(mixed_ys[idx])
+
+        ys.append(mean)
+        lowers.append(lower)
+        uppers.append(upper)
+
+    return xs, ys, lowers, uppers
+
+def set_of_vals_to_t_confidence_interval(ys):
+    if len(ys) <= 1:
+        return None, None, None
+
+    dof = len(ys) - 1
+
+    mean = np.mean(ys)
+    lower = mean - T_SCORE_PER_DOF[dof]*np.std(ys)/np.sqrt(dof+1)
+    upper = mean + T_SCORE_PER_DOF[dof]*np.std(ys)/np.sqrt(dof+1)
+
+    return mean, lower, upper
 
 def compute_auc_by_metric(errors_over_traj, metric: str):
     if metric in ['position_error', 'add_error', 'adds_error']:
@@ -364,10 +405,15 @@ class ResultsPlotter:
             self, full_or_toss: str, tracking_metric: str):
         """Tracking metrics against TagSLAM.  Only doable for tagged objects and
         not for PLL-only."""
+        # Keep track of all objects.
+        all_objects_bsdf_pll_mean = [[], []]
+        all_objects_bsdf_pll_auc = [[], []]
+        all_objects_bsdf_only_mean = [[], []]
+        all_objects_bsdf_only_auc = [[], []]
+
         for obj in self.tagged_objects:
             scale = METRIC_SCALING[tracking_metric]
-            auc_scale = METRIC_SCALING[tracking_metric] * \
-                METRIC_SCALING['auc']
+            auc_scale = METRIC_SCALING['auc']
 
             # Get the BundleSDF-PLL results.  Store as a 2D array [[xs], [ys]].
             bsdf_pll_mean = [[], []]
@@ -388,6 +434,10 @@ class ResultsPlotter:
                 bsdf_pll_auc[0].append(n_tosses)
                 bsdf_pll_mean[1].append(error)
                 bsdf_pll_auc[1].append(auc)
+                all_objects_bsdf_pll_mean[0].append(n_tosses)
+                all_objects_bsdf_pll_auc[0].append(n_tosses)
+                all_objects_bsdf_pll_mean[1].append(error)
+                all_objects_bsdf_pll_auc[1].append(auc)
 
             # Get the BundleSDF only results.
             bsdf_only_mean = [[], []]
@@ -408,18 +458,36 @@ class ResultsPlotter:
                 bsdf_only_auc[0].append(n_tosses)
                 bsdf_only_mean[1].append(error)
                 bsdf_only_auc[1].append(auc)
+                all_objects_bsdf_only_mean[0].append(n_tosses)
+                all_objects_bsdf_only_auc[0].append(n_tosses)
+                all_objects_bsdf_only_mean[1].append(error)
+                all_objects_bsdf_only_auc[1].append(auc)
 
             # Generate the plots.
             self._do_plot(
                 bp_data=bsdf_pll_mean, bo_data=bsdf_only_mean,
                 ylabel=ERROR_LABELS[tracking_metric], xlabel=NUM_TOSSES_LABEL,
-                title=f'{obj.capitalize()} Full Trajectory',
+                title=f'{obj} {full_or_toss} Trajectory'.title(),
                 filename=f'{obj}_{tracking_metric}_v_data_{full_or_toss}.png')
             self._do_plot(
                 bp_data=bsdf_pll_auc, bo_data=bsdf_only_auc,
                 ylabel=AUC_LABELS[tracking_metric], xlabel=NUM_TOSSES_LABEL,
-                title=f'{obj.capitalize()} Full Trajectory',
+                title=f'{obj} {full_or_toss} Trajectory'.title(),
                 filename=f'{obj}_{tracking_metric}_v_data_{full_or_toss}_auc.png')
+            
+        # Do a confidence interval plot that aggregates all the objects.
+        self._do_confidence_interval_plot(
+            bp_data=all_objects_bsdf_pll_mean,
+            bo_data=all_objects_bsdf_only_mean,
+            ylabel=ERROR_LABELS[tracking_metric], xlabel=NUM_TOSSES_LABEL,
+            title=f'All Tagged Objects {full_or_toss.capitalize()} Trajectory',
+            filename=f'all_objs_{tracking_metric}_v_data_{full_or_toss}.png')
+        self._do_confidence_interval_plot(
+            bp_data=all_objects_bsdf_pll_auc,
+            bo_data=all_objects_bsdf_only_auc,
+            ylabel=AUC_LABELS[tracking_metric], xlabel=NUM_TOSSES_LABEL,
+            title=f'All Tagged Objects {full_or_toss.capitalize()} Trajectory',
+            filename=f'all_objs_{tracking_metric}_v_data_{full_or_toss}_auc.png')
 
     def _do_plot(self, bp_data: list = None, bo_data: list = None,
                  to_data: list = None, ylabel: str = '', xlabel: str = '',
@@ -436,6 +504,45 @@ class ResultsPlotter:
         if to_data is not None:
             ax.plot(to_data[0], to_data[1], linewidth=LINEWIDTH,
                     color=PLL_ONLY_COLOR, label=PLL_ONLY_LABEL)
+
+        ax.set_xlim(0.5, np.max(bp_data[0])+0.5)
+        x_markers = bp_data[0]
+        ax.set_ylim(0, None)
+
+        plt.xlabel(xlabel)
+        plt.ylabel(ylabel)
+        plt.title(title)
+
+        self._beautify_plot(fig, ax, x_markers, auc='auc' in filename)
+
+        filename += '.png' if not filename.endswith('.png') else ''
+        fig_path = op.join(self.plot_dir, filename)
+        fig.savefig(fig_path, dpi=100)
+        plt.close()
+
+    def _do_confidence_interval_plot(
+            self, bp_data: list = None, bo_data: list = None,
+            to_data: list = None, ylabel: str = '', xlabel: str = '',
+            title: str = None, filename: str = None):
+        fig = plt.figure()
+        ax = plt.gca()
+
+        if bp_data is not None:
+            # Convert the data to mean/lower/upper.
+            x, y, l, u = xs_and_ys_to_x_mean_lower_upper(bp_data[0], bp_data[1])
+            ax.plot(x, y, linewidth=LINEWIDTH,
+                    color=BSDF_PLL_COLOR, label=BSDF_PLL_LABEL)
+            ax.fill_between(x, l, u, alpha=0.3, color=BSDF_PLL_COLOR)
+        if bo_data is not None:
+            x, y, l, u = xs_and_ys_to_x_mean_lower_upper(bo_data[0], bo_data[1])
+            ax.plot(x, y, linewidth=LINEWIDTH,
+                    color=BSDF_ONLY_COLOR, label=BSDF_ONLY_LABEL)
+            ax.fill_between(x, l, u, alpha=0.3, color=BSDF_ONLY_COLOR)
+        if to_data is not None:
+            x, y, l, u = xs_and_ys_to_x_mean_lower_upper(to_data[0], to_data[1])
+            ax.plot(x, y, linewidth=LINEWIDTH,
+                    color=PLL_ONLY_COLOR, label=PLL_ONLY_LABEL)
+            ax.fill_between(x, l, u, alpha=0.3, color=PLL_ONLY_COLOR)
 
         ax.set_xlim(0.5, np.max(bp_data[0])+0.5)
         x_markers = bp_data[0]
@@ -582,10 +689,11 @@ def process_plot_command():
         pll_only_results=pll_only_results
     )
 
-    for tagslam_tracking_metric in ERROR_LABELS.keys():
-        results_plotter.plot_tagslam_tracking_error_vs_data(
-            'full', tagslam_tracking_metric)
-    pdb.set_trace()
+    for trajectory in ['full', 'toss']:
+        for tagslam_tracking_metric in ERROR_LABELS.keys():
+            print(f'Plotting {trajectory}, {tagslam_tracking_metric}')
+            results_plotter.plot_tagslam_tracking_error_vs_data(
+                trajectory, tagslam_tracking_metric)
 
 
 if __name__ == '__main__':
