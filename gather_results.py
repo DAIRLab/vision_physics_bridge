@@ -128,6 +128,10 @@ ERROR_LABELS = {
     'adds_error': 'ADD-S Error [m]',
     'penetration_learned_geom_tagslam_traj': \
         'Learned Geometry Penetration [m]',
+    'penetration_true_geom_estimated_traj': \
+        'True Geometry Penetration [m]',
+    'penetration_learned_geom_estimated_traj': \
+        'Learned Geometry Penetration [m]',
 }
 AUC_LABELS = {
     'position_error': \
@@ -138,16 +142,22 @@ AUC_LABELS = {
     'adds_error': f'ADD-S AUC (<{eval_utils.POSITION_AUC_THRESHOLD})',
     'penetration_learned_geom_tagslam_traj': \
         f'Learned Geometry Penetration (<{eval_utils.POSITION_AUC_THRESHOLD}m)',
+    'penetration_true_geom_estimated_traj': \
+        f'True Geometry Penetration (<{eval_utils.POSITION_AUC_THRESHOLD}m)',
+    'penetration_learned_geom_estimated_traj': \
+        f'Learned Geometry Penetration (<{eval_utils.POSITION_AUC_THRESHOLD}m)',
 }
 NUM_TOSSES_LABEL = 'Number of Training Tosses'
 
 METRIC_SCALING = {
-    'auc': 100,                                 # [%]
-    'position_error': 1,                        # [m]
-    'rotation_error': 180/np.pi,                # [deg]
-    'add_error': 1,                             # [m]
-    'adds_error': 1,                            # [m]
-    'penetration_learned_geom_tagslam_traj': 1  # [m]
+    'auc': 100,                                     # [%]
+    'position_error': 1,                            # [m]
+    'rotation_error': 180/np.pi,                    # [deg]
+    'add_error': 1,                                 # [m]
+    'adds_error': 1,                                # [m]
+    'penetration_learned_geom_tagslam_traj': 1,     # [m]
+    'penetration_true_geom_estimated_traj': 1,      # [m]
+    'penetration_learned_geom_estimated_traj': 1,   # [m]
 }
 
 # The following are t values for 95% confidence interval.
@@ -473,7 +483,8 @@ class ResultsPlotter:
                 bp_data=bsdf_pll_auc, bo_data=bsdf_only_auc,
                 ylabel=AUC_LABELS[tracking_metric], xlabel=NUM_TOSSES_LABEL,
                 title=f'{obj} {full_or_toss} Trajectory'.title(),
-                filename=f'{obj}_{tracking_metric}_v_data_{full_or_toss}_auc.png')
+                filename=f'{obj}_{tracking_metric}_v_data_{full_or_toss}' + \
+                    f'_auc.png')
             
         # Do a confidence interval plot that aggregates all the objects.
         self._do_confidence_interval_plot(
@@ -481,13 +492,107 @@ class ResultsPlotter:
             bo_data=all_objects_bsdf_only_mean,
             ylabel=ERROR_LABELS[tracking_metric], xlabel=NUM_TOSSES_LABEL,
             title=f'All Tagged Objects {full_or_toss.capitalize()} Trajectory',
-            filename=f'all_objs_{tracking_metric}_v_data_{full_or_toss}.png')
+            filename=f'all_tagged_objs_{tracking_metric}_v_data_' + \
+                f'{full_or_toss}.png')
         self._do_confidence_interval_plot(
             bp_data=all_objects_bsdf_pll_auc,
             bo_data=all_objects_bsdf_only_auc,
             ylabel=AUC_LABELS[tracking_metric], xlabel=NUM_TOSSES_LABEL,
             title=f'All Tagged Objects {full_or_toss.capitalize()} Trajectory',
-            filename=f'all_objs_{tracking_metric}_v_data_{full_or_toss}_auc.png')
+            filename=f'all_tagged_objs_{tracking_metric}_v_data_' + \
+                f'{full_or_toss}_auc.png')
+
+    def plot_bundlesdf_tracking_error_vs_data(
+            self, full_or_toss: str, tracking_metric: str):
+        """Tracking metrics against BundleSDF.  Doable for all objects but not
+        for PLL-only."""
+        # Keep track of all objects.
+        all_objects_bsdf_pll_mean = [[], []]
+        all_objects_bsdf_pll_auc = [[], []]
+        all_objects_bsdf_only_mean = [[], []]
+        all_objects_bsdf_only_auc = [[], []]
+
+        for obj in self.tagless_objects:
+            scale = METRIC_SCALING[tracking_metric]
+            auc_scale = METRIC_SCALING['auc']
+
+            # Get the BundleSDF-PLL results.  Store as a 2D array [[xs], [ys]].
+            bsdf_pll_mean = [[], []]
+            bsdf_pll_auc = [[], []]
+            for tosses, results in self.bsdf_pll_results['tagless_objects'][obj
+                ].items():
+                tosses = tosses.split('trained_on_toss_')[-1]
+                start_toss = int(tosses.split('-')[0])
+                end_toss = int(tosses.split('-')[-1])
+                n_tosses = end_toss - start_toss + 1
+
+                error = results['tracking_metrics'][full_or_toss][
+                    'against_bundlesdf'][tracking_metric]['mean'] * scale
+                auc = results['tracking_metrics'][full_or_toss][
+                    'against_bundlesdf'][tracking_metric]['mean_auc'] * \
+                        auc_scale
+
+                bsdf_pll_mean[0].append(n_tosses)
+                bsdf_pll_auc[0].append(n_tosses)
+                bsdf_pll_mean[1].append(error)
+                bsdf_pll_auc[1].append(auc)
+                all_objects_bsdf_pll_mean[0].append(n_tosses)
+                all_objects_bsdf_pll_auc[0].append(n_tosses)
+                all_objects_bsdf_pll_mean[1].append(error)
+                all_objects_bsdf_pll_auc[1].append(auc)
+
+            # Get the BundleSDF only results.
+            bsdf_only_mean = [[], []]
+            bsdf_only_auc = [[], []]
+            for tosses, results in self.bsdf_only_results['tagless_objects'][obj
+                ].items():
+                tosses = tosses.split('trained_on_toss_')[-1]
+                start_toss = int(tosses.split('-')[0])
+                end_toss = int(tosses.split('-')[-1])
+                n_tosses = end_toss - start_toss + 1
+
+                error = results['tracking_metrics'][full_or_toss][
+                    'against_bundlesdf'][tracking_metric]['mean'] * scale
+                auc = results['tracking_metrics'][full_or_toss][
+                    'against_bundlesdf'][tracking_metric]['mean_auc'] * \
+                        auc_scale
+
+                bsdf_only_mean[0].append(n_tosses)
+                bsdf_only_auc[0].append(n_tosses)
+                bsdf_only_mean[1].append(error)
+                bsdf_only_auc[1].append(auc)
+                all_objects_bsdf_only_mean[0].append(n_tosses)
+                all_objects_bsdf_only_auc[0].append(n_tosses)
+                all_objects_bsdf_only_mean[1].append(error)
+                all_objects_bsdf_only_auc[1].append(auc)
+
+            # Generate the plots.
+            self._do_plot(
+                bp_data=bsdf_pll_mean, bo_data=bsdf_only_mean,
+                ylabel=ERROR_LABELS[tracking_metric], xlabel=NUM_TOSSES_LABEL,
+                title=f'{obj} {full_or_toss} Trajectory'.title(),
+                filename=f'{obj}_{tracking_metric}_v_data_{full_or_toss}.png')
+            self._do_plot(
+                bp_data=bsdf_pll_auc, bo_data=bsdf_only_auc,
+                ylabel=AUC_LABELS[tracking_metric], xlabel=NUM_TOSSES_LABEL,
+                title=f'{obj} {full_or_toss} Trajectory'.title(),
+                filename=f'{obj}_{tracking_metric}_v_data_{full_or_toss}_auc.png')
+
+        # Do a confidence interval plot that aggregates all the objects.
+        self._do_confidence_interval_plot(
+            bp_data=all_objects_bsdf_pll_mean,
+            bo_data=all_objects_bsdf_only_mean,
+            ylabel=ERROR_LABELS[tracking_metric], xlabel=NUM_TOSSES_LABEL,
+            title=f'All Tagless Objects {full_or_toss.capitalize()} Trajectory',
+            filename=f'all_tagless_objs_{tracking_metric}_v_data_' + \
+                f'{full_or_toss}.png')
+        self._do_confidence_interval_plot(
+            bp_data=all_objects_bsdf_pll_auc,
+            bo_data=all_objects_bsdf_only_auc,
+            ylabel=AUC_LABELS[tracking_metric], xlabel=NUM_TOSSES_LABEL,
+            title=f'All Tagless Objects {full_or_toss.capitalize()} Trajectory',
+            filename=f'all_tagless_objs_{tracking_metric}_v_data_' + \
+                f'{full_or_toss}_auc.png')
 
     def _do_plot(self, bp_data: list = None, bo_data: list = None,
                  to_data: list = None, ylabel: str = '', xlabel: str = '',
@@ -679,9 +784,14 @@ def process_gather_command():
 # and to generate plots with them.
 @cli.command('plot')
 def process_plot_command():
+    # Load the gathered results.
     bsdf_pll_results = file_utils.load_gathered_results_yaml('bsdf_pll.yaml')
     bsdf_only_results = file_utils.load_gathered_results_yaml('bsdf_only.yaml')
     pll_only_results = file_utils.load_gathered_results_yaml('pll_only.yaml')
+
+    # Load an empty results dictionary for checking which metrics are valid for
+    # which category/against which tracking.
+    empty_results = file_utils.load_empty_results_yaml()
 
     results_plotter = ResultsPlotter(
         bsdf_pll_results=bsdf_pll_results,
@@ -690,10 +800,17 @@ def process_plot_command():
     )
 
     for trajectory in ['full', 'toss']:
-        for tagslam_tracking_metric in ERROR_LABELS.keys():
-            print(f'Plotting {trajectory}, {tagslam_tracking_metric}')
-            results_plotter.plot_tagslam_tracking_error_vs_data(
-                trajectory, tagslam_tracking_metric)
+        for tracking_metric in ERROR_LABELS.keys():
+            if tracking_metric in \
+                empty_results['tracking_metrics']['against_tagslam'].keys():
+                print(f'Plotting TagSLAM {trajectory}, {tracking_metric}')
+                results_plotter.plot_tagslam_tracking_error_vs_data(
+                    trajectory, tracking_metric)
+            if tracking_metric in \
+                empty_results['tracking_metrics']['against_bundlesdf'].keys():
+                print(f'Plotting BundleSDF {trajectory}, {tracking_metric}')
+                results_plotter.plot_bundlesdf_tracking_error_vs_data(
+                    trajectory, tracking_metric)
 
 
 if __name__ == '__main__':
