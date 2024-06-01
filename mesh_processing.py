@@ -109,8 +109,8 @@ class MeshProcessor:
         )
 
         # Save the transformation matrix.
-        print(f'Solved transformation matrix:\n{reg_p2p.transformation}')
         self.true_to_learned_transform = reg_p2p.transformation
+        print(f'Solved TF matrix:\n{self.true_to_learned_transform}')
         if save_dir is not None:
             np.savetxt(
                 op.join(save_dir, 'true_to_learned_tf.txt'),
@@ -119,7 +119,7 @@ class MeshProcessor:
 
         # Transform the true mesh's point cloud by the solved transform and view
         # the results.
-        true_cloud.transform(reg_p2p.transformation)
+        true_cloud.transform(self.true_to_learned_transform)
         self.aligned_true_cloud = true_cloud
         if show:
             o3d.visualization.draw_geometries(
@@ -142,6 +142,9 @@ class MeshProcessor:
         self.true_mesh.transform(self.true_to_learned_transform)
         self.did_alignment_to_bundlesdf = True
         if save_dir is not None:
+            if op.exists(op.join(save_dir, obj_name)):
+                print(f'Found {obj_name} already in {save_dir}.')
+                pdb.set_trace()
             o3d.io.write_triangle_mesh(
                 op.join(save_dir, obj_name), self.true_mesh,
                 write_triangle_uvs=False, write_vertex_colors=False

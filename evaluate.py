@@ -312,12 +312,8 @@ class TrajectoryPerformanceEvaluator:
                 old_urdf_path = file_utils.template_urdf_filepath()
 
             # First create a URDF.
-            new_urdf_path = op.join(self.eval_dir, 'bsdf_mesh_pll_params.urdf')
+            new_urdf_path = op.join(self.eval_dir, 'true_mesh_pll_params.urdf')
             os.system(f'cp {old_urdf_path} {new_urdf_path}')
-
-            old_obj_path = file_utils.object_scan_filepath(self.object)
-            new_obj_path = op.join(self.eval_dir, 'true_geom_aligned.obj')
-            os.system(f'cp {old_obj_path} {new_obj_path}')
 
             # Align the true geometry to the BSDF geometry.
             self._write_aligned_true_geometry_obj(
@@ -326,7 +322,7 @@ class TrajectoryPerformanceEvaluator:
             # Overwrite the geometry in the URDF to refer to the new obj.
             eval_utils.overwrite_mesh_name_in_urdf(
                 new_urdf_path, 'true_geom_aligned.obj')
-            print(f'Wrote URDF to {new_urdf_path}')
+            print(f'TRAJ: Wrote URDF to {new_urdf_path}')
 
             # Create the system.
             self.true_geom_pll_system = \
@@ -729,6 +725,10 @@ class DynamicsPredictor:
 
     def _create_pll_sim_system(self):
         """Create a PLL MultibodyLearnableSystem, which can be simulated."""
+        if hasattr(self, 'pll_system'):
+            print(f'No need to remake PLL system in DynamicsPredictor.')
+            return
+
         # First create a URDF.  This should be the same as the last PLL URDF,
         # possibly with the geometry replaced by the new BSDF geometry if the
         # last run was BundleSDF and not PLL.
@@ -755,7 +755,7 @@ class DynamicsPredictor:
 
         # Overwrite the geometry in the URDF to refer to the new obj.
         eval_utils.overwrite_mesh_name_in_urdf(new_urdf_path, new_mesh_name)
-        print(f'Wrote URDF to {new_urdf_path}')
+        print(f'DYN: Wrote URDF to {new_urdf_path}')
 
         # Create the system.
         self.pll_system = eval_utils.create_multibody_learnable_system(
@@ -1172,7 +1172,7 @@ class GeometryEvaluator:
                 self.eval_dir, 'pll_urdf', 'test.obj')
             if not op.exists(learned_mesh_path):
                 learned_mesh_path = op.join(
-                self.eval_dir, 'pll_urdf', 'test_best.obj')
+                    self.eval_dir, 'pll_urdf', 'test_best.obj')
         assert op.exists(learned_mesh_path), f'GeometryEvaluator requires ' + \
             f'{learned_mesh_path=} to exist, but does not exist.'
         self.learned_mesh = icp.load_mesh_from_obj(learned_mesh_path)
@@ -1415,27 +1415,6 @@ def main_command(vision_asset: str, bundlesdf_id: str, nerf_bundlesdf_id: str,
     for key, val in history.items():
         print(f'\t{key} : {val}')
 
-    # Check if results already exist.
-    tracking_only = False
-    eval_dir = file_utils.evaluation_subdir(
-        dataset=vision_asset, cycle_iteration=cycle_iteration,
-        tracking_bundlesdf_id=bundlesdf_id,
-        nerf_bundlesdf_id=nerf_bundlesdf_id, pll_id=pll_id
-    )
-    if op.exists(op.join(eval_dir, 'results.yaml')):
-        if overwrite == 'none':
-            print(f'Found results.yaml in {eval_dir} -- skipping.  Use ' + \
-                  f'--overwrite to overwrite next time if desired.')
-            exit()
-        elif overwrite == 'all':
-            print(f'Overwriting results in {eval_dir}.')
-        elif overwrite == 'tracking':
-            print(f'Overwriting only tracking results in {eval_dir}.')
-            tracking_only = True
-        else:
-            raise ValueError(f'Invalid {overwrite=}.  Choose none, all, or ' + \
-                'tracking.')
-
     # Create an empty results dictionary to be stored as a yaml file.
     last_run_was_bsdf = True if pll_id is None else False
     results = eval_utils.create_empty_results_dict(
@@ -1444,12 +1423,46 @@ def main_command(vision_asset: str, bundlesdf_id: str, nerf_bundlesdf_id: str,
     results['_overview']['history'] = history
     results['_overview']['nerf_bundlesdf_id'] = nerf_bundlesdf_id
 
-    # Respect the previously generated other results.
-    if tracking_only:
+    # Check if results already exist.
+    do_dynamics = True
+    do_geometry = True
+    eval_dir = file_utils.evaluation_subdir(
+        dataset=vision_asset, cycle_iteration=cycle_iteration,
+        tracking_bundlesdf_id=bundlesdf_id,
+        nerf_bundlesdf_id=nerf_bundlesdf_id, pll_id=pll_id
+    )
+    if op.exists(op.join(eval_dir, 'results.yaml')):
         old_results = file_utils.load_results_yaml_in_subdir(
             op.basename(eval_dir))
-        old_results['tracking_metrics'] = results['tracking_metrics']
-        results = old_results
+        if overwrite == 'none':
+            print(f'Found results.yaml in {eval_dir} -- skipping.  Use ' + \
+                  f'--overwrite to overwrite next time if desired.')
+            exit()
+        elif overwrite == 'all':
+            print(f'Overwriting results in {eval_dir}.')
+            os.system(f'rm -r {eval_dir}/*')
+        elif overwrite == 'tracking':
+            print(f'Overwriting only tracking results in {eval_dir}.')
+            do_dynamics = False
+            do_geometry = False
+            # Clear out old results tracking metrics in preparation to be
+            # overwritten.
+            old_results['tracking_metrics'] = results['tracking_metrics']
+            results = old_results
+        elif overwrite == 'tracking_geometry':
+            print(f'Overwriting only tracking and geometry results in ' + \
+                  f'{eval_dir}.')
+            do_dynamics = False
+            do_geometry = True
+            # Clear out old results tracking and geometry metrics in preparation
+            # to be overwritten.
+            old_results['tracking_metrics'] = results['tracking_metrics']
+            old_results['geometry_metrics'] = results['geometry_metrics']
+            results = old_results
+
+        else:
+            raise ValueError(f'Invalid {overwrite=}.  Choose none, all, ' + \
+                'tracking, or tracking_geometry.')
 
     # Automatically detect if BundleSDF-only is necessary based on if the object
     # is a tagless one.
@@ -1463,6 +1476,7 @@ def main_command(vision_asset: str, bundlesdf_id: str, nerf_bundlesdf_id: str,
 
     ### Pose estimation.
     # Compute tracking metrics if last run was BundleSDF (so PLL ID is None).
+    print(f'\nDOING TRACKING METRICS\n')
     traj_evaluator = TrajectoryPerformanceEvaluator(
         vision_asset, history, nerf_bundlesdf_id, bsdf_only)
     traj_evaluator.get_tracking_trajectories()
@@ -1471,7 +1485,8 @@ def main_command(vision_asset: str, bundlesdf_id: str, nerf_bundlesdf_id: str,
 
     ### Dynamics predictions.
     # Compute dynamics metrics if last run was PLL or PLL was ever run.
-    if (pll_id is not None or cycle_iteration > 1) and not tracking_only:
+    if do_dynamics and (pll_id is not None or cycle_iteration > 1):
+        print(f'\nDOING DYNAMICS METRICS\n')
         dynamics_predictor = DynamicsPredictor(
             vision_asset, history, nerf_bundlesdf_id, bsdf_only)
         dynamics_predictor.generate_rollout_trajectories()
@@ -1485,7 +1500,8 @@ def main_command(vision_asset: str, bundlesdf_id: str, nerf_bundlesdf_id: str,
                 f'{bundlesdf_id=}, {nerf_bundlesdf_id=}, {cycle_iteration=}.')
 
     ### Geometry evaluation.
-    if not tracking_only:
+    if do_geometry:
+        print(f'\nDOING GEOMETRY METRICS\n')
         geometry_evaluator = GeometryEvaluator(
             vision_asset, history, nerf_bundlesdf_id)
         geometry_evaluator.compute_metrics()
