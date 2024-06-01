@@ -421,7 +421,8 @@ def evaluation_dir() -> str:
 
 def evaluation_subdir(
         dataset: str, cycle_iteration: int, tracking_bundlesdf_id: str = None,
-        nerf_bundlesdf_id: str = None, pll_id: str = None) -> str:
+        nerf_bundlesdf_id: str = None, pll_id: str = None, create: bool = True
+) -> str:
     """Subdirectory for a particular experiment's evaluation."""
     eval_dir = evaluation_dir()
 
@@ -448,7 +449,9 @@ def evaluation_subdir(
 
         subdir = f'{dataset}_pll_{pll_id}_{cycle_iteration}'
 
-    return assure_created(op.join(eval_dir, subdir))
+    if create:
+        return assure_created(op.join(eval_dir, subdir))
+    return op.join(eval_dir, subdir)
 
 def evaluation_toss_prediction_video_filepath(
         dataset: str, cycle_iteration: int, tracking_bundlesdf_id: str = None,

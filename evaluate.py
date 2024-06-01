@@ -2,8 +2,10 @@
 PLL cyclic pipeline."""
 
 import click
+import copy
 import matplotlib.pyplot as plt
 import numpy as np
+import open3d as o3d
 import os
 import os.path as op
 import pdb
@@ -572,6 +574,207 @@ class TrajectoryPerformanceEvaluator:
             subsub_results['traj'] = over_traj.tolist()
 
 
+class GeometryEvaluator:
+    """Evaluate the learned geometry.  This requires the following to already be
+    present in the evaluation directory:
+        - true_geom_aligned.obj
+        - bsdf_mesh.obj if last run was BundleSDF, else pll_mesh.obj
+    """
+    def __init__(self, vision_asset: str, history: dict,
+                 nerf_bundlesdf_id: str):
+        # First decode the latest BundleSDF or PLL run IDs to set up the
+        # evaluation directory.
+        last_bsdf_iteration = 0
+        for cycle in history.keys():
+            cycle_num = cycle.split('_')[-1]
+            if int(cycle_num) > last_bsdf_iteration:
+                last_bsdf_iteration = int(cycle_num)
+        last_tracking_bsdf_id = history[
+            f'cycle_iteration_{last_bsdf_iteration}']['bundlesdf_id']
+
+        pll_id = history[f'cycle_iteration_{last_bsdf_iteration}']['pll_id']
+        if pll_id is not None:
+            last_tracking_bsdf_id = None
+            nerf_bundlesdf_id = None
+
+        self.eval_dir = file_utils.evaluation_subdir(
+            dataset=vision_asset, cycle_iteration=last_bsdf_iteration,
+            tracking_bundlesdf_id=last_tracking_bsdf_id,
+            nerf_bundlesdf_id=nerf_bundlesdf_id, pll_id=pll_id
+        )
+
+        self.pll_id = pll_id
+        self.vision_asset = vision_asset
+        self.history = history
+        self.last_bsdf_iteration = last_bsdf_iteration
+
+        # Get the meshes -- handle alignment differently for BundleSDF and PLL
+        # since ICP probably works poorly for PLL geometries.
+        if self.pll_id is None:
+            self._get_meshes()
+        else:
+            self._handle_pll_geometry()
+
+    def _get_meshes(self):
+        """Loads the learned and ground truth meshes from the evaluation
+        directory."""
+        # Learned mesh.
+        learned_mesh_path = op.join(self.eval_dir, 'bsdf_mesh.obj')
+        assert op.exists(learned_mesh_path), f'GeometryEvaluator requires ' + \
+            f'{learned_mesh_path=} to exist for BundleSDF experiments, but ' + \
+            f'does not exist.'
+        self.learned_mesh = icp.load_mesh_from_obj(learned_mesh_path)
+
+        # Ground truth mesh.
+        true_mesh_path = op.join(self.eval_dir, 'true_geom_aligned.obj')
+        assert op.exists(true_mesh_path), f'GeometryEvaluator requires ' + \
+            f'{true_mesh_path=} to exist, but does not exist.'
+        self.true_mesh = icp.load_mesh_from_obj(true_mesh_path)
+
+        # Get each of their convex hulls too.
+        self.learned_hull, _ = self.learned_mesh.compute_convex_hull()
+        self.true_hull, _ = self.true_mesh.compute_convex_hull()
+
+    def _handle_pll_geometry(self):
+        """When using TagSLAM tracking, need to handle the geometry differently
+        since trajectory metrics are not available."""
+        # Get the true mesh aligned to a former BundleSDF run, then transform
+        # to this run's body origin.
+
+        # 1) PLL was run on BundleSDF trajectories:  Can use the BundleSDF run's
+        # GT geometry directly.
+        if self.last_bsdf_iteration >= 1:
+            other_eval_dir = file_utils.evaluation_subdir(
+                dataset=self.vision_asset,
+                cycle_iteration=self.last_bsdf_iteration,
+                tracking_bundlesdf_id=self.history[
+                    f'cycle_iteration_{self.last_bsdf_iteration}'][
+                        'bundlesdf_id'],
+                create=False
+            )
+            other_true_mesh_path = op.join(
+                other_eval_dir, 'true_geom_aligned.obj')
+            if not op.exists(other_true_mesh_path):
+                raise FileNotFoundError(f'Cannot find {other_true_mesh_path=}.')
+
+            # Load the true mesh from the associated BundleSDF run.
+            self.true_mesh = icp.load_mesh_from_obj(other_true_mesh_path)
+
+        # 2) PLL was run on TagSLAM trajectories:  Need to be more creative.
+        else:
+            other_bsdf_eval_dir = file_utils.evaluation_subdir(
+                dataset=self.vision_asset, cycle_iteration=1,
+                tracking_bundlesdf_id='bundlesdf_id_00',
+                nerf_bundlesdf_id='bundlesdf_id_00', create=False
+            )
+            other_bsdf_true_mesh_path = op.join(
+                other_bsdf_eval_dir, 'true_geom_aligned.obj')
+            if not op.exists(other_bsdf_true_mesh_path):
+                raise FileNotFoundError(
+                    f'Cannot find {other_bsdf_true_mesh_path=}.')
+
+            bsdf_output_pose_dir = file_utils.bundlesdf_pose_dir(
+                self.vision_asset, cycle_iteration=1,
+                bundlesdf_id='bundlesdf_id_00')
+            annotated_poses_dir = file_utils.bundlesdf_annotated_poses_dir(
+                self.vision_asset)
+
+            camera_T_B0 = np.loadtxt(op.join(bsdf_output_pose_dir, "0001.txt"))
+            camera_T_T0 = np.loadtxt(op.join(annotated_poses_dir, "0000.txt"))
+
+            tf_b_to_t = np.linalg.inv(camera_T_B0) @ camera_T_T0
+
+            # Load the other true mesh, then convert to TagSLAM frame.
+            other_true_mesh = icp.load_mesh_from_obj(other_bsdf_true_mesh_path)
+            self.true_mesh = copy.deepcopy(other_true_mesh).transform(tf_b_to_t)
+
+            # Also write this mesh to file for later use.
+            obj_name = 'true_geom_aligned.obj'
+            o3d.io.write_triangle_mesh(
+                op.join(self.eval_dir, obj_name), self.true_mesh,
+                write_triangle_uvs=False, write_vertex_colors=False
+            )
+            print(f'Saved ground truth mesh transformed to align with ' + \
+                f'TagSLAM tracked origin, as {obj_name} in {self.eval_dir}.')
+
+            material_filepath = op.join(
+                self.eval_dir, f'{obj_name.split(".")[0]}.mtl'
+            )
+            if op.exists(material_filepath):
+                os.system(f'rm {material_filepath}')
+
+        # Create the hull from the loaded true mesh.
+        self.true_hull, _ = self.true_mesh.compute_convex_hull()
+
+        # Get the learned mesh from PLL's URDF, which DynamicsPredictor should
+        # have already put in the evaluation directory.
+        learned_mesh_path = op.join(self.eval_dir, 'pll_urdf', 'test.obj')
+        if not op.exists(learned_mesh_path):
+            learned_mesh_path = op.join(
+                self.eval_dir, 'pll_urdf', 'test_best.obj')
+        assert op.exists(learned_mesh_path), f'GeometryEvaluator requires ' + \
+            f'{learned_mesh_path=} to exist for PLL experiments, but does ' + \
+            f'not exist.'
+
+        self.learned_mesh = icp.load_mesh_from_obj(learned_mesh_path)
+        self.learned_hull, _ = self.learned_mesh.compute_convex_hull()
+
+    def get_aligned_true_cloud(self):
+        if not hasattr(self, 'aligned_true_cloud'):
+            self.true_cloud = Tensor(np.asarray(
+                self.true_mesh.sample_points_poisson_disk(2000).points))
+        return self.true_cloud
+
+    def compute_metrics(self):
+        self._compute_chamfer_distance()
+        self._compute_f_score()
+        self._compute_volume_error()
+
+    def _compute_chamfer_distance(self):
+        # Sample point clouds on both meshes.
+        true_cloud = Tensor(np.asarray(
+            self.true_mesh.sample_points_poisson_disk(2000).points))
+        learned_cloud = Tensor(np.asarray(
+            self.learned_mesh.sample_points_poisson_disk(2000).points))
+
+        # Compute chamfer distance on these clouds.
+        self.chamfer_distance = eval_utils.chamfer_distance(
+            true_cloud, learned_cloud).item()
+
+        # Do the same thing for the convex hull.
+        true_hull_cloud = Tensor(np.asarray(
+            self.true_hull.sample_points_poisson_disk(2000).points))
+        learned_hull_cloud = Tensor(np.asarray(
+            self.learned_hull.sample_points_poisson_disk(2000).points))
+        self.hull_chamfer_distance = eval_utils.chamfer_distance(
+            true_hull_cloud, learned_hull_cloud).item()
+
+    # TODO BIBIT implement F-score
+    def _compute_f_score(self):
+        self.f_score = None
+        self.hull_f_score = None
+
+    def _compute_volume_error(self):
+        # Get the vertices of each mesh.
+        true_hull_vertices = Tensor(np.asarray(self.true_hull.vertices))
+        learned_hull_vertices = Tensor(np.asarray(self.learned_hull.vertices))
+
+        # Compute convex volume error on these vertices.
+        self.convex_volume_error = eval_utils.convex_volume_error(
+            true_hull_vertices, learned_hull_vertices).item()
+
+    def store_geometry_metrics(self, results: dict):
+        """Store the geometry metrics in the results dictionary."""
+        full_geometry_results = results['geometry_metrics']['full_geometry']
+        full_geometry_results['chamfer_distance'] = self.chamfer_distance
+        full_geometry_results['f_score'] = self.f_score
+
+        hull_geometry_results = results['geometry_metrics']['convex_hull']
+        hull_geometry_results['chamfer_distance'] = self.hull_chamfer_distance
+        hull_geometry_results['f_score'] = self.hull_f_score
+        hull_geometry_results['volume_error'] = self.convex_volume_error
+
+
 class DynamicsPredictor:
     """Generate dynamics predictions."""
     def __init__(self, vision_asset: str, history: dict, nerf_bundlesdf_id: str,
@@ -699,9 +902,8 @@ class DynamicsPredictor:
         # Sadly the mass that is stored in this checkpoint is slightly
         # incorrect since it was not manually overwritten to be the original
         # value.  We can look this up in the URDF.
-        urdf_path = op.join(
-            pll_results_dir, 'urdfs', 'with_bundlesdf_mesh.urdf')
-        mass = eval_utils.get_mass_from_urdf(urdf_path)
+        urdf_dir = op.join(pll_results_dir, 'urdfs')
+        mass = eval_utils.get_mass_from_urdf(urdf_dir)
 
         # Reminder, pi_cm format is:
         # [m, m * p_x, m * p_y, m * p_z, I_xx, I_yy, I_zz, I_xy, I_xz, I_yz]
@@ -773,14 +975,25 @@ class DynamicsPredictor:
 
     def _get_tracked_trajectories(self):
         # Get the BundleSDF trajectories for each toss.
-        if self.pll_id is not None:
+        if self.pll_id is not None and self.pll_last_tracking_bsdf_id is None:
+            print(f'No BundleSDF trajectories to get for PLL run.')
+            last_bsdf_id = None
+            self.bundlesdf_trajs = None
+
+        elif self.pll_id is not None:
             last_bsdf_id = self.pll_last_tracking_bsdf_id
+            self.bundlesdf_trajs = \
+                eval_utils.get_bundlesdf_trajectories_pll_format(
+                    self.vision_asset, cycle_iteration=self.last_bsdf_iteration,
+                    bundlesdf_id=self.pll_last_tracking_bsdf_id
+                )
         else:
             last_bsdf_id = self.last_tracking_bsdf_id
-        self.bundlesdf_trajs = eval_utils.get_bundlesdf_trajectories_pll_format(
-            self.vision_asset, cycle_iteration=self.last_bsdf_iteration,
-            bundlesdf_id=last_bsdf_id
-        )
+            self.bundlesdf_trajs = \
+                eval_utils.get_bundlesdf_trajectories_pll_format(
+                    self.vision_asset, cycle_iteration=self.last_bsdf_iteration,
+                    bundlesdf_id=self.last_tracking_bsdf_id
+                )
 
         # Get ground truth trajectories from TagSLAM.
         tagslam_trajs = eval_utils.get_pll_tagslam_trajectories_pll_format(
@@ -792,13 +1005,14 @@ class DynamicsPredictor:
             tagslam_trajs_of_b_origin = {}
             for toss_key, tagslam_traj in tagslam_trajs.items():
                 # Get synchronized BundleSDF and TagSLAM poses.
-                if toss_key in self.bundlesdf_trajs.keys():
+                if (self.bundlesdf_trajs is not None) and \
+                    (toss_key in self.bundlesdf_trajs.keys()):
                     print(f'Can synchronize toss {toss_key} with BundleSDF.')
                     b_mat = math_utils.pll_format_to_trans_mat(
                         self.bundlesdf_trajs[toss_key][0])
                     t_mat = math_utils.pll_format_to_trans_mat(tagslam_traj[0])
 
-                else:
+                elif last_bsdf_id is not None:
                     print(f'Need to synchronize at start for toss {toss_key}.')
                     b_mat, t_mat = \
                         eval_utils.get_synced_bsdf_tagslam_toss_poses(
@@ -807,6 +1021,12 @@ class DynamicsPredictor:
                             cycle_iteration=self.last_bsdf_iteration,
                             desired_toss_num=toss_key
                         )
+
+                else:
+                    print(f'PLL trained on TagSLAM, no need to synchronize ' + \
+                          f'for toss {toss_key}.')
+                    b_mat = np.eye(4)
+                    t_mat = np.eye(4)
 
                 # Do the conversion.
                 tagslam_trajs_of_b_origin[toss_key] = \
@@ -845,23 +1065,31 @@ class DynamicsPredictor:
     def generate_single_step_predictions(self):
         """Generate single-step predictions for the object using the learned
         parameters."""
+        assert (self.bundlesdf_trajs is not None) or \
+            hasattr(self, 'tagslam_b_trajs'), f'Need to have ' + \
+            f'at least one of BundleSDF or TagSLAM trajectories, but ' + \
+            f'have neither.'
+
         # Get the predictions.
-        pred_bsdf_steps = {}
-        target_bsdf_steps = {}
-        bundlesdf_trajs = self.bundlesdf_trajs
+        if self.bundlesdf_trajs is not None:
+            pred_bsdf_steps = {}
+            target_bsdf_steps = {}
+            bundlesdf_trajs = self.bundlesdf_trajs
 
-        for toss_key, target_bsdf_traj in bundlesdf_trajs.items():
-            start_adjust = file_utils.load_field_from_yaml(
-                object=self.object, toss_number=toss_key, key='start_adjust')
-            pred_bsdf_steps[toss_key], target_bsdf_steps[toss_key] = \
-                eval_utils.get_pll_single_step_predictions_and_targets(
-                    system=self.pll_system, full_traj=Tensor(target_bsdf_traj),
-                    start_adjust=start_adjust
-                )
+            for toss_key, target_bsdf_traj in bundlesdf_trajs.items():
+                start_adjust = file_utils.load_field_from_yaml(
+                    object=self.object, toss_number=toss_key,
+                    key='start_adjust')
+                pred_bsdf_steps[toss_key], target_bsdf_steps[toss_key] = \
+                    eval_utils.get_pll_single_step_predictions_and_targets(
+                        system=self.pll_system,
+                        full_traj=Tensor(target_bsdf_traj),
+                        start_adjust=start_adjust
+                    )
 
-        # Store the targets and predictions.
-        self.single_step_bsdf_predictions = pred_bsdf_steps
-        self.single_step_bsdf_targets = target_bsdf_steps
+            # Store the targets and predictions.
+            self.single_step_bsdf_predictions = pred_bsdf_steps
+            self.single_step_bsdf_targets = target_bsdf_steps
 
         # Do the same thing against TagSLAM, if available.
         if not hasattr(self, 'tagslam_b_trajs'):
@@ -894,20 +1122,21 @@ class DynamicsPredictor:
             torch.save(pred_traj, op.join(self.eval_dir, filename))
             print(f'\t{filename}')
 
-        for toss_num, target_traj in self.bundlesdf_trajs.items():
-            filename = f'bundlesdf_toss_{toss_num}.pt'
-            torch.save(target_traj, op.join(self.eval_dir, filename))
-            print(f'\t{filename}')
+        if self.bundlesdf_trajs is not None:
+            for toss_num, target_traj in self.bundlesdf_trajs.items():
+                filename = f'bundlesdf_toss_{toss_num}.pt'
+                torch.save(target_traj, op.join(self.eval_dir, filename))
+                print(f'\t{filename}')
 
-        for toss_num, step_targets in self.single_step_bsdf_targets.items():
-            filename = f'step_target_bsdf_toss_{toss_num}.pt'
-            torch.save(step_targets, op.join(self.eval_dir, filename))
-            print(f'\t{filename}')
+            for toss_num, step_targets in self.single_step_bsdf_targets.items():
+                filename = f'step_target_bsdf_toss_{toss_num}.pt'
+                torch.save(step_targets, op.join(self.eval_dir, filename))
+                print(f'\t{filename}')
 
-        for toss_num, step_preds in self.single_step_bsdf_predictions.items():
-            filename = f'step_prediction_bsdf_toss_{toss_num}.pt'
-            torch.save(step_preds, op.join(self.eval_dir, filename))
-            print(f'\t{filename}')
+            for toss_num, step_preds in self.single_step_bsdf_predictions.items():
+                filename = f'step_prediction_bsdf_toss_{toss_num}.pt'
+                torch.save(step_preds, op.join(self.eval_dir, filename))
+                print(f'\t{filename}')
 
         if hasattr(self, 'tagslam_b_trajs'):
             for toss_num, target_traj in self.tagslam_b_trajs.items():
@@ -936,114 +1165,115 @@ class DynamicsPredictor:
         prediction_overlay.make_overlay_video()
 
     def store_dynamics_metrics(
-            self, results: dict, traj_evaluator: TrajectoryPerformanceEvaluator
+            self, results: dict, geom_evaluator: GeometryEvaluator
     ) -> None:
         """Store the dynamics prediction metrics in the results dictionary."""
         # First do everything against BundleSDF.
-        ### Rollout metrics.
-        sub_results = results['dynamics_rollout_metrics']['against_bundlesdf']
+        if self.bundlesdf_trajs is not None:
+            ### Rollout metrics.
+            sub_results = results['dynamics_rollout_metrics']['against_bundlesdf']
 
-        position_results = sub_results['position_error']
-        for toss_key, subsub_results in position_results.items():
-            toss_num = int(toss_key.split('_')[1])
-            over_traj = TrajectoryMetrics.position_error(
-                self.bundlesdf_trajs[toss_num], self.predicted_trajs[toss_num])
-            subsub_results['mean'] = over_traj.mean().item()
-            subsub_results['traj'] = over_traj.tolist()
+            position_results = sub_results['position_error']
+            for toss_key, subsub_results in position_results.items():
+                toss_num = int(toss_key.split('_')[1])
+                over_traj = TrajectoryMetrics.position_error(
+                    self.bundlesdf_trajs[toss_num], self.predicted_trajs[toss_num])
+                subsub_results['mean'] = over_traj.mean().item()
+                subsub_results['traj'] = over_traj.tolist()
 
-        rotation_error = sub_results['rotation_error']
-        for toss_key, subsub_results in rotation_error.items():
-            toss_num = int(toss_key.split('_')[1])
-            over_traj = TrajectoryMetrics.rotation_error(
-                self.bundlesdf_trajs[toss_num], self.predicted_trajs[toss_num])
-            subsub_results['mean'] = over_traj.mean().item()
-            subsub_results['traj'] = over_traj.tolist()
+            rotation_error = sub_results['rotation_error']
+            for toss_key, subsub_results in rotation_error.items():
+                toss_num = int(toss_key.split('_')[1])
+                over_traj = TrajectoryMetrics.rotation_error(
+                    self.bundlesdf_trajs[toss_num], self.predicted_trajs[toss_num])
+                subsub_results['mean'] = over_traj.mean().item()
+                subsub_results['traj'] = over_traj.tolist()
 
-        add_error = sub_results['add_error']
-        for toss_key, subsub_results in add_error.items():
-            toss_num = int(toss_key.split('_')[1])
-            over_traj = TrajectoryMetrics.add_error(
-                self.bundlesdf_trajs[toss_num], self.predicted_trajs[toss_num],
-                traj_evaluator._get_aligned_true_cloud()
-            )
-            subsub_results['mean'] = over_traj.mean().item()
-            subsub_results['traj'] = over_traj.tolist()
+            add_error = sub_results['add_error']
+            for toss_key, subsub_results in add_error.items():
+                toss_num = int(toss_key.split('_')[1])
+                over_traj = TrajectoryMetrics.add_error(
+                    self.bundlesdf_trajs[toss_num], self.predicted_trajs[toss_num],
+                    geom_evaluator.get_aligned_true_cloud()
+                )
+                subsub_results['mean'] = over_traj.mean().item()
+                subsub_results['traj'] = over_traj.tolist()
 
-        adds_error = sub_results['adds_error']
-        for toss_key, subsub_results in adds_error.items():
-            toss_num = int(toss_key.split('_')[1])
-            over_traj = TrajectoryMetrics.adds_error(
-                self.bundlesdf_trajs[toss_num], self.predicted_trajs[toss_num],
-                traj_evaluator._get_aligned_true_cloud()
-            )
-            subsub_results['mean'] = over_traj.mean().item()
-            subsub_results['traj'] = over_traj.tolist()
+            adds_error = sub_results['adds_error']
+            for toss_key, subsub_results in adds_error.items():
+                toss_num = int(toss_key.split('_')[1])
+                over_traj = TrajectoryMetrics.adds_error(
+                    self.bundlesdf_trajs[toss_num], self.predicted_trajs[toss_num],
+                    geom_evaluator.get_aligned_true_cloud()
+                )
+                subsub_results['mean'] = over_traj.mean().item()
+                subsub_results['traj'] = over_traj.tolist()
 
-        penetration_true_geom = sub_results[
-            'penetration_true_geom_predicted_traj']
-        for toss_key, subsub_results in penetration_true_geom.items():
-            toss_num = int(toss_key.split('_')[1])
-            over_traj = TrajectoryMetrics.penetration(
-                self.predicted_trajs[toss_num],
-                traj_evaluator._get_true_geometry_pll_system()
-            )
-            subsub_results['mean'] = over_traj.mean().item()
-            subsub_results['traj'] = over_traj.tolist()
+            penetration_true_geom = sub_results[
+                'penetration_true_geom_predicted_traj']
+            for toss_key, subsub_results in penetration_true_geom.items():
+                toss_num = int(toss_key.split('_')[1])
+                over_traj = TrajectoryMetrics.penetration(
+                    self.predicted_trajs[toss_num],
+                    geom_evaluator._get_true_geometry_pll_system()
+                )
+                subsub_results['mean'] = over_traj.mean().item()
+                subsub_results['traj'] = over_traj.tolist()
 
-        ### Single-step metrics.
-        sub_results = results['dynamics_single_step_metrics'][
-            'against_bundlesdf']
+            ### Single-step metrics.
+            sub_results = results['dynamics_single_step_metrics'][
+                'against_bundlesdf']
 
-        position_results = sub_results['position_error']
-        for toss_key, subsub_results in position_results.items():
-            toss_num = int(toss_key.split('_')[1])
-            over_traj = TrajectoryMetrics.position_error(
-                self.single_step_bsdf_targets[toss_num],
-                self.single_step_bsdf_predictions[toss_num])
-            subsub_results['mean'] = over_traj.mean().item()
-            subsub_results['traj'] = over_traj.tolist()
+            position_results = sub_results['position_error']
+            for toss_key, subsub_results in position_results.items():
+                toss_num = int(toss_key.split('_')[1])
+                over_traj = TrajectoryMetrics.position_error(
+                    self.single_step_bsdf_targets[toss_num],
+                    self.single_step_bsdf_predictions[toss_num])
+                subsub_results['mean'] = over_traj.mean().item()
+                subsub_results['traj'] = over_traj.tolist()
 
-        rotation_error = sub_results['rotation_error']
-        for toss_key, subsub_results in rotation_error.items():
-            toss_num = int(toss_key.split('_')[1])
-            over_traj = TrajectoryMetrics.rotation_error(
-                self.single_step_bsdf_targets[toss_num],
-                self.single_step_bsdf_predictions[toss_num])
-            subsub_results['mean'] = over_traj.mean().item()
-            subsub_results['traj'] = over_traj.tolist()
+            rotation_error = sub_results['rotation_error']
+            for toss_key, subsub_results in rotation_error.items():
+                toss_num = int(toss_key.split('_')[1])
+                over_traj = TrajectoryMetrics.rotation_error(
+                    self.single_step_bsdf_targets[toss_num],
+                    self.single_step_bsdf_predictions[toss_num])
+                subsub_results['mean'] = over_traj.mean().item()
+                subsub_results['traj'] = over_traj.tolist()
 
-        add_error = sub_results['add_error']
-        for toss_key, subsub_results in add_error.items():
-            toss_num = int(toss_key.split('_')[1])
-            over_traj = TrajectoryMetrics.add_error(
-                self.single_step_bsdf_targets[toss_num],
-                self.single_step_bsdf_predictions[toss_num],
-                traj_evaluator._get_aligned_true_cloud()
-            )
-            subsub_results['mean'] = over_traj.mean().item()
-            subsub_results['traj'] = over_traj.tolist()
+            add_error = sub_results['add_error']
+            for toss_key, subsub_results in add_error.items():
+                toss_num = int(toss_key.split('_')[1])
+                over_traj = TrajectoryMetrics.add_error(
+                    self.single_step_bsdf_targets[toss_num],
+                    self.single_step_bsdf_predictions[toss_num],
+                    geom_evaluator.get_aligned_true_cloud()
+                )
+                subsub_results['mean'] = over_traj.mean().item()
+                subsub_results['traj'] = over_traj.tolist()
 
-        adds_error = sub_results['adds_error']
-        for toss_key, subsub_results in adds_error.items():
-            toss_num = int(toss_key.split('_')[1])
-            over_traj = TrajectoryMetrics.adds_error(
-                self.single_step_bsdf_targets[toss_num],
-                self.single_step_bsdf_predictions[toss_num],
-                traj_evaluator._get_aligned_true_cloud()
-            )
-            subsub_results['mean'] = over_traj.mean().item()
-            subsub_results['traj'] = over_traj.tolist()
+            adds_error = sub_results['adds_error']
+            for toss_key, subsub_results in adds_error.items():
+                toss_num = int(toss_key.split('_')[1])
+                over_traj = TrajectoryMetrics.adds_error(
+                    self.single_step_bsdf_targets[toss_num],
+                    self.single_step_bsdf_predictions[toss_num],
+                    geom_evaluator.get_aligned_true_cloud()
+                )
+                subsub_results['mean'] = over_traj.mean().item()
+                subsub_results['traj'] = over_traj.tolist()
 
-        penetration_true_geom = sub_results[
-            'penetration_true_geom_predicted_traj']
-        for toss_key, subsub_results in penetration_true_geom.items():
-            toss_num = int(toss_key.split('_')[1])
-            over_traj = TrajectoryMetrics.penetration(
-                self.single_step_bsdf_predictions[toss_num],
-                traj_evaluator._get_true_geometry_pll_system()
-            )
-            subsub_results['mean'] = over_traj.mean().item()
-            subsub_results['traj'] = over_traj.tolist()
+            penetration_true_geom = sub_results[
+                'penetration_true_geom_predicted_traj']
+            for toss_key, subsub_results in penetration_true_geom.items():
+                toss_num = int(toss_key.split('_')[1])
+                over_traj = TrajectoryMetrics.penetration(
+                    self.single_step_bsdf_predictions[toss_num],
+                    geom_evaluator._get_true_geometry_pll_system()
+                )
+                subsub_results['mean'] = over_traj.mean().item()
+                subsub_results['traj'] = over_traj.tolist()
 
         # Second do everything against TagSLAM.
         if not 'against_tagslam' in results['dynamics_rollout_metrics'].keys():
@@ -1075,7 +1305,7 @@ class DynamicsPredictor:
             toss_num = int(toss_key.split('_')[1])
             over_traj = TrajectoryMetrics.add_error(
                 self.tagslam_b_trajs[toss_num], self.predicted_trajs[toss_num],
-                traj_evaluator._get_aligned_true_cloud()
+                geom_evaluator.get_aligned_true_cloud()
             )
             subsub_results['mean'] = over_traj.mean().item()
             subsub_results['traj'] = over_traj.tolist()
@@ -1085,7 +1315,7 @@ class DynamicsPredictor:
             toss_num = int(toss_key.split('_')[1])
             over_traj = TrajectoryMetrics.adds_error(
                 self.tagslam_b_trajs[toss_num], self.predicted_trajs[toss_num],
-                traj_evaluator._get_aligned_true_cloud()
+                geom_evaluator.get_aligned_true_cloud()
             )
             subsub_results['mean'] = over_traj.mean().item()
             subsub_results['traj'] = over_traj.tolist()
@@ -1117,7 +1347,7 @@ class DynamicsPredictor:
             over_traj = TrajectoryMetrics.add_error(
                 self.single_step_tagslam_targets[toss_num],
                 self.single_step_tagslam_predictions[toss_num],
-                traj_evaluator._get_aligned_true_cloud()
+                geom_evaluator.get_aligned_true_cloud()
             )
             subsub_results['mean'] = over_traj.mean().item()
             subsub_results['traj'] = over_traj.tolist()
@@ -1128,129 +1358,10 @@ class DynamicsPredictor:
             over_traj = TrajectoryMetrics.adds_error(
                 self.single_step_tagslam_targets[toss_num],
                 self.single_step_tagslam_predictions[toss_num],
-                traj_evaluator._get_aligned_true_cloud()
+                geom_evaluator.get_aligned_true_cloud()
             )
             subsub_results['mean'] = over_traj.mean().item()
             subsub_results['traj'] = over_traj.tolist()
-
-
-class GeometryEvaluator:
-    """Evaluate the learned geometry.  This requires the following to already be
-    present in the evaluation directory:
-        - true_geom_aligned.obj
-        - bsdf_mesh.obj if last run was BundleSDF, else pll_mesh.obj
-    """
-    def __init__(self, vision_asset: str, history: dict,
-                 nerf_bundlesdf_id: str):
-        # First decode the latest BundleSDF or PLL run IDs to set up the
-        # evaluation directory.
-        last_bsdf_iteration = 0
-        for cycle in history.keys():
-            cycle_num = cycle.split('_')[-1]
-            if int(cycle_num) > last_bsdf_iteration:
-                last_bsdf_iteration = int(cycle_num)
-        last_tracking_bsdf_id = history[
-            f'cycle_iteration_{last_bsdf_iteration}']['bundlesdf_id']
-
-        pll_id = history[f'cycle_iteration_{last_bsdf_iteration}']['pll_id']
-        if pll_id is not None:
-            last_tracking_bsdf_id = None
-            nerf_bundlesdf_id = None
-
-        self.eval_dir = file_utils.evaluation_subdir(
-            dataset=vision_asset, cycle_iteration=last_bsdf_iteration,
-            tracking_bundlesdf_id=last_tracking_bsdf_id,
-            nerf_bundlesdf_id=nerf_bundlesdf_id, pll_id=pll_id
-        )
-
-        self.pll_id = pll_id
-
-        # Get the meshes.
-        if last_bsdf_iteration > 0:
-            self._get_meshes()
-        else:
-            self._handle_tagslam_pll_geometry()
-
-    def _get_meshes(self):
-        """Loads the learned and ground truth meshes from the evaluation
-        directory."""
-        # Learned mesh.
-        if self.pll_id is None:
-            learned_mesh_path = op.join(self.eval_dir, 'bsdf_mesh.obj')
-        else:
-            learned_mesh_path = op.join(
-                self.eval_dir, 'pll_urdf', 'test.obj')
-            if not op.exists(learned_mesh_path):
-                learned_mesh_path = op.join(
-                    self.eval_dir, 'pll_urdf', 'test_best.obj')
-        assert op.exists(learned_mesh_path), f'GeometryEvaluator requires ' + \
-            f'{learned_mesh_path=} to exist, but does not exist.'
-        self.learned_mesh = icp.load_mesh_from_obj(learned_mesh_path)
-
-        # Ground truth mesh.
-        true_mesh_path = op.join(self.eval_dir, 'true_geom_aligned.obj')
-        assert op.exists(true_mesh_path), f'GeometryEvaluator requires ' + \
-            f'{true_mesh_path=} to exist, but does not exist.'
-        self.true_mesh = icp.load_mesh_from_obj(true_mesh_path)
-
-        # Get each of their convex hulls too.
-        self.learned_hull, _ = self.learned_mesh.compute_convex_hull()
-        self.true_hull, _ = self.true_mesh.compute_convex_hull()
-
-    # TODO
-    def _handle_tagslam_pll_geometry(self):
-        """When using TagSLAM tracking, need to handle the geometry differently
-        since trajectory metrics are not available."""
-        raise NotImplementedError
-
-    def compute_metrics(self):
-        self._compute_chamfer_distance()
-        self._compute_f_score()
-        self._compute_volume_error()
-
-    def _compute_chamfer_distance(self):
-        # Sample point clouds on both meshes.
-        true_cloud = Tensor(np.asarray(
-            self.true_mesh.sample_points_poisson_disk(2000).points))
-        learned_cloud = Tensor(np.asarray(
-            self.learned_mesh.sample_points_poisson_disk(2000).points))
-
-        # Compute chamfer distance on these clouds.
-        self.chamfer_distance = eval_utils.chamfer_distance(
-            true_cloud, learned_cloud).item()
-
-        # Do the same thing for the convex hull.
-        true_hull_cloud = Tensor(np.asarray(
-            self.true_hull.sample_points_poisson_disk(2000).points))
-        learned_hull_cloud = Tensor(np.asarray(
-            self.learned_hull.sample_points_poisson_disk(2000).points))
-        self.hull_chamfer_distance = eval_utils.chamfer_distance(
-            true_hull_cloud, learned_hull_cloud).item()
-
-    # TODO BIBIT implement F-score
-    def _compute_f_score(self):
-        self.f_score = None
-        self.hull_f_score = None
-
-    def _compute_volume_error(self):
-        # Get the vertices of each mesh.
-        true_hull_vertices = Tensor(np.asarray(self.true_hull.vertices))
-        learned_hull_vertices = Tensor(np.asarray(self.learned_hull.vertices))
-
-        # Compute convex volume error on these vertices.
-        self.convex_volume_error = eval_utils.convex_volume_error(
-            true_hull_vertices, learned_hull_vertices).item()
-
-    def store_geometry_metrics(self, results: dict):
-        """Store the geometry metrics in the results dictionary."""
-        full_geometry_results = results['geometry_metrics']['full_geometry']
-        full_geometry_results['chamfer_distance'] = self.chamfer_distance
-        full_geometry_results['f_score'] = self.f_score
-
-        hull_geometry_results = results['geometry_metrics']['convex_hull']
-        hull_geometry_results['chamfer_distance'] = self.hull_chamfer_distance
-        hull_geometry_results['f_score'] = self.hull_f_score
-        hull_geometry_results['volume_error'] = self.convex_volume_error
 
 
 class TrajectoryMetrics:
@@ -1489,8 +1600,9 @@ def main_command(vision_asset: str, bundlesdf_id: str, nerf_bundlesdf_id: str,
             raise ValueError(f'Invalid {overwrite=}.  Choose none, all, ' + \
                 'tracking, or tracking_geometry.')
 
-        # It will complain if there's already an aligned true geometry, so
-        # remove it to be overwritten.
+    # It will complain if there's already an aligned true geometry, so
+    # remove it to be overwritten.
+    if op.exists(op.join(eval_dir, 'true_geom_aligned.obj')):
         os.system(f'rm {op.join(eval_dir, "true_geom_aligned.obj")}')
 
     # Automatically detect if BundleSDF-only is necessary based on if the object
@@ -1513,16 +1625,21 @@ def main_command(vision_asset: str, bundlesdf_id: str, nerf_bundlesdf_id: str,
         if pll_id is None:
             traj_evaluator.store_tracking_metrics(results)
 
+    ### Some prerequisites required by each other, sadly.
+    dynamics_predictor = DynamicsPredictor(
+        vision_asset, history, nerf_bundlesdf_id, bsdf_only)
+    dynamics_predictor._create_pll_sim_system()
+    geometry_evaluator = GeometryEvaluator(
+        vision_asset, history, nerf_bundlesdf_id)
+
     ### Dynamics predictions.
     # Compute dynamics metrics if last run was PLL or PLL was ever run.
     if do_dynamics and (pll_id is not None or cycle_iteration > 1):
         print(f'\nDOING DYNAMICS METRICS\n')
-        dynamics_predictor = DynamicsPredictor(
-            vision_asset, history, nerf_bundlesdf_id, bsdf_only)
         dynamics_predictor.generate_rollout_trajectories()
         dynamics_predictor.generate_single_step_predictions()
         dynamics_predictor.save_predictions()
-        dynamics_predictor.store_dynamics_metrics(results, traj_evaluator)
+        dynamics_predictor.store_dynamics_metrics(results, geometry_evaluator)
         if do_videos:
             dynamics_predictor.make_prediction_video()
         else:
@@ -1532,8 +1649,6 @@ def main_command(vision_asset: str, bundlesdf_id: str, nerf_bundlesdf_id: str,
     ### Geometry evaluation.
     if do_geometry:
         print(f'\nDOING GEOMETRY METRICS\n')
-        geometry_evaluator = GeometryEvaluator(
-            vision_asset, history, nerf_bundlesdf_id)
         geometry_evaluator.compute_metrics()
         geometry_evaluator.store_geometry_metrics(results)
 

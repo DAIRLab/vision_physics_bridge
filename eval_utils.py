@@ -276,8 +276,16 @@ def convert_inertia_theta_to_pi_cm(theta: Tensor) -> Tensor:
     """Convert inertia theta to pi-cm units."""
     return pll_inertia.InertialParameterConverter.theta_to_pi_cm(theta)
 
-def get_mass_from_urdf(urdf_path: str) -> float:
-    """Get mass from URDF file."""
+def get_mass_from_urdf(urdf_dir: str) -> float:
+    """Get mass from the URDF file in the provided directory."""
+    # First find the path to the URDF.
+    urdf_path = None
+    for file in os.listdir(urdf_dir):
+        if file.endswith('.urdf'):
+            assert urdf_path is None, f'Multiple URDF files in {urdf_dir}.'
+            urdf_path = op.join(urdf_dir, file)
+            break
+
     with open(urdf_path, 'r') as file:
         lines = file.readlines()
     for line in lines:
@@ -365,6 +373,12 @@ def create_empty_results_dict(
     # PLL instead of BundleSDF.
     if not last_run_was_bsdf:
         del empty_results['tracking_metrics']
+
+    # Fifth modification:  Get rid of any metrics against BundleSDF if it was
+    # never run in this experiment's history.
+    if cycle_iteration == 0:
+        del empty_results['dynamics_rollout_metrics']['against_bundlesdf']
+        del empty_results['dynamics_single_step_metrics']['against_bundlesdf']
 
     return empty_results
 
