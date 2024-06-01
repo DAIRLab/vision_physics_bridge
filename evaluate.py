@@ -1464,6 +1464,10 @@ def main_command(vision_asset: str, bundlesdf_id: str, nerf_bundlesdf_id: str,
             raise ValueError(f'Invalid {overwrite=}.  Choose none, all, ' + \
                 'tracking, or tracking_geometry.')
 
+        # It will complain if there's already an aligned true geometry, so
+        # remove it to be overwritten.
+        os.system(f'rm {op.join(eval_dir, "true_geom_aligned.obj")}')
+
     # Automatically detect if BundleSDF-only is necessary based on if the object
     # is a tagless one.
     bsdf_only = False
