@@ -238,7 +238,8 @@ def add_auc_to_results(results):
     # Iterate over every metric category, e.g. dynamics_rollout_metrics.
     for _category, subresults in results.items():
         # Skip if the category doesn't have tracking-related metrics.
-        if 'against_bundlesdf' not in subresults.keys():
+        if ('against_bundlesdf' not in subresults.keys()) and \
+            ('against_tagslam' not in subresults.keys()):
             continue
 
         # Iterate over every comparison against, e.g. against_bundlesdf.
