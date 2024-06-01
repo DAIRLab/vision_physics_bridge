@@ -132,6 +132,9 @@ ERROR_LABELS = {
         'True Geometry Penetration [m]',
     'penetration_learned_geom_estimated_traj': \
         'Learned Geometry Penetration [m]',
+    'volume_error': 'Relative Volume Error',
+    'chamfer_distance': 'Chamfer Distance [m]',
+    #'f_score': TODO this isn't implemented so exclude from dictionary
 }
 AUC_LABELS = {
     'position_error': \
@@ -158,6 +161,9 @@ METRIC_SCALING = {
     'penetration_learned_geom_tagslam_traj': 1,     # [m]
     'penetration_true_geom_estimated_traj': 1,      # [m]
     'penetration_learned_geom_estimated_traj': 1,   # [m]
+    'volume_error': 1,                              # weird fractional units
+    'chamfer_distance': 1,                          # [m]
+    #'f_score': TODO this isn't implemented so exclude from dictionary
 }
 
 # The following are t values for 95% confidence interval.
@@ -478,13 +484,14 @@ class ResultsPlotter:
                 bp_data=bsdf_pll_mean, bo_data=bsdf_only_mean,
                 ylabel=ERROR_LABELS[tracking_metric], xlabel=NUM_TOSSES_LABEL,
                 title=f'{obj} {full_or_toss} Trajectory'.title(),
-                filename=f'{obj}_{tracking_metric}_v_data_{full_or_toss}.png')
+                filename=f'{obj}_{tracking_metric}_v_data_{full_or_toss}.png',
+                subdir='tracking')
             self._do_plot(
                 bp_data=bsdf_pll_auc, bo_data=bsdf_only_auc,
                 ylabel=AUC_LABELS[tracking_metric], xlabel=NUM_TOSSES_LABEL,
                 title=f'{obj} {full_or_toss} Trajectory'.title(),
                 filename=f'{obj}_{tracking_metric}_v_data_{full_or_toss}' + \
-                    f'_auc.png')
+                    f'_auc.png', subdir='tracking')
             
         # Do a confidence interval plot that aggregates all the objects.
         self._do_confidence_interval_plot(
@@ -493,14 +500,14 @@ class ResultsPlotter:
             ylabel=ERROR_LABELS[tracking_metric], xlabel=NUM_TOSSES_LABEL,
             title=f'All Tagged Objects {full_or_toss.capitalize()} Trajectory',
             filename=f'all_tagged_objs_{tracking_metric}_v_data_' + \
-                f'{full_or_toss}.png')
+                f'{full_or_toss}.png', subdir='tracking')
         self._do_confidence_interval_plot(
             bp_data=all_objects_bsdf_pll_auc,
             bo_data=all_objects_bsdf_only_auc,
             ylabel=AUC_LABELS[tracking_metric], xlabel=NUM_TOSSES_LABEL,
             title=f'All Tagged Objects {full_or_toss.capitalize()} Trajectory',
             filename=f'all_tagged_objs_{tracking_metric}_v_data_' + \
-                f'{full_or_toss}_auc.png')
+                f'{full_or_toss}_auc.png', subdir='tracking')
 
     def plot_bundlesdf_tracking_error_vs_data(
             self, full_or_toss: str, tracking_metric: str):
@@ -571,12 +578,14 @@ class ResultsPlotter:
                 bp_data=bsdf_pll_mean, bo_data=bsdf_only_mean,
                 ylabel=ERROR_LABELS[tracking_metric], xlabel=NUM_TOSSES_LABEL,
                 title=f'{obj} {full_or_toss} Trajectory'.title(),
-                filename=f'{obj}_{tracking_metric}_v_data_{full_or_toss}.png')
+                filename=f'{obj}_{tracking_metric}_v_data_{full_or_toss}.png',
+                subdir='tracking')
             self._do_plot(
                 bp_data=bsdf_pll_auc, bo_data=bsdf_only_auc,
                 ylabel=AUC_LABELS[tracking_metric], xlabel=NUM_TOSSES_LABEL,
                 title=f'{obj} {full_or_toss} Trajectory'.title(),
-                filename=f'{obj}_{tracking_metric}_v_data_{full_or_toss}_auc.png')
+                filename=f'{obj}_{tracking_metric}_v_data_{full_or_toss}_auc.png',
+                subdir='tracking')
 
         # Do a confidence interval plot that aggregates all the objects.
         self._do_confidence_interval_plot(
@@ -585,18 +594,106 @@ class ResultsPlotter:
             ylabel=ERROR_LABELS[tracking_metric], xlabel=NUM_TOSSES_LABEL,
             title=f'All Tagless Objects {full_or_toss.capitalize()} Trajectory',
             filename=f'all_tagless_objs_{tracking_metric}_v_data_' + \
-                f'{full_or_toss}.png')
+                f'{full_or_toss}.png', subdir='tracking')
         self._do_confidence_interval_plot(
             bp_data=all_objects_bsdf_pll_auc,
             bo_data=all_objects_bsdf_only_auc,
             ylabel=AUC_LABELS[tracking_metric], xlabel=NUM_TOSSES_LABEL,
             title=f'All Tagless Objects {full_or_toss.capitalize()} Trajectory',
             filename=f'all_tagless_objs_{tracking_metric}_v_data_' + \
-                f'{full_or_toss}_auc.png')
+                f'{full_or_toss}_auc.png', subdir='tracking')
+
+    def plot_geometry_error_vs_data(
+            self, hull_or_full: str, geometry_metric: str):
+        """Geometry metrics.  Doable for all objects and approaches."""
+        # Keep track of all objects.
+        all_objects_bsdf_pll_mean = [[], []]
+        all_objects_bsdf_only_mean = [[], []]
+        all_objects_pll_only_mean = [[], []]
+
+        # Do both tagged and tagless objects.
+        all_objects = self.tagless_objects + self.tagged_objects
+        object_labels = ['tagless_objects'] * len(self.tagless_objects) + \
+            ['tagged_objects'] * len(self.tagged_objects)
+        for obj, tag_label in zip(all_objects, object_labels):
+            scale = METRIC_SCALING[geometry_metric]
+
+            # Get the BundleSDF-PLL results.  Store as a 2D array [[xs], [ys]].
+            bsdf_pll_mean = [[], []]
+            for tosses, results in self.bsdf_pll_results[tag_label][obj
+                ].items():
+                tosses = tosses.split('trained_on_toss_')[-1]
+                start_toss = int(tosses.split('-')[0])
+                end_toss = int(tosses.split('-')[-1])
+                n_tosses = end_toss - start_toss + 1
+
+                error = results['geometry_metrics'][hull_or_full][
+                    geometry_metric] * scale
+
+                bsdf_pll_mean[0].append(n_tosses)
+                bsdf_pll_mean[1].append(error)
+                all_objects_bsdf_pll_mean[0].append(n_tosses)
+                all_objects_bsdf_pll_mean[1].append(error)
+
+            # Get the BundleSDF only results.
+            bsdf_only_mean = [[], []]
+            for tosses, results in self.bsdf_only_results[tag_label][obj
+                ].items():
+                tosses = tosses.split('trained_on_toss_')[-1]
+                start_toss = int(tosses.split('-')[0])
+                end_toss = int(tosses.split('-')[-1])
+                n_tosses = end_toss - start_toss + 1
+
+                error = results['geometry_metrics'][hull_or_full][
+                    geometry_metric] * scale
+
+                bsdf_only_mean[0].append(n_tosses)
+                bsdf_only_mean[1].append(error)
+                all_objects_bsdf_only_mean[0].append(n_tosses)
+                all_objects_bsdf_only_mean[1].append(error)
+
+            # Get the PLL only results.
+            pll_only_mean = [[], []]
+            if tag_label not in self.pll_only_results.keys():
+                pll_only_mean = None
+            else:
+                for tosses, results in self.pll_only_results[tag_label][obj
+                    ].items():
+                    tosses = tosses.split('trained_on_toss_')[-1]
+                    start_toss = int(tosses.split('-')[0])
+                    end_toss = int(tosses.split('-')[-1])
+                    n_tosses = end_toss - start_toss + 1
+
+                    error = results['geometry_metrics'][hull_or_full][
+                        geometry_metric] * scale
+
+                    pll_only_mean[0].append(n_tosses)
+                    pll_only_mean[1].append(error)
+                    all_objects_pll_only_mean[0].append(n_tosses)
+                    all_objects_pll_only_mean[1].append(error)
+
+            # Generate the plots.
+            self._do_plot(
+                bp_data=bsdf_pll_mean, bo_data=bsdf_only_mean,
+                to_data=pll_only_mean,
+                ylabel=ERROR_LABELS[geometry_metric], xlabel=NUM_TOSSES_LABEL,
+                title=f'{obj} {hull_or_full.replace("_", " ")} Geometry'.title(),
+                filename=f'{obj}_{geometry_metric}_v_data_{hull_or_full}.png',
+                subdir='geometry')
+
+        # Do a confidence interval plot that aggregates all the objects.
+        self._do_confidence_interval_plot(
+            bp_data=all_objects_bsdf_pll_mean,
+            bo_data=all_objects_bsdf_only_mean,
+            to_data=all_objects_pll_only_mean,
+            ylabel=ERROR_LABELS[geometry_metric], xlabel=NUM_TOSSES_LABEL,
+            title=f'All Objects {hull_or_full.replace("_", " ")} Geometry'.title(),
+            filename=f'all_objs_{geometry_metric}_v_data_{hull_or_full}.png',
+            subdir='geometry')
 
     def _do_plot(self, bp_data: list = None, bo_data: list = None,
                  to_data: list = None, ylabel: str = '', xlabel: str = '',
-                 title: str = None, filename: str = None):
+                 title: str = None, filename: str = None, subdir: str = ''):
         fig = plt.figure()
         ax = plt.gca()
 
@@ -621,14 +718,15 @@ class ResultsPlotter:
         self._beautify_plot(fig, ax, x_markers, auc='auc' in filename)
 
         filename += '.png' if not filename.endswith('.png') else ''
-        fig_path = op.join(self.plot_dir, filename)
+        file_utils.assure_created(op.join(self.plot_dir, subdir))
+        fig_path = op.join(self.plot_dir, subdir, filename)
         fig.savefig(fig_path, dpi=100)
         plt.close()
 
     def _do_confidence_interval_plot(
             self, bp_data: list = None, bo_data: list = None,
             to_data: list = None, ylabel: str = '', xlabel: str = '',
-            title: str = None, filename: str = None):
+            title: str = None, filename: str = None, subdir: str = ''):
         fig = plt.figure()
         ax = plt.gca()
 
@@ -660,7 +758,8 @@ class ResultsPlotter:
         self._beautify_plot(fig, ax, x_markers, auc='auc' in filename)
 
         filename += '.png' if not filename.endswith('.png') else ''
-        fig_path = op.join(self.plot_dir, filename)
+        file_utils.assure_created(op.join(self.plot_dir, subdir))
+        fig_path = op.join(self.plot_dir, subdir, filename)
         fig.savefig(fig_path, dpi=100)
         plt.close()
 
@@ -782,6 +881,9 @@ def process_gather_command():
 
 # Use 'plot' command to load the previously generated yaml files with results
 # and to generate plots with them.
+PLOT_TRACKING = False
+PLOT_DYNAMICS = False
+PLOT_GEOMETRY = True
 @cli.command('plot')
 def process_plot_command():
     # Load the gathered results.
@@ -799,18 +901,33 @@ def process_plot_command():
         pll_only_results=pll_only_results
     )
 
-    for trajectory in ['full', 'toss']:
-        for tracking_metric in ERROR_LABELS.keys():
-            if tracking_metric in \
+    for metric in ERROR_LABELS.keys():
+        for trajectory in ['full', 'toss']:
+            if metric in \
                 empty_results['tracking_metrics']['against_tagslam'].keys():
-                print(f'Plotting TagSLAM {trajectory}, {tracking_metric}')
-                results_plotter.plot_tagslam_tracking_error_vs_data(
-                    trajectory, tracking_metric)
-            if tracking_metric in \
+                if PLOT_TRACKING:
+                    print(f'Plotting TagSLAM {trajectory}, {metric}')
+                    results_plotter.plot_tagslam_tracking_error_vs_data(
+                        trajectory, metric)
+            if metric in \
                 empty_results['tracking_metrics']['against_bundlesdf'].keys():
-                print(f'Plotting BundleSDF {trajectory}, {tracking_metric}')
-                results_plotter.plot_bundlesdf_tracking_error_vs_data(
-                    trajectory, tracking_metric)
+                if PLOT_TRACKING:
+                    print(f'Plotting BundleSDF {trajectory}, {metric}')
+                    results_plotter.plot_bundlesdf_tracking_error_vs_data(
+                        trajectory, metric)
+
+        if metric in \
+            empty_results['geometry_metrics']['convex_hull'].keys():
+            if PLOT_GEOMETRY:
+                print(f'Plotting convex hull geometry {metric}')
+                results_plotter.plot_geometry_error_vs_data(
+                    'convex_hull', metric)
+        if metric in \
+            empty_results['geometry_metrics']['full_geometry'].keys():
+            if PLOT_GEOMETRY:
+                print(f'Plotting full geometry {metric}')
+                results_plotter.plot_geometry_error_vs_data(
+                    'full_geometry', metric)
 
 
 if __name__ == '__main__':
