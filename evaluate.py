@@ -89,6 +89,9 @@ def traverse_run_history_from_pll(
     traverse_run_history_from_bsdf.  The highest cycle iteration of PLL will
     have the provided PLL ID."""
     # Get the BundleSDF ID associated with the PLL run.
+    if cycle_iteration == 0:
+        return {f'cycle_iteration_0': {'bundlesdf_id': None, 'pll_id': pll_id}}
+
     pll_output_dir = file_utils.contactnets_output_dir(
         vision_asset, cycle_iteration=cycle_iteration, pll_id=pll_id)
     bundlesdf_id = file_utils.load_bundlesdf_id_from_pll_json(
@@ -125,7 +128,7 @@ class TrajectoryPerformanceEvaluator:
         self.start_toss = start_toss
         self.end_toss = end_toss
 
-        last_bsdf_iteration = 1
+        last_bsdf_iteration = 0
         for cycle in history.keys():
             cycle_num = cycle.split('_')[-1]
             if int(cycle_num) > last_bsdf_iteration:
@@ -589,7 +592,7 @@ class DynamicsPredictor:
         self.history = history
         self.bsdf_only = bsdf_only
 
-        last_bsdf_iteration = 1
+        last_bsdf_iteration = 0
         for cycle in self.history.keys():
             cycle_num = cycle.split('_')[-1]
             if int(cycle_num) > last_bsdf_iteration:
@@ -1141,7 +1144,7 @@ class GeometryEvaluator:
                  nerf_bundlesdf_id: str):
         # First decode the latest BundleSDF or PLL run IDs to set up the
         # evaluation directory.
-        last_bsdf_iteration = 1
+        last_bsdf_iteration = 0
         for cycle in history.keys():
             cycle_num = cycle.split('_')[-1]
             if int(cycle_num) > last_bsdf_iteration:
@@ -1163,7 +1166,10 @@ class GeometryEvaluator:
         self.pll_id = pll_id
 
         # Get the meshes.
-        self._get_meshes()
+        if last_bsdf_iteration > 0:
+            self._get_meshes()
+        else:
+            self._handle_tagslam_pll_geometry()
 
     def _get_meshes(self):
         """Loads the learned and ground truth meshes from the evaluation
@@ -1190,6 +1196,12 @@ class GeometryEvaluator:
         # Get each of their convex hulls too.
         self.learned_hull, _ = self.learned_mesh.compute_convex_hull()
         self.true_hull, _ = self.true_mesh.compute_convex_hull()
+
+    # TODO
+    def _handle_tagslam_pll_geometry(self):
+        """When using TagSLAM tracking, need to handle the geometry differently
+        since trajectory metrics are not available."""
+        raise NotImplementedError
 
     def compute_metrics(self):
         self._compute_chamfer_distance()
@@ -1382,7 +1394,18 @@ class TrajectoryMetrics:
 def main_command(vision_asset: str, bundlesdf_id: str, nerf_bundlesdf_id: str,
                  pll_id: str, cycle_iteration: int, do_videos: bool,
                  overwrite: str):
-    assert cycle_iteration > 0, f'Invalid {cycle_iteration=}.'
+    do_tracking = True
+    do_dynamics = True
+    do_geometry = True
+
+    if cycle_iteration == 0:
+        assert pll_id is not None, f'Need {pll_id=} if cycle_iteration is 0.'
+        assert bundlesdf_id is None, f'Cannot have {bundlesdf_id=} if ' + \
+            f'cycle_iteration is 0.'
+        assert nerf_bundlesdf_id is None, f'Cannot have {nerf_bundlesdf_id=}' +\
+            f' if cycle_iteration is 0.'
+        do_tracking = False
+    assert cycle_iteration >= 0, f'Invalid {cycle_iteration=}.'
     assert '_' in vision_asset, f'Invalid {vision_asset=}.'
 
     if pll_id is None:
@@ -1428,8 +1451,6 @@ def main_command(vision_asset: str, bundlesdf_id: str, nerf_bundlesdf_id: str,
     results['_overview']['nerf_bundlesdf_id'] = nerf_bundlesdf_id
 
     # Check if results already exist.
-    do_dynamics = True
-    do_geometry = True
     eval_dir = file_utils.evaluation_subdir(
         dataset=vision_asset, cycle_iteration=cycle_iteration,
         tracking_bundlesdf_id=bundlesdf_id,
@@ -1484,12 +1505,13 @@ def main_command(vision_asset: str, bundlesdf_id: str, nerf_bundlesdf_id: str,
 
     ### Pose estimation.
     # Compute tracking metrics if last run was BundleSDF (so PLL ID is None).
-    print(f'\nDOING TRACKING METRICS\n')
-    traj_evaluator = TrajectoryPerformanceEvaluator(
-        vision_asset, history, nerf_bundlesdf_id, bsdf_only)
-    traj_evaluator.get_tracking_trajectories()
-    if pll_id is None:
-        traj_evaluator.store_tracking_metrics(results)
+    if do_tracking:
+        print(f'\nDOING TRACKING METRICS\n')
+        traj_evaluator = TrajectoryPerformanceEvaluator(
+            vision_asset, history, nerf_bundlesdf_id, bsdf_only)
+        traj_evaluator.get_tracking_trajectories()
+        if pll_id is None:
+            traj_evaluator.store_tracking_metrics(results)
 
     ### Dynamics predictions.
     # Compute dynamics metrics if last run was PLL or PLL was ever run.
