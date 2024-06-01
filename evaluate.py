@@ -618,13 +618,17 @@ class DynamicsPredictor:
 
     def _look_up_latest_pll_results(self):
         """Also stores self.pll_results_dir."""
-        if self.last_bsdf_iteration == 1:
+        if self.last_bsdf_iteration == 1 and self.pll_id is None:
             print(f'No prior PLL results to look up for {self.vision_asset=}' +\
                   f' with {self.history=}.')
             return {}
 
-        pll_iteration = self.last_bsdf_iteration - 1
-        pll_id = self.history[f'cycle_iteration_{pll_iteration}']['pll_id']
+        if self.pll_id is None:
+            pll_iteration = self.last_bsdf_iteration - 1
+            pll_id = self.history[f'cycle_iteration_{pll_iteration}']['pll_id']
+        else:
+            pll_iteration = self.last_bsdf_iteration
+            pll_id = self.pll_id
         self.pll_results_dir = file_utils.contactnets_output_dir(
             dataset=self.vision_asset, cycle_iteration=pll_iteration,
             pll_id=pll_id)
