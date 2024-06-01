@@ -101,6 +101,8 @@ only have results for tosses 1-3.
     nerf_on: ...            <-- same as bsdf_pll but with online NeRF
     bsdf_only: ...          <-- same as bsdf_pll but without dynamics sections
     pll_only: ...           <-- same as bsdf_pll
+    pll_tagslam: ...        <-- same as bsdf_pll
+    pll_blind: ...          <-- same as bsdf_pll
 
 """
 
@@ -186,10 +188,14 @@ BSDF_PLL_COLOR = '#01256e'
 NERF_ON_COLOR = '#92668d'
 BSDF_ONLY_COLOR = '#398537'
 PLL_ONLY_COLOR = '#95001a'
+PLL_TAGSLAM_COLOR = '#4a0042'
+PLL_BLIND_COLOR = '#833785'
 BSDF_PLL_LABEL = 'BundleSDF-PLL'
 NERF_ON_LABEL = 'BundleSDF-PLL NeRF Online'
 BSDF_ONLY_LABEL = 'BundleSDF Only'
-PLL_ONLY_LABEL = 'PLL Only'
+PLL_ONLY_LABEL = 'PLL with Vision Supervision'
+PLL_TAGSLAM_LABEL = 'PLL with TagSLAM'
+PLL_BLIND_LABEL = 'Blind PLL'
 LINEWIDTH = 5
 
 
@@ -410,16 +416,22 @@ def add_experiment_to_overall_results(experiment_results, add_to_results):
 class ResultsPlotter:
     """Generate plots of results stored in result dictionaries."""
     def __init__(self, bsdf_pll_results: dict, nerf_on_results: dict,
-                 bsdf_only_results: dict, pll_only_results: dict):
+                 bsdf_only_results: dict, pll_only_results: dict,
+                 pll_tagslam_results: dict, pll_blind_results: dict,
+                 do_objects: bool):
         # Store the results dictionaries.
         self.bsdf_pll_results = bsdf_pll_results
         self.nerf_on_results = nerf_on_results
         self.bsdf_only_results = bsdf_only_results
         self.pll_only_results = pll_only_results
+        self.pll_tagslam_results = pll_tagslam_results
+        self.pll_blind_results = pll_blind_results
 
         # Get a plotting directory.
         self.plot_dir = file_utils.plot_dir()
         print(f'Preparing to store to {self.plot_dir}')
+
+        self.do_objects = do_objects
 
         # Extract all the objects.
         self.tagged_objects = [
@@ -622,8 +634,20 @@ class ResultsPlotter:
         """Geometry metrics.  Doable for all objects and approaches."""
         # Keep track of all objects.
         all_objects_bsdf_pll_mean = [[], []]
+        all_objects_nerf_on_mean = [[], []]
         all_objects_bsdf_only_mean = [[], []]
         all_objects_pll_only_mean = [[], []]
+        all_objects_pll_tagslam_mean = [[], []]
+        all_objects_pll_blind_mean = [[], []]
+
+        # Prepare to zip in consistent order:  BSDF-PLL, NeRF Online, BundleSDF
+        # Only, PLL Only, PLL TagSLAM, PLL Blind.
+        means = [all_objects_bsdf_pll_mean, all_objects_nerf_on_mean,
+                 all_objects_bsdf_only_mean, all_objects_pll_only_mean,
+                 all_objects_pll_tagslam_mean, all_objects_pll_blind_mean]
+        result_dicts = [self.bsdf_pll_results, self.nerf_on_results,
+                        self.bsdf_only_results, self.pll_only_results,
+                        self.pll_tagslam_results, self.pll_blind_results]
 
         # Do both tagged and tagless objects.
         all_objects = self.tagless_objects + self.tagged_objects
@@ -632,46 +656,22 @@ class ResultsPlotter:
         for obj, tag_label in zip(all_objects, object_labels):
             scale = METRIC_SCALING[geometry_metric]
 
-            # Get the BundleSDF-PLL results.  Store as a 2D array [[xs], [ys]].
             bsdf_pll_mean = [[], []]
-            for tosses, results in self.bsdf_pll_results[tag_label][obj
-                ].items():
-                tosses = tosses.split('trained_on_toss_')[-1]
-                start_toss = int(tosses.split('-')[0])
-                end_toss = int(tosses.split('-')[-1])
-                n_tosses = end_toss - start_toss + 1
-
-                error = results['geometry_metrics'][hull_or_full][
-                    geometry_metric] * scale
-
-                bsdf_pll_mean[0].append(n_tosses)
-                bsdf_pll_mean[1].append(error)
-                all_objects_bsdf_pll_mean[0].append(n_tosses)
-                all_objects_bsdf_pll_mean[1].append(error)
-
-            # Get the BundleSDF only results.
+            nerf_on_mean = [[], []]
             bsdf_only_mean = [[], []]
-            for tosses, results in self.bsdf_only_results[tag_label][obj
-                ].items():
-                tosses = tosses.split('trained_on_toss_')[-1]
-                start_toss = int(tosses.split('-')[0])
-                end_toss = int(tosses.split('-')[-1])
-                n_tosses = end_toss - start_toss + 1
-
-                error = results['geometry_metrics'][hull_or_full][
-                    geometry_metric] * scale
-
-                bsdf_only_mean[0].append(n_tosses)
-                bsdf_only_mean[1].append(error)
-                all_objects_bsdf_only_mean[0].append(n_tosses)
-                all_objects_bsdf_only_mean[1].append(error)
-
-            # Get the PLL only results.
             pll_only_mean = [[], []]
-            if tag_label not in self.pll_only_results.keys():
-                pll_only_mean = None
-            else:
-                for tosses, results in self.pll_only_results[tag_label][obj
+            pll_tagslam_mean = [[], []]
+            pll_blind_mean = [[], []]
+
+            obj_means = [bsdf_pll_mean, nerf_on_mean, bsdf_only_mean,
+                         pll_only_mean, pll_tagslam_mean, pll_blind_mean]
+
+            for all_mean, obj_mean, result_dict in zip(
+                    means, obj_means, result_dicts):
+                if tag_label not in result_dict.keys():
+                    obj_mean = None
+                    continue
+                for tosses, results in result_dict[tag_label][obj
                     ].items():
                     tosses = tosses.split('trained_on_toss_')[-1]
                     start_toss = int(tosses.split('-')[0])
@@ -681,15 +681,16 @@ class ResultsPlotter:
                     error = results['geometry_metrics'][hull_or_full][
                         geometry_metric] * scale
 
-                    pll_only_mean[0].append(n_tosses)
-                    pll_only_mean[1].append(error)
-                    all_objects_pll_only_mean[0].append(n_tosses)
-                    all_objects_pll_only_mean[1].append(error)
+                    obj_mean[0].append(n_tosses)
+                    obj_mean[1].append(error)
+                    all_mean[0].append(n_tosses)
+                    all_mean[1].append(error)
 
             # Generate the plots.
             self._do_plot(
-                bp_data=bsdf_pll_mean, bo_data=bsdf_only_mean,
-                po_data=pll_only_mean,
+                bp_data=bsdf_pll_mean, n_data=nerf_on_mean,
+                bo_data=bsdf_only_mean, po_data=pll_only_mean,
+                pt_data=pll_tagslam_mean, pb_data=pll_blind_mean,
                 ylabel=ERROR_LABELS[geometry_metric], xlabel=NUM_TOSSES_LABEL,
                 title=f'{obj} {hull_or_full.replace("_", " ")} Geometry'.title(),
                 filename=f'{obj}_{geometry_metric}_v_data_{hull_or_full}.png',
@@ -698,125 +699,172 @@ class ResultsPlotter:
         # Do a confidence interval plot that aggregates all the objects.
         self._do_confidence_interval_plot(
             bp_data=all_objects_bsdf_pll_mean,
+            n_data=all_objects_nerf_on_mean,
             bo_data=all_objects_bsdf_only_mean,
             po_data=all_objects_pll_only_mean,
+            pt_data=all_objects_pll_tagslam_mean,
+            pb_data=all_objects_pll_blind_mean,
             ylabel=ERROR_LABELS[geometry_metric], xlabel=NUM_TOSSES_LABEL,
             title=f'All Objects {hull_or_full.replace("_", " ")} Geometry'.title(),
             filename=f'all_objs_{geometry_metric}_v_data_{hull_or_full}.png',
             subdir='geometry')
 
-    def plot_tagslam_dynamics_rollout_error_vs_data(
-            self, toss_subset: str, dynamics_metric: str):
+    def plot_tagslam_dynamics_error_vs_data(
+            self, toss_subset: str, dynamics_category: str,
+            dynamics_metric: str):
         """Dynamics metrics against TagSLAM.  Only doable for tagged objects and
         not for BundleSDF-only."""
+        title_add = 'Rollout' if dynamics_category=='dynamics_rollout_metrics' \
+            else 'Single-Step'
+
         # Keep track of all objects.
         all_objects_bsdf_pll_mean = [[], []]
         all_objects_bsdf_pll_auc = [[], []]
+        all_objects_nerf_on_mean = [[], []]
+        all_objects_nerf_on_auc = [[], []]
         all_objects_pll_only_mean = [[], []]
         all_objects_pll_only_auc = [[], []]
+        all_objects_pll_tagslam_mean = [[], []]
+        all_objects_pll_tagslam_auc = [[], []]
+        all_objects_pll_blind_mean = [[], []]
+        all_objects_pll_blind_auc = [[], []]
+
+        # Prepare to zip in consistent order:  BSDF-PLL, NeRF Online, PLL Only,
+        # PLL TagSLAM, PLL Blind.
+        means = [all_objects_bsdf_pll_mean, all_objects_nerf_on_mean,
+                 all_objects_pll_only_mean, all_objects_pll_tagslam_mean,
+                 all_objects_pll_blind_mean]
+        aucs = [all_objects_bsdf_pll_auc, all_objects_nerf_on_auc,
+                all_objects_pll_only_auc, all_objects_pll_tagslam_auc,
+                all_objects_pll_blind_auc]
+        result_dicts = [self.bsdf_pll_results, self.nerf_on_results,
+                        self.pll_only_results, self.pll_tagslam_results,
+                        self.pll_blind_results]
 
         for obj in self.tagged_objects:
             scale = METRIC_SCALING[dynamics_metric]
             auc_scale = METRIC_SCALING['auc']
 
-            # Get the BundleSDF-PLL results.  Store as a 2D array [[xs], [ys]].
             bsdf_pll_mean = [[], []]
             bsdf_pll_auc = [[], []]
-            for tosses, results in self.bsdf_pll_results['tagged_objects'][obj
-                ].items():
-                tosses = tosses.split('trained_on_toss_')[-1]
-                start_toss = int(tosses.split('-')[0])
-                end_toss = int(tosses.split('-')[-1])
-                n_tosses = end_toss - start_toss + 1
-
-                error = results['dynamics_rollout_metrics'][toss_subset][
-                    'against_tagslam'][dynamics_metric]['mean'] * scale
-                auc = results['dynamics_rollout_metrics'][toss_subset][
-                    'against_tagslam'][dynamics_metric]['mean_auc'] * auc_scale
-
-                bsdf_pll_mean[0].append(n_tosses)
-                bsdf_pll_auc[0].append(n_tosses)
-                bsdf_pll_mean[1].append(error)
-                bsdf_pll_auc[1].append(auc)
-                all_objects_bsdf_pll_mean[0].append(n_tosses)
-                all_objects_bsdf_pll_auc[0].append(n_tosses)
-                all_objects_bsdf_pll_mean[1].append(error)
-                all_objects_bsdf_pll_auc[1].append(auc)
-
-            # Get the PLL only results.
+            nerf_on_mean = [[], []]
+            nerf_on_auc = [[], []]
             pll_only_mean = [[], []]
             pll_only_auc = [[], []]
-            for tosses, results in self.pll_only_results['tagged_objects'][obj
-                ].items():
-                tosses = tosses.split('trained_on_toss_')[-1]
-                start_toss = int(tosses.split('-')[0])
-                end_toss = int(tosses.split('-')[-1])
-                n_tosses = end_toss - start_toss + 1
+            pll_tagslam_mean = [[], []]
+            pll_tagslam_auc = [[], []]
+            pll_blind_mean = [[], []]
+            pll_blind_auc = [[], []]
 
-                error = results['dynamics_rollout_metrics'][toss_subset][
-                    'against_tagslam'][dynamics_metric]['mean'] * scale
-                auc = results['dynamics_rollout_metrics'][toss_subset][
-                    'against_tagslam'][dynamics_metric]['mean_auc'] * auc_scale
+            obj_means = [bsdf_pll_mean, nerf_on_mean, pll_only_mean,
+                         pll_tagslam_mean, pll_blind_mean]
+            obj_aucs = [bsdf_pll_auc, nerf_on_auc, pll_only_auc,
+                        pll_tagslam_auc, pll_blind_auc]
 
-                pll_only_mean[0].append(n_tosses)
-                pll_only_auc[0].append(n_tosses)
-                pll_only_mean[1].append(error)
-                pll_only_auc[1].append(auc)
-                all_objects_pll_only_mean[0].append(n_tosses)
-                all_objects_pll_only_auc[0].append(n_tosses)
-                all_objects_pll_only_mean[1].append(error)
-                all_objects_pll_only_auc[1].append(auc)
+            for all_mean, all_auc, obj_mean, obj_auc, result_dict in zip(
+                    means, aucs, obj_means, obj_aucs, result_dicts):
+                if 'tagged_objects' not in result_dict.keys():
+                    obj_mean = None
+                    obj_auc = None
+                    continue
+                for tosses, results in result_dict['tagged_objects'][obj].items():
+                    tosses = tosses.split('trained_on_toss_')[-1]
+                    start_toss = int(tosses.split('-')[0])
+                    end_toss = int(tosses.split('-')[-1])
+                    n_tosses = end_toss - start_toss + 1
+
+                    error = results[dynamics_category][toss_subset][
+                        'against_tagslam'][dynamics_metric]['mean'] * scale
+                    auc = results[dynamics_category][toss_subset][
+                        'against_tagslam'][dynamics_metric]['mean_auc'] * \
+                            auc_scale
+
+                    obj_mean[0].append(n_tosses)
+                    obj_auc[0].append(n_tosses)
+                    obj_mean[1].append(error)
+                    obj_auc[1].append(auc)
+                    all_mean[0].append(n_tosses)
+                    all_auc[0].append(n_tosses)
+                    all_mean[1].append(error)
+                    all_auc[1].append(auc)
 
             # Generate the plots.
             self._do_plot(
                 bp_data=bsdf_pll_mean, po_data=pll_only_mean,
+                n_data=nerf_on_mean, pt_data=pll_tagslam_mean,
+                pb_data=pll_blind_mean,
                 ylabel=ERROR_LABELS[dynamics_metric], xlabel=NUM_TOSSES_LABEL,
                 title=f'{obj} {toss_subset.replace("_", " ")} Dynamics '.title() + \
-                    f'Prediction'.title(),
-                filename=f'{obj}_{dynamics_metric}_tagslam_v_data_{toss_subset}.png',
-                subdir='dynamics')
+                    f'{title_add} Prediction'.title(),
+                filename=f'{obj}_{dynamics_metric}_tagslam_v_data_' + \
+                    f'{toss_subset}_{dynamics_category}.png', subdir='dynamics')
             self._do_plot(
                 bp_data=bsdf_pll_auc, po_data=pll_only_auc,
+                n_data=nerf_on_auc, pt_data=pll_tagslam_auc,
+                pb_data=pll_blind_auc,
                 ylabel=AUC_LABELS[dynamics_metric], xlabel=NUM_TOSSES_LABEL,
                 title=f'{obj} {toss_subset.replace("_", " ")} Dynamics '.title() + \
-                    f'Prediction'.title(),
+                    f'{title_add} Prediction'.title(),
                 filename=f'{obj}_{dynamics_metric}_tagslam_v_data_{toss_subset}' + \
-                    f'_auc.png', subdir='dynamics')
+                    f'_{dynamics_category}_auc.png', subdir='dynamics')
 
         # Do a confidence interval plot that aggregates all the objects.
         self._do_confidence_interval_plot(
             bp_data=all_objects_bsdf_pll_mean,
             po_data=all_objects_pll_only_mean,
+            n_data=all_objects_nerf_on_mean,
+            pt_data=all_objects_pll_tagslam_mean,
+            pb_data=all_objects_pll_blind_mean,
             ylabel=ERROR_LABELS[dynamics_metric], xlabel=NUM_TOSSES_LABEL,
             title=f'All Tagged Objects {toss_subset.replace("_", " ")} '.title() + \
-                f'Dynamics Prediction'.title(),
+                f'Dynamics {title_add} Prediction'.title(),
             filename=f'all_tagged_objs_{dynamics_metric}_tagslam_v_data_' + \
-                f'{toss_subset}.png', subdir='dynamics')
+                f'{toss_subset}_{dynamics_category}.png', subdir='dynamics')
         self._do_confidence_interval_plot(
             bp_data=all_objects_bsdf_pll_auc,
             po_data=all_objects_pll_only_auc,
+            n_data=all_objects_nerf_on_auc,
+            pt_data=all_objects_pll_tagslam_auc,
+            pb_data=all_objects_pll_blind_auc,
             ylabel=AUC_LABELS[dynamics_metric], xlabel=NUM_TOSSES_LABEL,
             title=f'All Tagged Objects {toss_subset.replace("_", " ")} '.title() + \
-                f'Dynamics Prediction'.title(),
+                f'Dynamics {title_add} Prediction'.title(),
             filename=f'all_tagged_objs_{dynamics_metric}_tagslam_v_data_' + \
-                f'{toss_subset}_auc.png', subdir='dynamics')
+                f'{toss_subset}_{dynamics_category}_auc.png', subdir='dynamics')
 
-    def plot_bundlesdf_dynamics_rollout_error_vs_data(
-            self, toss_subset: str, dynamics_metric: str):
-        """Dynamics metrics against BundleSDF.  Doable for all objects, not
-        not for BundleSDF-only, and since against BundleSDF this only works for
-        all training tosses since predicting beyond the dataset requires
-        TagSLAM."""
+    def plot_bundlesdf_dynamics_error_vs_data(
+            self, toss_subset: str, dynamics_category: str,
+            dynamics_metric: str):
+        """Dynamics metrics against BundleSDF.  Doable for all objects, not for
+        BundleSDF-only, not for PLL trained on TagSLAM, and since against
+        BundleSDF this only works for all training tosses since predicting
+        beyond the dataset requires TagSLAM."""
         if toss_subset != 'training_tosses':
             print(f'Cannot compute dynamics predictions w.r.t. BundleSDF ' + \
                   f'beyond the training set (told to do {toss_subset}; skip.')
             return
 
+        title_add = 'Rollout' if dynamics_category=='dynamics_rollout_metrics' \
+            else 'Single-Step'
+
         # Keep track of all objects.
         all_objects_bsdf_pll_mean = [[], []]
         all_objects_bsdf_pll_auc = [[], []]
+        all_objects_nerf_on_mean = [[], []]
+        all_objects_nerf_on_auc = [[], []]
         all_objects_pll_only_mean = [[], []]
         all_objects_pll_only_auc = [[], []]
+        all_objects_pll_blind_mean = [[], []]
+        all_objects_pll_blind_auc = [[], []]
+
+        # Prepare to zip in consistent order:  BSDF-PLL, NeRF Online, PLL Only,
+        # PLL Blind.
+        means = [all_objects_bsdf_pll_mean, all_objects_nerf_on_mean,
+                 all_objects_pll_only_mean, all_objects_pll_blind_mean]
+        aucs = [all_objects_bsdf_pll_auc, all_objects_nerf_on_auc,
+                all_objects_pll_only_auc, all_objects_pll_blind_auc]
+        result_dicts = [self.bsdf_pll_results, self.nerf_on_results,
+                        self.pll_only_results, self.pll_blind_results]
 
         # Do both tagged and tagless objects.
         all_objects = self.tagless_objects + self.tagged_objects
@@ -830,118 +878,124 @@ class ResultsPlotter:
             # Also cannot do out-of-training data dynamics predictions w.r.t.
             # BundleSDF, even for tagged objects.
             if toss_subset != 'training_tosses':
-                pass
+                continue
 
             scale = METRIC_SCALING[dynamics_metric]
             auc_scale = METRIC_SCALING['auc']
 
-            # Get the BundleSDF-PLL results.  Store as a 2D array [[xs], [ys]].
             bsdf_pll_mean = [[], []]
             bsdf_pll_auc = [[], []]
-            for tosses, results in self.bsdf_pll_results[tag_label][obj
-                ].items():
-                tosses = tosses.split('trained_on_toss_')[-1]
-                start_toss = int(tosses.split('-')[0])
-                end_toss = int(tosses.split('-')[-1])
-                n_tosses = end_toss - start_toss + 1
-
-                error = results['dynamics_rollout_metrics'][toss_subset][
-                    'against_bundlesdf'][dynamics_metric]['mean'] * scale
-                auc = results['dynamics_rollout_metrics'][toss_subset][
-                    'against_bundlesdf'][dynamics_metric]['mean_auc'] * \
-                        auc_scale
-
-                bsdf_pll_mean[0].append(n_tosses)
-                bsdf_pll_auc[0].append(n_tosses)
-                bsdf_pll_mean[1].append(error)
-                bsdf_pll_auc[1].append(auc)
-                all_objects_bsdf_pll_mean[0].append(n_tosses)
-                all_objects_bsdf_pll_auc[0].append(n_tosses)
-                all_objects_bsdf_pll_mean[1].append(error)
-                all_objects_bsdf_pll_auc[1].append(auc)
-
-            # Get the PLL only results.
+            nerf_on_mean = [[], []]
+            nerf_on_auc = [[], []]
             pll_only_mean = [[], []]
             pll_only_auc = [[], []]
-            if tag_label not in self.pll_only_results:
-                pll_only_mean = None
-                pll_only_auc = None
-            else:
-                for tosses, results in self.pll_only_results[tag_label][obj
-                    ].items():
+            pll_blind_mean = [[], []]
+            pll_blind_auc = [[], []]
+
+            obj_means = [bsdf_pll_mean, nerf_on_mean, pll_only_mean,
+                        pll_blind_mean]
+            obj_aucs = [bsdf_pll_auc, nerf_on_auc, pll_only_auc,
+                        pll_blind_auc]
+
+            for all_mean, all_auc, obj_mean, obj_auc, result_dict in zip(
+                    means, aucs, obj_means, obj_aucs, result_dicts):
+                if tag_label not in result_dict.keys():
+                    obj_mean = None
+                    obj_auc = None
+                    continue
+                for tosses, results in result_dict[tag_label][obj].items():
                     tosses = tosses.split('trained_on_toss_')[-1]
                     start_toss = int(tosses.split('-')[0])
                     end_toss = int(tosses.split('-')[-1])
                     n_tosses = end_toss - start_toss + 1
 
-                    error = results['dynamics_rollout_metrics'][toss_subset][
+                    error = results[dynamics_category][toss_subset][
                         'against_bundlesdf'][dynamics_metric]['mean'] * scale
-                    auc = results['dynamics_rollout_metrics'][toss_subset][
+                    auc = results[dynamics_category][toss_subset][
                         'against_bundlesdf'][dynamics_metric]['mean_auc'] * \
                             auc_scale
 
-                    pll_only_mean[0].append(n_tosses)
-                    pll_only_auc[0].append(n_tosses)
-                    pll_only_mean[1].append(error)
-                    pll_only_auc[1].append(auc)
-                    all_objects_pll_only_mean[0].append(n_tosses)
-                    all_objects_pll_only_auc[0].append(n_tosses)
-                    all_objects_pll_only_mean[1].append(error)
-                    all_objects_pll_only_auc[1].append(auc)
+                    obj_mean[0].append(n_tosses)
+                    obj_auc[0].append(n_tosses)
+                    obj_mean[1].append(error)
+                    obj_auc[1].append(auc)
+                    all_mean[0].append(n_tosses)
+                    all_auc[0].append(n_tosses)
+                    all_mean[1].append(error)
+                    all_auc[1].append(auc)
 
             # Generate the plots.
             self._do_plot(
                 bp_data=bsdf_pll_mean, po_data=pll_only_mean,
-                ylabel=ERROR_LABELS[dynamics_metric], xlabel=NUM_TOSSES_LABEL,
+                n_data=nerf_on_mean, pb_data=pll_blind_mean,
+                ylabel=ERROR_LABELS[dynamics_metric],
+                xlabel=NUM_TOSSES_LABEL,
                 title=f'{obj} {toss_subset.replace("_", " ")} Dynamics '.title() + \
-                    f'Prediction'.title(),
-                filename=f'{obj}_{dynamics_metric}_bsdf_v_data_{toss_subset}.png',
-                subdir='dynamics')
+                    f'{title_add} Prediction'.title(),
+                filename=f'{obj}_{dynamics_metric}_bsdf_v_data_{toss_subset}' +\
+                    f'_{dynamics_category}.png', subdir='dynamics')
             self._do_plot(
                 bp_data=bsdf_pll_auc, po_data=pll_only_auc,
-                ylabel=AUC_LABELS[dynamics_metric], xlabel=NUM_TOSSES_LABEL,
+                n_data=nerf_on_auc, pb_data=pll_blind_auc,
+                ylabel=AUC_LABELS[dynamics_metric],
+                xlabel=NUM_TOSSES_LABEL,
                 title=f'{obj} {toss_subset.replace("_", " ")} Dynamics '.title() + \
-                    f'Prediction'.title(),
+                    f'{title_add} Prediction'.title(),
                 filename=f'{obj}_{dynamics_metric}_bsdf_v_data_{toss_subset}' + \
-                    f'_auc.png', subdir='dynamics')
+                    f'_{dynamics_category}_auc.png', subdir='dynamics')
 
         # Do a confidence interval plot that aggregates all the objects.
         self._do_confidence_interval_plot(
             bp_data=all_objects_bsdf_pll_mean,
             po_data=all_objects_pll_only_mean,
+            n_data=all_objects_nerf_on_mean,
+            pb_data=all_objects_pll_blind_mean,
             ylabel=ERROR_LABELS[dynamics_metric], xlabel=NUM_TOSSES_LABEL,
             title=f'All Objects {toss_subset.replace("_", " ")} '.title() + \
-                f'Dynamics Prediction'.title(),
-            filename=f'all_objs_{dynamics_metric}_bsdf_v_data_{toss_subset}.png',
-            subdir='dynamics')
+                f'Dynamics {title_add} Prediction'.title(),
+            filename=f'all_objs_{dynamics_metric}_bsdf_v_data_{toss_subset}' + \
+                f'_{dynamics_category}.png', subdir='dynamics')
         self._do_confidence_interval_plot(
             bp_data=all_objects_bsdf_pll_auc,
             po_data=all_objects_pll_only_auc,
+            n_data=all_objects_nerf_on_auc,
+            pb_data=all_objects_pll_blind_auc,
             ylabel=AUC_LABELS[dynamics_metric], xlabel=NUM_TOSSES_LABEL,
             title=f'All Objects {toss_subset.replace("_", " ")} '.title() + \
-                f'Dynamics Prediction'.title(),
-            filename=f'all_objs_{dynamics_metric}_bsdf_v_data_{toss_subset}_auc.png',
-            subdir='dynamics')
+                f'Dynamics {title_add} Prediction'.title(),
+            filename=f'all_objs_{dynamics_metric}_bsdf_v_data_{toss_subset}' + \
+                f'_{dynamics_category}_auc.png', subdir='dynamics')
 
     def _do_plot(self, bp_data: list = None, n_data: list = None,
-                 bo_data: list = None, po_data: list = None, ylabel: str = '',
+                 bo_data: list = None, po_data: list = None,
+                 pt_data: list = None, pb_data: list = None, ylabel: str = '',
                  xlabel: str = '', title: str = None, filename: str = None,
                  subdir: str = ''):
+        # Skip individual object plots.
+        if not self.do_objects:
+            return
+
         fig = plt.figure()
         ax = plt.gca()
 
-        if bp_data is not None:
+        if bp_data is not None and len(bp_data[0]) > 0:
             ax.plot(bp_data[0], bp_data[1], linewidth=LINEWIDTH,
                     color=BSDF_PLL_COLOR, label=BSDF_PLL_LABEL)
-        if n_data is not None:
+        if n_data is not None and len(n_data[0]) > 0:
             ax.plot(n_data[0], n_data[1], linewidth=LINEWIDTH,
                     color=NERF_ON_COLOR, label=NERF_ON_LABEL)
-        if bo_data is not None:
+        if bo_data is not None and len(bo_data[0]) > 0:
             ax.plot(bo_data[0], bo_data[1], linewidth=LINEWIDTH,
                     color=BSDF_ONLY_COLOR, label=BSDF_ONLY_LABEL)
-        if po_data is not None:
+        if po_data is not None and len(po_data[0]) > 0:
             ax.plot(po_data[0], po_data[1], linewidth=LINEWIDTH,
                     color=PLL_ONLY_COLOR, label=PLL_ONLY_LABEL)
+        if pt_data is not None and len(pt_data[0]) > 0:
+            ax.plot(pt_data[0], pt_data[1], linewidth=LINEWIDTH,
+                    color=PLL_TAGSLAM_COLOR, label=PLL_TAGSLAM_LABEL)
+        if pb_data is not None and len(pb_data[0]) > 0:
+            ax.plot(pb_data[0], pb_data[1], linewidth=LINEWIDTH,
+                    color=PLL_BLIND_COLOR, label=PLL_BLIND_LABEL)
 
         ax.set_xlim(0.5, np.max(bp_data[0])+0.5)
         x_markers = bp_data[0]
@@ -961,33 +1015,43 @@ class ResultsPlotter:
 
     def _do_confidence_interval_plot(
             self, bp_data: list = None, n_data: list = None,
-            bo_data: list = None, po_data: list = None, ylabel: str = '',
-            xlabel: str = '', title: str = None, filename: str = None,
-            subdir: str = ''):
+            bo_data: list = None, po_data: list = None, pt_data: list = None,
+            pb_data: list = None, ylabel: str = '', xlabel: str = '',
+            title: str = None, filename: str = None, subdir: str = ''):
         fig = plt.figure()
         ax = plt.gca()
 
-        if bp_data is not None:
+        if bp_data is not None and len(bp_data[0]) > 0:
             # Convert the data to mean/lower/upper.
             x, y, l, u = xs_and_ys_to_x_mean_lower_upper(bp_data[0], bp_data[1])
             ax.plot(x, y, linewidth=LINEWIDTH,
                     color=BSDF_PLL_COLOR, label=BSDF_PLL_LABEL)
             ax.fill_between(x, l, u, alpha=0.3, color=BSDF_PLL_COLOR)
-        if n_data is not None:
+        if n_data is not None and len(n_data[0]) > 0:
             x, y, l, u = xs_and_ys_to_x_mean_lower_upper(n_data[0], n_data[1])
             ax.plot(x, y, linewidth=LINEWIDTH,
                     color=NERF_ON_COLOR, label=NERF_ON_LABEL)
-            ax.fill_between(x, l, u, alpha=0.3, color=BSDF_PLL_COLOR)
-        if bo_data is not None:
+            ax.fill_between(x, l, u, alpha=0.3, color=NERF_ON_COLOR)
+        if bo_data is not None and len(bo_data[0]) > 0:
             x, y, l, u = xs_and_ys_to_x_mean_lower_upper(bo_data[0], bo_data[1])
             ax.plot(x, y, linewidth=LINEWIDTH,
                     color=BSDF_ONLY_COLOR, label=BSDF_ONLY_LABEL)
             ax.fill_between(x, l, u, alpha=0.3, color=BSDF_ONLY_COLOR)
-        if po_data is not None:
+        if po_data is not None and len(po_data[0]) > 0:
             x, y, l, u = xs_and_ys_to_x_mean_lower_upper(po_data[0], po_data[1])
             ax.plot(x, y, linewidth=LINEWIDTH,
                     color=PLL_ONLY_COLOR, label=PLL_ONLY_LABEL)
             ax.fill_between(x, l, u, alpha=0.3, color=PLL_ONLY_COLOR)
+        if pt_data is not None and len(pt_data[0]) > 0:
+            x, y, l, u = xs_and_ys_to_x_mean_lower_upper(pt_data[0], pt_data[1])
+            ax.plot(x, y, linewidth=LINEWIDTH,
+                    color=PLL_TAGSLAM_COLOR, label=PLL_TAGSLAM_LABEL)
+            ax.fill_between(x, l, u, alpha=0.3, color=PLL_TAGSLAM_COLOR)
+        if pb_data is not None and len(pb_data[0]) > 0:
+            x, y, l, u = xs_and_ys_to_x_mean_lower_upper(pb_data[0], pb_data[1])
+            ax.plot(x, y, linewidth=LINEWIDTH,
+                    color=PLL_BLIND_COLOR, label=PLL_BLIND_LABEL)
+            ax.fill_between(x, l, u, alpha=0.3, color=PLL_BLIND_COLOR)
 
         ax.set_xlim(0.5, np.max(bp_data[0])+0.5)
         x_markers = bp_data[0]
@@ -1083,6 +1147,7 @@ def process_gather_command():
     bsdf_only_results = {}
     pll_only_results = {}
     pll_tagslam_results = {}
+    pll_blind_results = {}
 
     # Iterate over every evaluation subdirectory.
     for subdir in os.listdir(file_utils.evaluation_dir()):
@@ -1093,8 +1158,10 @@ def process_gather_command():
 
         if 'bsdf' in subdir:
             add_to_results = bsdf_only_results
-        elif 'pll' in subdir and subdir.endswith('_1'):
+        elif 'pll' in subdir and subdir.endswith('_1') and '00' in subdir:
             add_to_results = pll_only_results
+        elif 'pll' in subdir and subdir.endswith('_1') and '04' in subdir:
+            add_to_results = pll_blind_results
         elif 'pll' in subdir and subdir.endswith('_0'):
             add_to_results = pll_tagslam_results
         elif '02' in subdir:
@@ -1128,6 +1195,9 @@ def process_gather_command():
     file_utils.save_results_to_yaml(
         pll_tagslam_results, file_utils.evaluation_dir(),
         filename='pll_tagslam.yaml')
+    file_utils.save_results_to_yaml(
+        pll_blind_results, file_utils.evaluation_dir(),
+        filename='pll_blind.yaml')
 
 
 # Use 'plot' command to load the previously generated yaml files with results
@@ -1136,12 +1206,19 @@ PLOT_TRACKING = False
 PLOT_DYNAMICS = False
 PLOT_GEOMETRY = True
 @cli.command('plot')
-def process_plot_command():
+@click.option('--do-objects/--skip-objects',
+              type=bool, default=True,
+              help='Whether to plot object-level results or just aggregates.')
+def process_plot_command(do_objects: bool):
     # Load the gathered results.
     bsdf_pll_results = file_utils.load_gathered_results_yaml('bsdf_pll.yaml')
     nerf_on_results = file_utils.load_gathered_results_yaml('nerf_on.yaml')
     bsdf_only_results = file_utils.load_gathered_results_yaml('bsdf_only.yaml')
     pll_only_results = file_utils.load_gathered_results_yaml('pll_only.yaml')
+    pll_tagslam_results = file_utils.load_gathered_results_yaml(
+        'pll_tagslam.yaml')
+    pll_blind_results = file_utils.load_gathered_results_yaml(
+        'pll_blind.yaml')
 
     # Load an empty results dictionary for checking which metrics are valid for
     # which category/against which tracking.
@@ -1151,7 +1228,10 @@ def process_plot_command():
         bsdf_pll_results=bsdf_pll_results,
         nerf_on_results=nerf_on_results,
         bsdf_only_results=bsdf_only_results,
-        pll_only_results=pll_only_results
+        pll_only_results=pll_only_results,
+        pll_tagslam_results=pll_tagslam_results,
+        pll_blind_results=pll_blind_results,
+        do_objects=do_objects
     )
 
     for metric in ERROR_LABELS.keys():
@@ -1170,21 +1250,27 @@ def process_plot_command():
                         trajectory, metric)
 
         for toss_subset in ['all_tosses', 'training_tosses', 'unseen_tosses']:
+            for dynamics_category in [
+                'dynamics_rollout_metrics', 'dynamics_single_step_metrics']:
+                if metric in \
+                    empty_results[dynamics_category]['against_tagslam'
+                    ].keys():
+                    if PLOT_DYNAMICS:
+                        print(f'Plotting TagSLAM {toss_subset}, ' + \
+                            f'{dynamics_category}, {metric}')
+                        results_plotter.plot_tagslam_dynamics_error_vs_data(
+                            toss_subset, dynamics_category, metric)
+        for dynamics_category in [
+            'dynamics_rollout_metrics', 'dynamics_single_step_metrics']:
             if metric in \
-                empty_results['dynamics_rollout_metrics']['against_tagslam'
+                empty_results[dynamics_category]['against_bundlesdf'
                 ].keys():
+                toss_subset = 'training_tosses'
                 if PLOT_DYNAMICS:
-                    print(f'Plotting TagSLAM {toss_subset}, {metric}')
-                    results_plotter.plot_tagslam_dynamics_rollout_error_vs_data(
-                        toss_subset, metric)
-        if metric in \
-            empty_results['dynamics_rollout_metrics']['against_bundlesdf'
-            ].keys():
-            toss_subset = 'training_tosses'
-            if PLOT_DYNAMICS:
-                print(f'Plotting BundleSDF {toss_subset}, {metric}')
-                results_plotter.plot_bundlesdf_dynamics_rollout_error_vs_data(
-                    toss_subset, metric)
+                    print(f'Plotting BundleSDF {toss_subset}, ' + \
+                        f'{dynamics_category}, {metric}')
+                    results_plotter.plot_bundlesdf_dynamics_error_vs_data(
+                        toss_subset, dynamics_category, metric)
 
         if metric in \
             empty_results['geometry_metrics']['convex_hull'].keys():
