@@ -489,6 +489,51 @@ def get_synced_bsdf_tagslam_toss_poses(
 
     return b_trans_mat, t_trans_mat
 
+def get_synced_bsdf_keyframe_tagslam_toss_poses(
+        vision_asset: str, tracking_bundlesdf_id: str, nerf_bundlesdf_id: str,
+        cycle_iteration: int) -> Tensor:
+    """Get a time-synchronized pair of TagSLAM and BundleSDF keyframe poses for
+    a given BundleSDF experiment.  Uses the last keyframe in the BundleSDF
+    experiment's results.  Returns both poses as 4x4 transformation matrices."""
+    # First load the keyframes:  get the adjusted keyframe poses from the
+    # BundleSDF NeRF results' poses_after_nerf.txt.
+    keyframe_tfs = \
+        file_utils.load_optimized_keyframe_poses_from_nerf_results(
+            dataset=vision_asset, cycle_iteration=cycle_iteration,
+            tracking_bundlesdf_id=tracking_bundlesdf_id,
+            nerf_bundlesdf_id=nerf_bundlesdf_id
+        )
+
+    # Use the last keyframe.
+    b_trans_mat_camera = keyframe_tfs[-1]
+
+    # Convert to world frame.
+    object = vision_asset.split('_')[0]
+    cam_trans, cam_rot_axis_angle = file_utils.load_camera_extrinsics(object)
+    b_trans_mat = math_utils.camera_to_world(
+        b_trans_mat_camera, translation=cam_trans, axis_vec=cam_rot_axis_angle)
+
+    # Get the keyframe indices from the BundleSDF tracking results' last frame
+    # directory, in keyframes.yml.
+    keyframe_idx_1_indexed = \
+        file_utils.load_keyframe_indices_from_nerf_results_yml(
+            vision_asset, cycle_iteration, tracking_bundlesdf_id)
+    keyframe_idx = [i-1 for i in keyframe_idx_1_indexed]
+    keyframe_i = keyframe_idx[-1]
+
+    # Lastly get the corresponding TagSLAM pose.
+    """Load all the poses reported by TagSLAM.  These are in world coordinates
+    of the TagSLAM body origin with the following ordering:
+        [x, y, z, qx, qy, qz, qw]
+    """
+    tagslam_dir = file_utils.synchronized_tagslam_pose_dir(
+        vision_asset, check_exists=True)
+    tagslam_data = np.loadtxt(op.join(tagslam_dir, 'synced_tagslam.txt'))
+    tagslam_poses = tagslam_data[:, 1:]
+    t_trans_mat = math_utils.pos_quat_to_trans_mat(tagslam_poses[keyframe_i,:7])
+
+    return b_trans_mat, t_trans_mat
+
 def get_pll_rollout_trajectory(
         system: MultibodyLearnableSystem, target_traj: Tensor,
         start_adjust: int = 0) -> Tensor:

@@ -691,16 +691,15 @@ class GeometryEvaluator:
                 raise FileNotFoundError(
                     f'Cannot find {other_bsdf_true_mesh_path=}.')
 
-            bsdf_output_pose_dir = file_utils.bundlesdf_pose_dir(
-                self.vision_asset, cycle_iteration=1,
-                bundlesdf_id='bundlesdf_id_00')
-            annotated_poses_dir = file_utils.bundlesdf_annotated_poses_dir(
-                self.vision_asset)
-
-            camera_T_B0 = np.loadtxt(op.join(bsdf_output_pose_dir, "0001.txt"))
-            camera_T_T0 = np.loadtxt(op.join(annotated_poses_dir, "0000.txt"))
-
-            tf_b_to_t = np.linalg.inv(camera_T_B0) @ camera_T_T0
+            # Get synchronized keyframe poses.
+            world_T_B, world_T_T = \
+                eval_utils.get_synced_bsdf_keyframe_tagslam_toss_poses(
+                    vision_asset=self.vision_asset,
+                    cycle_iteration=1,
+                    tracking_bundlesdf_id='bundlesdf_id_00',
+                    nerf_bundlesdf_id='bundlesdf_id_00'
+                )
+            tf_b_to_t = np.linalg.inv(world_T_B) @ world_T_T
 
             # Load the other true mesh, then convert to TagSLAM frame.
             other_true_mesh = icp.load_mesh_from_obj(other_bsdf_true_mesh_path)
