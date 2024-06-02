@@ -650,6 +650,9 @@ class GeometryEvaluator:
                 tracking_bundlesdf_id=self.history[
                     f'cycle_iteration_{self.last_bsdf_iteration}'][
                         'bundlesdf_id'],
+                nerf_bundlesdf_id=self.history[
+                    f'cycle_iteration_{self.last_bsdf_iteration}'][
+                        'bundlesdf_id'],
                 create=False
             )
             other_true_mesh_path = op.join(
@@ -659,6 +662,21 @@ class GeometryEvaluator:
 
             # Load the true mesh from the associated BundleSDF run.
             self.true_mesh = icp.load_mesh_from_obj(other_true_mesh_path)
+
+            # Also write this mesh to file for later use.
+            obj_name = 'true_geom_aligned.obj'
+            o3d.io.write_triangle_mesh(
+                op.join(self.eval_dir, obj_name), self.true_mesh,
+                write_triangle_uvs=False, write_vertex_colors=False
+            )
+            print(f'Saved ground truth mesh already aligned with previous ' + \
+                f'BundleSDF run, as {obj_name} in {self.eval_dir}.')
+
+            material_filepath = op.join(
+                self.eval_dir, f'{obj_name.split(".")[0]}.mtl'
+            )
+            if op.exists(material_filepath):
+                os.system(f'rm {material_filepath}')
 
         # 2) PLL was run on TagSLAM trajectories:  Need to be more creative.
         else:
@@ -724,6 +742,49 @@ class GeometryEvaluator:
             self.true_cloud = Tensor(np.asarray(
                 self.true_mesh.sample_points_poisson_disk(2000).points))
         return self.true_cloud
+
+    def _get_true_geometry_pll_system(self):
+        """Get a PLL system with the learned parameters but true geometry."""
+        if not hasattr(self, 'true_geom_pll_system'):
+            # if self.last_bsdf_iteration > 1:
+            # pll_iteration = self.last_bsdf_iteration - 1
+            # pll_id = self.history[f'cycle_iteration_{pll_iteration}'][
+            #     'pll_id']
+            pll_results_dir = file_utils.contactnets_output_dir(
+                dataset=self.vision_asset,
+                cycle_iteration=self.last_bsdf_iteration,
+                pll_id=self.pll_id
+            )
+
+            # Get the old URDF from the PLL results.
+            old_urdf_path = op.join(
+                pll_results_dir, 'urdfs', 'with_bundlesdf_mesh.urdf')
+
+            # else:
+            #     # Use the original URDF.
+            #     old_urdf_path = file_utils.template_urdf_filepath()
+
+            # First create a URDF.
+            new_urdf_path = op.join(self.eval_dir, 'true_mesh_pll_params.urdf')
+            os.system(f'cp {old_urdf_path} {new_urdf_path}')
+
+            assert op.exists(op.join(self.eval_dir, 'true_geom_aligned.obj')), \
+                f'Expected true geometry to already exist but did not find ' + \
+                f'true_geom_aligned.ob in {self.eval_dir}.'
+            # # Align the true geometry to the BSDF geometry.
+            # self._write_aligned_true_geometry_obj(
+            #     obj_name='true_geom_aligned.obj')
+
+            # Overwrite the geometry in the URDF to refer to the new obj.
+            eval_utils.overwrite_mesh_name_in_urdf(
+                new_urdf_path, 'true_geom_aligned.obj')
+            print(f'TRAJ: Wrote URDF to {new_urdf_path}')
+
+            # Create the system.
+            self.true_geom_pll_system = \
+                eval_utils.create_multibody_learnable_system(new_urdf_path)
+
+        return self.true_geom_pll_system
 
     def compute_metrics(self):
         self._compute_chamfer_distance()
@@ -1617,7 +1678,7 @@ def main_command(vision_asset: str, bundlesdf_id: str, nerf_bundlesdf_id: str,
 
     ### Pose estimation.
     # Compute tracking metrics if last run was BundleSDF (so PLL ID is None).
-    if do_tracking:
+    if do_tracking and 'tracking_metrics' in results.keys():
         print(f'\nDOING TRACKING METRICS\n')
         traj_evaluator = TrajectoryPerformanceEvaluator(
             vision_asset, history, nerf_bundlesdf_id, bsdf_only)
@@ -1634,7 +1695,8 @@ def main_command(vision_asset: str, bundlesdf_id: str, nerf_bundlesdf_id: str,
 
     ### Dynamics predictions.
     # Compute dynamics metrics if last run was PLL or PLL was ever run.
-    if do_dynamics and (pll_id is not None or cycle_iteration > 1):
+    if do_dynamics and (pll_id is not None or cycle_iteration > 1) and \
+        'dynamics_rollout_metrics' in results.keys():
         print(f'\nDOING DYNAMICS METRICS\n')
         dynamics_predictor.generate_rollout_trajectories()
         dynamics_predictor.generate_single_step_predictions()
