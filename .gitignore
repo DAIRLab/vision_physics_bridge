@@ -18,3 +18,5 @@
 /consolidated_results
 /evaluation
 /assets/object_scans
+/table_calibration
+!/table_calibration/table_heights.yaml
