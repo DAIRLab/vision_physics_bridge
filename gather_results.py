@@ -194,6 +194,8 @@ T_SCORE_PER_DOF = {1: 12.71, 2: 4.303, 3: 3.182, 4: 2.776,
                    21: 2.080, 22: 2.074, 23: 2.069, 24: 2.064,
                    25: 2.060, 26: 2.056, 27: 2.052, 28: 2.048,
                    29: 2.045, 30: 2.042}
+for i in range(31, 100):
+    T_SCORE_PER_DOF[i] = 1.960
 
 
 # pll_vision_results
@@ -752,7 +754,8 @@ class ResultsPlotter:
             ylabel=ERROR_LABELS[geometry_metric], xlabel=NUM_TOSSES_LABEL,
             title=f'All Objects {hull_or_full.replace("_", " ")} Geometry'.title(),
             filename=f'all_objs_{geometry_metric}_v_data_{hull_or_full}.png',
-            subdir='geometry')
+            subdir='geometry',
+            save_to_txt=True, yscale=10)  # Report CD in cm
 
     def plot_tagslam_dynamics_error_vs_data(
             self, toss_subset: str, dynamics_category: str,
@@ -901,26 +904,48 @@ class ResultsPlotter:
             else 'Single-Step'
 
         # Keep track of all objects.
-        all_objects_bsdf_pll_mean = [[], []]
-        all_objects_nerf_on_mean = [[], []]
-        all_objects_pll_vision_mean = [[], []]
-        all_objects_pll_size_mean = [[], []]
-        all_objects_pll_blind_b_mean = [[], []]
+        tagged_objects_bsdf_pll_mean = [[], []]
+        tagged_objects_nerf_on_mean = [[], []]
+        tagged_objects_pll_vision_mean = [[], []]
+        tagged_objects_pll_size_mean = [[], []]
+        tagged_objects_pll_blind_b_mean = [[], []]
 
-        all_objects_bsdf_pll_auc = [[], []]
-        all_objects_nerf_on_auc = [[], []]
-        all_objects_pll_vision_auc = [[], []]
-        all_objects_pll_size_auc = [[], []]
-        all_objects_pll_blind_b_auc = [[], []]
+        tagged_objects_bsdf_pll_auc = [[], []]
+        tagged_objects_nerf_on_auc = [[], []]
+        tagged_objects_pll_vision_auc = [[], []]
+        tagged_objects_pll_size_auc = [[], []]
+        tagged_objects_pll_blind_b_auc = [[], []]
+
+        tagless_objects_bsdf_pll_mean = [[], []]
+        tagless_objects_nerf_on_mean = [[], []]
+        tagless_objects_pll_vision_mean = [[], []]
+        tagless_objects_pll_size_mean = [[], []]
+        tagless_objects_pll_blind_b_mean = [[], []]
+
+        tagless_objects_bsdf_pll_auc = [[], []]
+        tagless_objects_nerf_on_auc = [[], []]
+        tagless_objects_pll_vision_auc = [[], []]
+        tagless_objects_pll_size_auc = [[], []]
+        tagless_objects_pll_blind_b_auc = [[], []]
 
         # Prepare to zip in consistent order:  BSDF-PLL, NeRF Online, PLL
         # Vision, PLL Size, PLL Blind B.
-        means = [all_objects_bsdf_pll_mean, all_objects_nerf_on_mean,
-                 all_objects_pll_vision_mean, all_objects_pll_size_mean,
-                 all_objects_pll_blind_b_mean]
-        aucs = [all_objects_bsdf_pll_auc, all_objects_nerf_on_auc,
-                all_objects_pll_vision_auc, all_objects_pll_size_auc,
-                all_objects_pll_blind_b_auc]
+        tagged_means = [
+            tagged_objects_bsdf_pll_mean, tagged_objects_nerf_on_mean,
+            tagged_objects_pll_vision_mean, tagged_objects_pll_size_mean,
+            tagged_objects_pll_blind_b_mean]
+        tagged_aucs = [
+            tagged_objects_bsdf_pll_auc, tagged_objects_nerf_on_auc,
+            tagged_objects_pll_vision_auc, tagged_objects_pll_size_auc,
+            tagged_objects_pll_blind_b_auc]
+        tagless_means = [
+            tagless_objects_bsdf_pll_mean, tagless_objects_nerf_on_mean,
+            tagless_objects_pll_vision_mean, tagless_objects_pll_size_mean,
+            tagless_objects_pll_blind_b_mean]
+        tagless_aucs = [
+            tagless_objects_bsdf_pll_auc, tagless_objects_nerf_on_auc,
+            tagless_objects_pll_vision_auc, tagless_objects_pll_size_auc,
+            tagless_objects_pll_blind_b_auc]
         result_dicts = [self.bsdf_pll_results, self.nerf_on_results,
                         self.pll_vision_results, self.pll_size_results,
                         self.pll_blind_b_results]
@@ -936,8 +961,8 @@ class ResultsPlotter:
                 continue
             # Also cannot do out-of-training data dynamics predictions w.r.t.
             # BundleSDF, even for tagged objects.
-            if toss_subset != 'training_tosses':
-                continue
+            # if toss_subset != 'training_tosses':
+            #     continue
 
             scale = METRIC_SCALING[dynamics_metric]
             auc_scale = METRIC_SCALING['auc']
@@ -959,8 +984,10 @@ class ResultsPlotter:
             obj_aucs = [bsdf_pll_auc, nerf_on_auc, pll_vision_auc,
                         pll_size_auc, pll_blind_b_auc]
 
-            for all_mean, all_auc, obj_mean, obj_auc, result_dict in zip(
-                    means, aucs, obj_means, obj_aucs, result_dicts):
+            for tagged_mean, tagged_auc, tagless_mean, tagless_auc, obj_mean, \
+                obj_auc, result_dict in zip(
+                    tagged_means, tagged_aucs, tagless_means, tagless_aucs, \
+                    obj_means, obj_aucs, result_dicts):
                 if tag_label not in result_dict.keys():
                     obj_mean = None
                     obj_auc = None
@@ -981,10 +1008,17 @@ class ResultsPlotter:
                     obj_auc[0].append(n_tosses)
                     obj_mean[1].append(error)
                     obj_auc[1].append(auc)
-                    all_mean[0].append(n_tosses)
-                    all_auc[0].append(n_tosses)
-                    all_mean[1].append(error)
-                    all_auc[1].append(auc)
+
+                    if obj in self.tagged_objects:
+                        tagged_mean[0].append(n_tosses)
+                        tagged_auc[0].append(n_tosses)
+                        tagged_mean[1].append(error)
+                        tagged_auc[1].append(auc)
+                    else:
+                        tagless_mean[0].append(n_tosses)
+                        tagless_auc[0].append(n_tosses)
+                        tagless_mean[1].append(error)
+                        tagless_auc[1].append(auc)
 
             # Generate the plots.
             self._do_plot(
@@ -1009,6 +1043,70 @@ class ResultsPlotter:
                     f'_{dynamics_category}_auc.png', subdir='dynamics')
 
         # Do a confidence interval plot that aggregates all the objects.
+        all_objects_bsdf_pll_mean = \
+            tagged_objects_bsdf_pll_mean + tagless_objects_bsdf_pll_mean
+        all_objects_nerf_on_mean = \
+            tagged_objects_nerf_on_mean + tagless_objects_nerf_on_mean
+        all_objects_pll_vision_mean = \
+            tagged_objects_pll_vision_mean + tagless_objects_pll_vision_mean
+        all_objects_pll_size_mean = \
+            tagged_objects_pll_size_mean + tagless_objects_pll_size_mean
+        all_objects_pll_blind_b_mean = \
+            tagged_objects_pll_blind_b_mean + tagless_objects_pll_blind_b_mean
+        all_objects_bsdf_pll_auc = \
+            tagged_objects_bsdf_pll_auc + tagless_objects_bsdf_pll_auc
+        all_objects_nerf_on_auc = \
+            tagged_objects_nerf_on_auc + tagless_objects_nerf_on_auc
+        all_objects_pll_vision_auc = \
+            tagged_objects_pll_vision_auc + tagless_objects_pll_vision_auc
+        all_objects_pll_size_auc = \
+            tagged_objects_pll_size_auc + tagless_objects_pll_size_auc
+        all_objects_pll_blind_b_auc = \
+            tagged_objects_pll_blind_b_auc + tagless_objects_pll_blind_b_auc
+        self._do_confidence_interval_plot(
+            bp_data=tagged_objects_bsdf_pll_mean,
+            n_data=tagged_objects_nerf_on_mean,
+            pv_data=tagged_objects_pll_vision_mean,
+            ps_data=tagged_objects_pll_size_mean,
+            pbb_data=tagged_objects_pll_blind_b_mean,
+            ylabel=ERROR_LABELS[dynamics_metric], xlabel=NUM_TOSSES_LABEL,
+            title=f'Tagged Objects {toss_subset.replace("_", " ")} '.title() + \
+                f'Dynamics {title_add} Prediction'.title(),
+            filename=f'tagged_objs_{dynamics_metric}_bsdf_v_data_{toss_subset}' + \
+                f'_{dynamics_category}.png', subdir='dynamics')
+        self._do_confidence_interval_plot(
+            bp_data=tagged_objects_bsdf_pll_auc,
+            n_data=tagged_objects_nerf_on_auc,
+            pv_data=tagged_objects_pll_vision_auc,
+            ps_data=tagged_objects_pll_size_auc,
+            pbb_data=tagged_objects_pll_blind_b_auc,
+            ylabel=AUC_LABELS[dynamics_metric], xlabel=NUM_TOSSES_LABEL,
+            title=f'Tagged Objects {toss_subset.replace("_", " ")} '.title() + \
+                f'Dynamics {title_add} Prediction'.title(),
+            filename=f'tagged_objs_{dynamics_metric}_bsdf_v_data_{toss_subset}' + \
+                f'_{dynamics_category}_auc.png', subdir='dynamics')
+        self._do_confidence_interval_plot(
+            bp_data=tagless_objects_bsdf_pll_mean,
+            n_data=tagless_objects_nerf_on_mean,
+            pv_data=tagless_objects_pll_vision_mean,
+            ps_data=tagless_objects_pll_size_mean,
+            pbb_data=tagless_objects_pll_blind_b_mean,
+            ylabel=ERROR_LABELS[dynamics_metric], xlabel=NUM_TOSSES_LABEL,
+            title=f'Tagless Objects {toss_subset.replace("_", " ")} '.title() + \
+                f'Dynamics {title_add} Prediction'.title(),
+            filename=f'tagless_objs_{dynamics_metric}_bsdf_v_data_{toss_subset}' + \
+                f'_{dynamics_category}.png', subdir='dynamics')
+        self._do_confidence_interval_plot(
+            bp_data=tagless_objects_bsdf_pll_auc,
+            n_data=tagless_objects_nerf_on_auc,
+            pv_data=tagless_objects_pll_vision_auc,
+            ps_data=tagless_objects_pll_size_auc,
+            pbb_data=tagless_objects_pll_blind_b_auc,
+            ylabel=AUC_LABELS[dynamics_metric], xlabel=NUM_TOSSES_LABEL,
+            title=f'Tagless Objects {toss_subset.replace("_", " ")} '.title() + \
+                f'Dynamics {title_add} Prediction'.title(),
+            filename=f'tagless_objs_{dynamics_metric}_bsdf_v_data_{toss_subset}' + \
+                f'_{dynamics_category}_auc.png', subdir='dynamics')
         self._do_confidence_interval_plot(
             bp_data=all_objects_bsdf_pll_mean,
             n_data=all_objects_nerf_on_mean,
@@ -1084,16 +1182,39 @@ class ResultsPlotter:
         fig.savefig(fig_path, dpi=100)
         plt.close()
 
+    def _add_to_string(self, string, data_name, x, y, l, u, yscale, ys):
+        y = [yi*yscale for yi in y]
+        u = [ui*yscale for ui in u]
+        l = [li*yscale for li in l]
+        ys = [ysi*yscale for ysi in ys]
+        pm = [(ui-li)/2 for ui, li in zip(u, l)]
+
+        # Get a total mean and confidence interval.
+        same_xs = [0] * len(ys)
+        _, toty, totl, totu = xs_and_ys_to_x_mean_lower_upper(same_xs, ys)
+        
+        string += f'{data_name}:\n'
+        string += f'{x=}\n'
+        string += f'y = '
+        for yi, pmi in zip(y, pm):
+            string += f' & ${yi:.2f} \pm {pmi:.2f}$'
+        string += f'\nCombined:  ${toty[0]:.2f} \pm {(totu[0]-totl[0])/2:.2f}$'
+        string += f'\n\n'
+        return string
+
     def _do_confidence_interval_plot(
             self, bp_data: list = None, n_data: list = None,
             bo_data: list = None,
-            #po_data: list = None, pt_data: list = None, pb_data: list = None,
             pv_data: list = None, ps_data: list = None,
             pbb_data: list = None, pbt_data: list = None,
             ylabel: str = '', xlabel: str = '',
-            title: str = None, filename: str = None, subdir: str = ''):
+            title: str = None, filename: str = None, subdir: str = '',
+            save_to_txt: bool = False, yscale: float = 1):
         fig = plt.figure()
         ax = plt.gca()
+
+        if save_to_txt:
+            data_str = ''
 
         if bp_data is not None and len(bp_data[0]) > 0:
             # Convert the data to mean/lower/upper.
@@ -1101,36 +1222,57 @@ class ResultsPlotter:
             ax.plot(x, y, linewidth=LINEWIDTH,
                     color=BSDF_PLL_COLOR, label=BSDF_PLL_LABEL)
             ax.fill_between(x, l, u, alpha=0.3, color=BSDF_PLL_COLOR)
+            if save_to_txt:
+                data_str = self._add_to_string(
+                    data_str, 'bp_data', x, y, l, u, yscale, bp_data[1])
         if n_data is not None and len(n_data[0]) > 0:
             x, y, l, u = xs_and_ys_to_x_mean_lower_upper(n_data[0], n_data[1])
             ax.plot(x, y, linewidth=LINEWIDTH,
                     color=NERF_ON_COLOR, label=NERF_ON_LABEL)
             ax.fill_between(x, l, u, alpha=0.3, color=NERF_ON_COLOR)
+            if save_to_txt:
+                data_str = self._add_to_string(
+                    data_str, 'n_data', x, y, l, u, yscale, n_data[1])
         if bo_data is not None and len(bo_data[0]) > 0:
             x, y, l, u = xs_and_ys_to_x_mean_lower_upper(bo_data[0], bo_data[1])
             ax.plot(x, y, linewidth=LINEWIDTH,
                     color=BSDF_ONLY_COLOR, label=BSDF_ONLY_LABEL)
             ax.fill_between(x, l, u, alpha=0.3, color=BSDF_ONLY_COLOR)
+            if save_to_txt:
+                data_str = self._add_to_string(
+                    data_str, 'bo_data', x, y, l, u, yscale, bo_data[1])
         if pv_data is not None and len(pv_data[0]) > 0:
             x, y, l, u = xs_and_ys_to_x_mean_lower_upper(pv_data[0], pv_data[1])
             ax.plot(x, y, linewidth=LINEWIDTH,
                     color=PLL_VISION_COLOR, label=PLL_VISION_LABEL)
             ax.fill_between(x, l, u, alpha=0.3, color=PLL_VISION_COLOR)
+            if save_to_txt:
+                data_str = self._add_to_string(
+                    data_str, 'pv_data', x, y, l, u, yscale, pv_data[1])
         if ps_data is not None and len(ps_data[0]) > 0:
             x, y, l, u = xs_and_ys_to_x_mean_lower_upper(ps_data[0], ps_data[1])
             ax.plot(x, y, linewidth=LINEWIDTH,
                     color=PLL_SIZE_COLOR, label=PLL_SIZE_LABEL)
             ax.fill_between(x, l, u, alpha=0.3, color=PLL_SIZE_COLOR)
+            if save_to_txt:
+                data_str = self._add_to_string(
+                    data_str, 'ps_data', x, y, l, u, yscale, ps_data[1])
         if pbb_data is not None and len(pbb_data[0]) > 0:
             x, y, l, u = xs_and_ys_to_x_mean_lower_upper(pbb_data[0], pbb_data[1])
             ax.plot(x, y, linewidth=LINEWIDTH,
                     color=PLL_BLIND_B_COLOR, label=PLL_BLIND_B_LABEL)
             ax.fill_between(x, l, u, alpha=0.3, color=PLL_BLIND_B_COLOR)
+            if save_to_txt:
+                data_str = self._add_to_string(
+                    data_str, 'pbb_data', x, y, l, u, yscale, pbb_data[1])
         if pbt_data is not None and len(pbt_data[0]) > 0:
             x, y, l, u = xs_and_ys_to_x_mean_lower_upper(pbt_data[0], pbt_data[1])
             ax.plot(x, y, linewidth=LINEWIDTH,
                     color=PLL_BLIND_T_COLOR, label=PLL_BLIND_T_LABEL)
             ax.fill_between(x, l, u, alpha=0.3, color=PLL_BLIND_T_COLOR)
+            if save_to_txt:
+                data_str = self._add_to_string(
+                    data_str, 'pbt_data', x, y, l, u, yscale, pbt_data[1])
 
         ax.set_xlim(0.5, np.max(bp_data[0])+0.5)
         x_markers = bp_data[0]
@@ -1142,11 +1284,25 @@ class ResultsPlotter:
 
         self._beautify_plot(fig, ax, x_markers, auc='auc' in filename)
 
+        if 'all_objs_chamfer_distance_v_data_convex_hull' in filename:
+            ax.set_ylim(0, 0.1)
+        if 'all_objs_chamfer_distance_v_data_full_geometry' in filename:
+            ax.set_ylim(0, 0.1)
+
         filename += '.png' if not filename.endswith('.png') else ''
         file_utils.assure_created(op.join(self.plot_dir, subdir))
         fig_path = op.join(self.plot_dir, subdir, filename)
         fig.savefig(fig_path, dpi=100)
         plt.close()
+
+        # Save the string to a text file as well.
+        if save_to_txt:
+            str_filepath = fig_path.replace('.png', '.txt')
+            with open(str_filepath, 'w') as txt_file:
+                txt_file.write(data_str)
+            print(f'Wrote to {str_filepath}')
+
+
 
     def _beautify_plot(self, fig, ax, x_markers, auc: bool):
         """Perform all the nice formatting on a plot."""
@@ -1289,7 +1445,7 @@ def process_gather_command():
 # Use 'plot' command to load the previously generated yaml files with results
 # and to generate plots with them.
 PLOT_TRACKING = False
-PLOT_DYNAMICS = True
+PLOT_DYNAMICS = False
 PLOT_GEOMETRY = True
 @cli.command('plot')
 @click.option('--do-objects/--skip-objects',
