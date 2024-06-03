@@ -10,7 +10,7 @@ import torch
 from scipy import signal
 from scipy.spatial.transform import Rotation
 import matplotlib
-matplotlib.use('TkAgg')
+#matplotlib.use('TkAgg')
 import matplotlib.pyplot as plt
 import pdb
 import trimesh
@@ -1174,7 +1174,8 @@ class TrajectoryConverterBundleSDFToPLL:
             full_tagslam_dir = file_utils.contactnets_input_dir_tagslam(
                 dataset=self.dataset, full=True)
             torch.save(
-                torch.tensor(self.tagslam_t_full_processed_states),
+                # torch.tensor(self.tagslam_t_full_processed_states),
+                torch.tensor(self.tagslam_b_full_processed_states),
                 op.join(full_tagslam_dir, 'tagslam.pt'))
             print(f"\t{op.join(full_tagslam_dir, 'tagslam.pt')}")
 
@@ -1183,7 +1184,8 @@ class TrajectoryConverterBundleSDFToPLL:
                 dataset=self.dataset, full=False)
             for i in range(len(toss_filenames)):
                 torch.save(
-                    torch.tensor(self.tagslam_t_toss_processed_states[i]),
+                    # torch.tensor(self.tagslam_t_toss_processed_states[i]),
+                    torch.tensor(self.tagslam_b_toss_processed_states[i]),
                     op.join(toss_tagslam_dir, toss_filenames[i]))
                 print(f'\t{op.join(toss_tagslam_dir, toss_filenames[i])}')
 
@@ -1195,7 +1197,8 @@ class TrajectoryConverterBundleSDFToPLL:
                 )
                 for i in range(len(toss_filenames)):
                     torch.save(
-                        torch.tensor(self.keyframe_t_toss_processed_states[i]),
+                        # torch.tensor(self.keyframe_t_toss_processed_states[i]),
+                        torch.tensor(self.keyframe_b_toss_processed_states[i]),
                         op.join(key_tagslam_dir, toss_filenames[i]))
                     print(f'\t{op.join(key_tagslam_dir, toss_filenames[i])}')
 
