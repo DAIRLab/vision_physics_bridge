@@ -300,7 +300,25 @@ class TrajectoryPerformanceEvaluator:
     def _get_true_geometry_pll_system(self):
         """Get a PLL system with the learned parameters but true geometry."""
         if not hasattr(self, 'true_geom_pll_system'):
-            if self.last_bsdf_iteration > 1:
+            if self.pll_id is not None:
+                pll_results_dir = file_utils.contactnets_output_dir(
+                    dataset=self.vision_asset,
+                    cycle_iteration=self.last_bsdf_iteration,
+                    pll_id=self.pll_id
+                )
+
+                # Get the old URDF from the PLL results.
+                old_urdf_path = op.join(
+                    pll_results_dir, 'urdfs', 'with_bundlesdf_mesh.urdf')
+                if not op.exists(old_urdf_path):
+                    old_urdf_path = op.join(
+                        pll_results_dir, 'urdfs', 'bundlesdf_cube_mesh.urdf')
+                    assert op.exists(old_urdf_path), f'Did not find ' + \
+                        f'true_mesh_pll_params.urdf or bundlesdf_cube_mesh.urdf' + \
+                        f'in {op.join(pll_results_dir, "urdfs")}.'
+
+            elif self.last_bsdf_iteration > 1:
+                print(f'Checking for PLL results')
                 pll_iteration = self.last_bsdf_iteration - 1
                 pll_id = self.history[f'cycle_iteration_{pll_iteration}'][
                     'pll_id']
@@ -311,6 +329,12 @@ class TrajectoryPerformanceEvaluator:
                 # Get the old URDF from the PLL results.
                 old_urdf_path = op.join(
                     pll_results_dir, 'urdfs', 'with_bundlesdf_mesh.urdf')
+                if not op.exists(old_urdf_path):
+                    old_urdf_path = op.join(
+                        pll_results_dir, 'urdfs', 'bundlesdf_cube_mesh.urdf')
+                    assert op.exists(old_urdf_path), f'Did not find ' + \
+                        f'true_mesh_pll_params.urdf or bundlesdf_cube_mesh.urdf' + \
+                        f'in {op.join(pll_results_dir, "urdfs")}.'
 
             else:
                 # Use the original URDF.
@@ -758,6 +782,12 @@ class GeometryEvaluator:
             # Get the old URDF from the PLL results.
             old_urdf_path = op.join(
                 pll_results_dir, 'urdfs', 'with_bundlesdf_mesh.urdf')
+            if not op.exists(old_urdf_path):
+                old_urdf_path = op.join(
+                    pll_results_dir, 'urdfs', 'bundlesdf_cube_mesh.urdf')
+            assert op.exists(old_urdf_path), f'Did not find ' + \
+                f'true_mesh_pll_params.urdf or bundlesdf_cube_mesh.urdf' + \
+                f'in {op.join(pll_results_dir, "urdfs")}.'
 
             # else:
             #     # Use the original URDF.
