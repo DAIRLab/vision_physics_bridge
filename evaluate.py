@@ -668,7 +668,7 @@ class GeometryEvaluator:
         # 1) PLL was run on BundleSDF trajectories:  Can use the BundleSDF run's
         # GT geometry directly.
         if self.last_bsdf_iteration >= 1:
-            other_eval_dir = file_utils.evaluation_subdir(
+            other_bsdf_eval_dir = file_utils.evaluation_subdir(
                 dataset=self.vision_asset,
                 cycle_iteration=self.last_bsdf_iteration,
                 tracking_bundlesdf_id=self.history[
@@ -679,70 +679,40 @@ class GeometryEvaluator:
                         'bundlesdf_id'],
                 create=False
             )
-            other_true_mesh_path = op.join(
-                other_eval_dir, 'true_geom_aligned.obj')
-            if not op.exists(other_true_mesh_path):
-                raise FileNotFoundError(f'Cannot find {other_true_mesh_path=}.')
 
-            # Load the true mesh from the associated BundleSDF run.
-            self.true_mesh = icp.load_mesh_from_obj(other_true_mesh_path)
-
-            # Also write this mesh to file for later use.
-            obj_name = 'true_geom_aligned.obj'
-            o3d.io.write_triangle_mesh(
-                op.join(self.eval_dir, obj_name), self.true_mesh,
-                write_triangle_uvs=False, write_vertex_colors=False
-            )
-            print(f'Saved ground truth mesh already aligned with previous ' + \
-                f'BundleSDF run, as {obj_name} in {self.eval_dir}.')
-
-            material_filepath = op.join(
-                self.eval_dir, f'{obj_name.split(".")[0]}.mtl'
-            )
-            if op.exists(material_filepath):
-                os.system(f'rm {material_filepath}')
-
-        # 2) PLL was run on TagSLAM trajectories:  Need to be more creative.
+        # 2) PLL was run on TagSLAM trajectories:  TagSLAM trajectories were
+        # stored wrt to the BundleSDF origin, so can directly use the aligned
+        # GT mesh from an analogous BundleSDF run.
         else:
             other_bsdf_eval_dir = file_utils.evaluation_subdir(
                 dataset=self.vision_asset, cycle_iteration=1,
                 tracking_bundlesdf_id='bundlesdf_id_00',
                 nerf_bundlesdf_id='bundlesdf_id_00', create=False
             )
-            other_bsdf_true_mesh_path = op.join(
-                other_bsdf_eval_dir, 'true_geom_aligned.obj')
-            if not op.exists(other_bsdf_true_mesh_path):
-                raise FileNotFoundError(
-                    f'Cannot find {other_bsdf_true_mesh_path=}.')
 
-            # Get synchronized keyframe poses.
-            world_T_B, world_T_T = \
-                eval_utils.get_synced_bsdf_keyframe_tagslam_toss_poses(
-                    vision_asset=self.vision_asset,
-                    cycle_iteration=1,
-                    tracking_bundlesdf_id='bundlesdf_id_00',
-                    nerf_bundlesdf_id='bundlesdf_id_00'
-                )
-            tf_b_to_t = np.linalg.inv(world_T_B) @ world_T_T
+        other_bsdf_true_mesh_path = op.join(
+            other_bsdf_eval_dir, 'true_geom_aligned.obj')
+        if not op.exists(other_bsdf_true_mesh_path):
+            raise FileNotFoundError(
+                f'Cannot find {other_bsdf_true_mesh_path=}.')
 
-            # Load the other true mesh, then convert to TagSLAM frame.
-            other_true_mesh = icp.load_mesh_from_obj(other_bsdf_true_mesh_path)
-            self.true_mesh = copy.deepcopy(other_true_mesh).transform(tf_b_to_t)
+        # Load the true mesh from the associated BundleSDF run.
+        self.true_mesh = icp.load_mesh_from_obj(other_bsdf_true_mesh_path)
 
-            # Also write this mesh to file for later use.
-            obj_name = 'true_geom_aligned.obj'
-            o3d.io.write_triangle_mesh(
-                op.join(self.eval_dir, obj_name), self.true_mesh,
-                write_triangle_uvs=False, write_vertex_colors=False
-            )
-            print(f'Saved ground truth mesh transformed to align with ' + \
-                f'TagSLAM tracked origin, as {obj_name} in {self.eval_dir}.')
+        # Also write this mesh to file for later use.
+        obj_name = 'true_geom_aligned.obj'
+        o3d.io.write_triangle_mesh(
+            op.join(self.eval_dir, obj_name), self.true_mesh,
+            write_triangle_uvs=False, write_vertex_colors=False
+        )
+        print(f'Saved ground truth mesh transformed to align with ' + \
+            f'TagSLAM tracked origin, as {obj_name} in {self.eval_dir}.')
 
-            material_filepath = op.join(
-                self.eval_dir, f'{obj_name.split(".")[0]}.mtl'
-            )
-            if op.exists(material_filepath):
-                os.system(f'rm {material_filepath}')
+        material_filepath = op.join(
+            self.eval_dir, f'{obj_name.split(".")[0]}.mtl'
+        )
+        if op.exists(material_filepath):
+            os.system(f'rm {material_filepath}')
 
         # Create the hull from the loaded true mesh.
         self.true_hull, _ = self.true_mesh.compute_convex_hull()
@@ -1085,7 +1055,12 @@ class DynamicsPredictor:
                     bundlesdf_id=self.last_tracking_bsdf_id
                 )
 
-        # Get ground truth trajectories from TagSLAM.
+        # Get ground truth trajectories from TagSLAM.  All TagSLAM trajectories
+        # stored in PLL assets directory along with corresponding BundleSDF runs
+        # are wrt the BundleSDF body origin.  However, when TagSLAM trajectories
+        # are stored without BundleSDF runs, these are wrt the TagSLAM body
+        # origin.  In either case, we can safely "convert to BundleSDF body
+        # frame" since for the former case, this transformation is the identity.
         tagslam_trajs = eval_utils.get_pll_tagslam_trajectories_pll_format(
             object=self.object)
 
