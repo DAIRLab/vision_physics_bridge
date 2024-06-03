@@ -385,6 +385,79 @@ class MeshScalingProcessor(UnscaledMeshProcessor):
             os.system(f'rm {material_filepath}')
 
 
+class MeshInspector:
+    def __init__(self, object: str):
+        self.object = object
+        true_obj_file = file_utils.object_scan_filepath(self.object)
+        self.true_mesh = icp.load_mesh_from_obj(true_obj_file)
+
+    def load_bsdf_and_tagslam_pll_meshes(self):
+        """Load PLL meshes:  one trained on BundleSDF poses and one trained on
+        TagSLAM poses."""
+        vision_asset = f'{self.object}_1'
+
+        pb_results_dir = file_utils.contactnets_output_dir(
+            vision_asset, 1, 'pll_id_04')
+        pb_obj_file = op.join(pb_results_dir, 'urdfs', 'test.obj')
+        if not op.exists(pb_obj_file):
+            pb_obj_file = op.join(pb_results_dir, 'urdfs', 'test_best.obj')
+        assert op.exists(pb_obj_file), f'Could not find {pb_obj_file}.'
+
+        pt_results_dir = file_utils.contactnets_output_dir(
+            vision_asset, 0, 'pll_id_00')
+        pt_obj_file = op.join(pt_results_dir, 'urdfs', 'test.obj')
+        if not op.exists(pt_obj_file):
+            pt_obj_file = op.join(pt_results_dir, 'urdfs', 'test_best.obj')
+        assert op.exists(pt_obj_file), f'Could not find {pt_obj_file}.'
+
+        pb2_results_dir = file_utils.contactnets_output_dir(
+            vision_asset, 1, 'pll_id_05')
+        pb2_obj_file = op.join(pb2_results_dir, 'urdfs', 'test.obj')
+        if not op.exists(pb2_obj_file):
+            pb2_obj_file = op.join(pb2_results_dir, 'urdfs', 'test_best.obj')
+        assert op.exists(pb2_obj_file), f'Could not find {pb2_obj_file}.'
+
+        pb3_results_dir = file_utils.contactnets_output_dir(
+            vision_asset, 1, 'pll_id_db00')
+        pb3_obj_file = op.join(pb3_results_dir, 'urdfs', 'test.obj')
+        if not op.exists(pb3_obj_file):
+            pb3_obj_file = op.join(pb3_results_dir, 'urdfs', 'test_best.obj')
+        assert op.exists(pb3_obj_file), f'Could not find {pb3_obj_file}.'
+
+        self.pb_mesh = icp.load_mesh_from_obj(pb_obj_file)
+        self.pt_mesh = icp.load_mesh_from_obj(pt_obj_file)
+        self.pb2_mesh = icp.load_mesh_from_obj(pb2_obj_file)
+        self.pb3_mesh = icp.load_mesh_from_obj(pb3_obj_file)
+
+    def view_true_bsdf_tagslam_pll_meshes(self):
+        true_cloud = self.true_mesh.sample_points_poisson_disk(2000)
+        pb_cloud = self.pb_mesh.sample_points_poisson_disk(2000)
+        pt_cloud = self.pt_mesh.sample_points_poisson_disk(2000)
+        pb2_cloud = self.pb2_mesh.sample_points_poisson_disk(2000)
+        pb3_cloud = self.pb3_mesh.sample_points_poisson_disk(2000)
+        o3d.visualization.draw_geometries(
+            [true_cloud, pb_cloud, pt_cloud, pb2_cloud, pb3_cloud],
+            window_name='Aligned'
+        )
+
+        # Now split them up a bit.
+        slide_right = np.eye(4)
+        slide_right[0, 3] = 0.1
+        slide_right_more = np.eye(4)
+        slide_right_more[0, 3] = 0.2
+        slide_right_more_more = np.eye(4)
+        slide_right_more_more[0, 3] = 0.3
+        slide_right_more_more_more = np.eye(4)
+        slide_right_more_more_more[0, 3] = 0.4
+        pb_cloud.transform(slide_right)
+        pt_cloud.transform(slide_right_more)
+        pb2_cloud.transform(slide_right_more_more)
+        pb3_cloud.transform(slide_right_more_more_more)
+        o3d.visualization.draw_geometries(
+            [true_cloud, pb_cloud, pt_cloud, pb2_cloud, pb3_cloud],
+            window_name='True-BSDF-TagSLAM-BSDF2')
+
+
 
 #######################################################################
 @click.command()
@@ -441,6 +514,10 @@ if __name__ == '__main__':
     # for object in ['croc']:
     #     mesh_processor = MeshScalingProcessor(object=object)
     #     mesh_processor.scale_manually(show=True)
+
+    mi = MeshInspector(object='milk')
+    mi.load_bsdf_and_tagslam_pll_meshes()
+    mi.view_true_bsdf_tagslam_pll_meshes()
 
 
     main_command()  # pylint: disable=no-value-for-parameter
