@@ -107,12 +107,11 @@ only have results for tosses 1-3.
 Experiments to collect:
     - bsdf_pll:  bsdf 02_2
     - nerf_on:  bsdf 03_2
-    - PLL with vision supervision:  PLL 00_1
     - bsdf_only:  bsdf 00_1
+    - PLL with vision supervision:  PLL 00_1
     - PLL with size vision supervision only:  PLL 04_1 (or PLL 05_1)
-    - PLL with TagSLAM and no vision supervision:  PLL 00_0 (or PLL 06_0)
     - PLL with BundleSDF tracking and no vision supervision:  PLL 07_1
-
+    - PLL with TagSLAM and no vision supervision:  PLL 00_0 (or PLL 06_0)
 """
 
 import click
@@ -1151,12 +1150,14 @@ def process_auc_command():
 @cli.command('gather')
 def process_gather_command():
     # Start dictionaries for each of the four result types.
-    bsdf_pll_results = {}
-    nerf_on_results = {}
-    bsdf_only_results = {}
-    pll_only_results = {}
-    pll_tagslam_results = {}
-    pll_blind_results = {}
+    bsdf_pll_results = {}       # 02_2
+    nerf_on_results = {}        # 03_2
+    bsdf_only_results = {}      # bsdf 00_1
+
+    pll_vision_results = {}     # pll 00_1
+    pll_size_results = {}       # pll 04_1 (or pll 05_1)
+    pll_blind_b_results = {}    # pll 07_1
+    pll_blind_t_results = {}    # pll 00_0 (or PLL 06_0)
 
     # Iterate over every evaluation subdirectory.
     for subdir in os.listdir(file_utils.evaluation_dir()):
@@ -1168,18 +1169,19 @@ def process_gather_command():
         if 'bsdf' in subdir:
             add_to_results = bsdf_only_results
         elif 'pll' in subdir and subdir.endswith('_1') and '00' in subdir:
-            add_to_results = pll_only_results
+            add_to_results = pll_vision_results
         elif 'pll' in subdir and subdir.endswith('_1') and '04' in subdir:
-            add_to_results = pll_blind_results
+            add_to_results = pll_size_results
+        elif 'pll' in subdir and subdir.endswith('_1') and '07' in subdir:
+            add_to_results = pll_blind_b_results
         elif 'pll' in subdir and subdir.endswith('_0'):
-            add_to_results = pll_tagslam_results
+            add_to_results = pll_blind_t_results
         elif '02' in subdir:
             add_to_results = bsdf_pll_results
         elif '03' in subdir:
             add_to_results = nerf_on_results
         else:
-            print(f'  Skipping {subdir} because looking for 02 or 03 ' + \
-                  f'BundleSDF IDs.')
+            print(f'  Skipping {subdir}')
             continue
 
         print(f'Found {subdir}...', end='')
@@ -1200,13 +1202,17 @@ def process_gather_command():
         bsdf_only_results, file_utils.evaluation_dir(),
         filename='bsdf_only.yaml')
     file_utils.save_results_to_yaml(
-        pll_only_results, file_utils.evaluation_dir(), filename='pll_only.yaml')
+        pll_vision_results, file_utils.evaluation_dir(),
+        filename='pll_vision.yaml')
     file_utils.save_results_to_yaml(
-        pll_tagslam_results, file_utils.evaluation_dir(),
-        filename='pll_tagslam.yaml')
+        pll_size_results, file_utils.evaluation_dir(),
+        filename='pll_size.yaml')
     file_utils.save_results_to_yaml(
-        pll_blind_results, file_utils.evaluation_dir(),
-        filename='pll_blind.yaml')
+        pll_blind_b_results, file_utils.evaluation_dir(),
+        filename='pll_blind_b.yaml')
+    file_utils.save_results_to_yaml(
+        pll_blind_t_results, file_utils.evaluation_dir(),
+        filename='pll_blind_t.yaml')
 
 
 # Use 'plot' command to load the previously generated yaml files with results
