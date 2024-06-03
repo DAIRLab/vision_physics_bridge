@@ -104,6 +104,15 @@ only have results for tosses 1-3.
     pll_tagslam: ...        <-- same as bsdf_pll
     pll_blind: ...          <-- same as bsdf_pll
 
+Experiments to collect:
+    - bsdf_pll:  bsdf 02_2
+    - nerf_on:  bsdf 03_2
+    - PLL with vision supervision:  PLL 00_1
+    - bsdf_only:  bsdf 00_1
+    - PLL with size vision supervision only:  PLL 04_1 (or PLL 05_1)
+    - PLL with TagSLAM and no vision supervision:  PLL 00_0 (or PLL 06_0)
+    - PLL with BundleSDF tracking and no vision supervision:  PLL 07_1
+
 """
 
 import click
@@ -1207,7 +1216,7 @@ PLOT_DYNAMICS = False
 PLOT_GEOMETRY = True
 @cli.command('plot')
 @click.option('--do-objects/--skip-objects',
-              type=bool, default=True,
+              type=bool, default=False,
               help='Whether to plot object-level results or just aggregates.')
 def process_plot_command(do_objects: bool):
     # Load the gathered results.

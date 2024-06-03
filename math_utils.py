@@ -666,6 +666,9 @@ def rotvecfix(rv):
                 rv[i+1,:] = rnew
     return rv
 
+def fix_quaternions_wxyz(quat_wxyz):
+    return xyzw2wxyz(fix_quaternions(wxyz2xyzw(quat_wxyz)))
+
 def fix_quaternions(quat_xyzw):
     """Input quaternions must be in xyzw format.  Returns the fixed quaternions
     in xyzw format.  Inputs can be (N, 4) or (4,)."""
