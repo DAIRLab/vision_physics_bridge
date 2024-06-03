@@ -419,15 +419,33 @@ class MeshInspector:
 
         pb3_results_dir = file_utils.contactnets_output_dir(
             vision_asset, 1, 'pll_id_db00')
+        # pb3_results_dir = file_utils.contactnets_output_dir(
+        #     vision_asset, 1, 'pll_id_07')
         pb3_obj_file = op.join(pb3_results_dir, 'urdfs', 'test.obj')
         if not op.exists(pb3_obj_file):
             pb3_obj_file = op.join(pb3_results_dir, 'urdfs', 'test_best.obj')
         assert op.exists(pb3_obj_file), f'Could not find {pb3_obj_file}.'
 
+        pt2_results_dir = file_utils.contactnets_output_dir(
+            vision_asset, 1, 'pll_id_08')
+        pt2_obj_file = op.join(pt2_results_dir, 'urdfs', 'test.obj')
+        if not op.exists(pt2_obj_file):
+            pt2_obj_file = op.join(pt2_results_dir, 'urdfs', 'test_best.obj')
+        assert op.exists(pt2_obj_file), f'Could not find {pt2_obj_file}.'
+
+        pt3_results_dir = file_utils.contactnets_output_dir(
+            vision_asset, 0, 'pll_id_09')
+        pt3_obj_file = op.join(pt3_results_dir, 'urdfs', 'test.obj')
+        if not op.exists(pt3_obj_file):
+            pt3_obj_file = op.join(pt3_results_dir, 'urdfs', 'test_best.obj')
+        assert op.exists(pt3_obj_file), f'Could not find {pt3_obj_file}.'
+
         self.pb_mesh = icp.load_mesh_from_obj(pb_obj_file)
         self.pt_mesh = icp.load_mesh_from_obj(pt_obj_file)
         self.pb2_mesh = icp.load_mesh_from_obj(pb2_obj_file)
         self.pb3_mesh = icp.load_mesh_from_obj(pb3_obj_file)
+        self.pt2_mesh = icp.load_mesh_from_obj(pt2_obj_file)
+        self.pt3_mesh = icp.load_mesh_from_obj(pt3_obj_file)
 
     def view_true_bsdf_tagslam_pll_meshes(self):
         true_cloud = self.true_mesh.sample_points_poisson_disk(2000)
@@ -435,8 +453,11 @@ class MeshInspector:
         pt_cloud = self.pt_mesh.sample_points_poisson_disk(2000)
         pb2_cloud = self.pb2_mesh.sample_points_poisson_disk(2000)
         pb3_cloud = self.pb3_mesh.sample_points_poisson_disk(2000)
+        pt2_cloud = self.pt2_mesh.sample_points_poisson_disk(2000)
+        pt3_cloud = self.pt3_mesh.sample_points_poisson_disk(2000)
         o3d.visualization.draw_geometries(
-            [true_cloud, pb_cloud, pt_cloud, pb2_cloud, pb3_cloud],
+            [true_cloud, pb_cloud, pt_cloud, pb2_cloud, pb3_cloud, pt2_cloud,
+             pt3_cloud],
             window_name='Aligned'
         )
 
@@ -449,13 +470,20 @@ class MeshInspector:
         slide_right_more_more[0, 3] = 0.3
         slide_right_more_more_more = np.eye(4)
         slide_right_more_more_more[0, 3] = 0.4
+        slide_right_more_more_more_more = np.eye(4)
+        slide_right_more_more_more_more[0, 3] = 0.5
+        slide_right_more_more_more_more_more = np.eye(4)
+        slide_right_more_more_more_more_more[0, 3] = 0.6
         pb_cloud.transform(slide_right)
         pt_cloud.transform(slide_right_more)
         pb2_cloud.transform(slide_right_more_more)
         pb3_cloud.transform(slide_right_more_more_more)
+        pt2_cloud.transform(slide_right_more_more_more_more)
+        pt3_cloud.transform(slide_right_more_more_more_more_more)
         o3d.visualization.draw_geometries(
-            [true_cloud, pb_cloud, pt_cloud, pb2_cloud, pb3_cloud],
-            window_name='True-BSDF-TagSLAM-BSDF2')
+            [true_cloud, pb_cloud, pt_cloud, pb2_cloud, pb3_cloud, pt2_cloud,
+             pt3_cloud],
+            window_name='True-BSDF-TagSLAM-BSDF2-TagSLAM2-TagSLAM3')
 
 
 
