@@ -560,24 +560,23 @@ def get_pll_rollout_trajectory(
     return full_traj.detach().clone()
 
 def get_pll_single_step_predictions_and_targets(
-        system: MultibodyLearnableSystem, full_traj: Tensor,
-        start_adjust: int = 0) -> Tensor:
+        system: MultibodyLearnableSystem, full_traj: Tensor) -> Tensor:
     """Get single step predictions and targets from a ground truth trajectory.
-    A start adjust can be given to ignore some of the starting states."""
+    No start adjust since only doing single-step predictions."""
     assert full_traj.ndim == 2, f'Invalid {full_traj.shape=}.'
     assert full_traj.shape[1] == 13, f'Invalid {full_traj.shape=}.'
 
     # Use the input argument structure of system.simulate() -- this can be
     # batched as (n_batch, n_step, n_state).
-    initial_states = full_traj[start_adjust:-1, :].reshape(-1, 1, 13)
-    end_states = full_traj[start_adjust+1:, :].reshape(-1, 1, 13)
+    initial_states = full_traj[:-1, :].reshape(-1, 1, 13)
+    end_states = full_traj[1:, :].reshape(-1, 1, 13)
 
     carry_0 = system.carry_callback()
     simulated_states, _ = system.simulate(initial_states, carry_0, 1)
 
-    # Return as (N-1-start_adjust, 13) tensors.  Need to drop the initial
-    # condition from the simulated states.
-    simulated_states = simulated_states[:, 0].detach().clone().squeeze()
+    # Return as (N-1, 13) tensors.  Need to drop the initial condition from the
+    # simulated states.
+    simulated_states = simulated_states[:, 1].detach().clone().squeeze()
     end_states = end_states.squeeze()
     return simulated_states, end_states
 
