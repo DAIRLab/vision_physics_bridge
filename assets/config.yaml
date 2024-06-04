@@ -2945,7 +2945,7 @@ tosses:
         nsecs: 859556
       start_frame: 8
       end_frame: 75
-      start_adjust: 1
+      start_adjust: 0
 
     - toss: 2
       start_time:
