@@ -588,7 +588,7 @@ class PredictionOverlayGenerator(OverlayVideoGenerator):
     def __init__(self, vision_asset: str, history: dict, nerf_bundlesdf_id: str,
                  bsdf_only: bool = False, remote: bool = False):
         # Extract the relevant tracking, NeRF, and PLL IDs.
-        last_bsdf_iteration = 1
+        last_bsdf_iteration = 0
         for cycle in history.keys():
             cycle_num = cycle.split('_')[-1]
             if int(cycle_num) > last_bsdf_iteration:
@@ -624,6 +624,11 @@ class PredictionOverlayGenerator(OverlayVideoGenerator):
             pll_output_dir = file_utils.contactnets_output_dir(
                 self.vision_asset, self.cycle_iteration, last_pll_id)
             self.mesh_file = op.join(pll_output_dir, 'urdfs', 'test.obj')
+            if not op.exists(self.mesh_file):
+                self.mesh_file = op.join(
+                    pll_output_dir, 'urdfs', 'test_best.obj')
+                assert op.exists(self.mesh_file), f'Could not find test.obj' +\
+                    f'or test_best.obj in {pll_output_dir}/urdfs.'
 
         # Get the path to the evaluation directory.
         self.evaluation_dir = file_utils.evaluation_subdir(
