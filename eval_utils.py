@@ -12,6 +12,7 @@ import sys
 import torch
 from torch import Tensor
 from typing import Tuple
+import click
 
 import meshcat
 import meshcat.geometry as g
@@ -935,16 +936,29 @@ class TagSLAMTrajectoryConverter(TrajectoryConverterBundleSDFToPLL):
         self.bsdf_only = False
         super().save_data(save_bundlesdf=False, save_tagslam=True)
 
+#######################################################################
+@click.command()
+@click.option('--vision-asset',
+              type=str,
+              default=None,
+              help="asset name e.g. cube_2.")
+
+def main_command(vision_asset: str):
+    print(f'Processing {vision_asset}')
+    tagslam_converter = TagSLAMTrajectoryConverter(vision_asset)
+    tagslam_converter.do_process()
+    tagslam_converter.save_data()
 
 
 if __name__ == '__main__':
+    main_command()
+    # # pdb.set_trace()
+    # # pgen = PredictionOverlayGenerator('bakingbox_1-2', '00', '00', 2, [1, 2])
+    # # # pgen = PredictionOverlayGenerator('cube_1', '00', '00', 2, [1])
+    # # pgen.make_overlay_video()
+    # # pdb.set_trace()
+    # # pdb.set_trace()
+    # tagslam_converter = TagSLAMTrajectoryConverter('bottle_1-10')
+    # tagslam_converter.do_process()
+    # tagslam_converter.save_data()
     # pdb.set_trace()
-    # pgen = PredictionOverlayGenerator('bakingbox_1-2', '00', '00', 2, [1, 2])
-    # # pgen = PredictionOverlayGenerator('cube_1', '00', '00', 2, [1])
-    # pgen.make_overlay_video()
-    # pdb.set_trace()
-    # pdb.set_trace()
-    tagslam_converter = TagSLAMTrajectoryConverter('bottle_1-10')
-    tagslam_converter.do_process()
-    tagslam_converter.save_data()
-    pdb.set_trace()
