@@ -413,6 +413,25 @@ def inspection_3d_slice_figure_filepath(
 
     return op.join(slice_plot_dir, filename)
 
+def inspection_triad_image_filepath(
+        dataset: str, tracking_bundlesdf_id: str, nerf_bundlesdf_id: str,
+        cycle_iteration: int, suffix: str) -> str:
+    """The directory for all meshes."""
+    triad_image_dir = assure_created(op.join(inspection_dir(), 'triad_images'))
+
+    if tracking_bundlesdf_id.startswith('bundlesdf_id_'):
+        tracking_bundlesdf_id = tracking_bundlesdf_id[13:]
+    if nerf_bundlesdf_id.startswith('bundlesdf_id_'):
+        nerf_bundlesdf_id = nerf_bundlesdf_id[13:]
+
+    now = datetime.datetime.now()
+    date_str = now.strftime('%m%d')
+    filename = \
+        f'{date_str}_{dataset}_{tracking_bundlesdf_id}_' + \
+            f'{nerf_bundlesdf_id}_{cycle_iteration}_{suffix}.png'
+
+    return op.join(triad_image_dir, filename)
+
 
 """Evaluation directories and utilities."""
 def evaluation_dir() -> str:
@@ -673,7 +692,8 @@ def load_table_z_height(object, toss_number) -> float:
 
 def load_keyframe_indices_from_nerf_results_yml(
         dataset: str, cycle_iteration: int, bundlesdf_id: str) -> list:
-    """Load the indices of all keyframes from a NeRF run."""
+    """Load the indices of all keyframes from a NeRF run.  These are 1-indexed.
+    """
     run_results_dir = bundlesdf_run_results_dir(
         dataset, cycle_iteration, bundlesdf_id)
 

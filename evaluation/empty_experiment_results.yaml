@@ -158,6 +158,38 @@ dynamics_rollout_metrics:   # Delete sub-section for BundleSDF-only baseline.
       toss_10:
         traj: null
         mean: null
+    penetration_true_geom_predicted_traj:
+      toss_1:
+        traj: null
+        mean: null
+      toss_2:
+        traj: null
+        mean: null
+      toss_3:
+        traj: null
+        mean: null
+      toss_4:
+        traj: null
+        mean: null
+      toss_5:
+        traj: null
+        mean: null
+      toss_6:
+        traj: null
+        mean: null
+      toss_7:
+        traj: null
+        mean: null
+      toss_8:
+        traj: null
+        mean: null
+      toss_9:
+        traj: null
+        mean: null
+      toss_10:
+        traj: null
+        mean: null
+
 
 dynamics_single_step_metrics: # Delete sub-section for BundleSDF-only baseline.
   against_bundlesdf:  # Add toss keys for every toss contained in vision asset.
@@ -308,6 +340,38 @@ dynamics_single_step_metrics: # Delete sub-section for BundleSDF-only baseline.
       toss_10:
         traj: null
         mean: null
+    penetration_true_geom_predicted_traj:
+      toss_1:
+        traj: null
+        mean: null
+      toss_2:
+        traj: null
+        mean: null
+      toss_3:
+        traj: null
+        mean: null
+      toss_4:
+        traj: null
+        mean: null
+      toss_5:
+        traj: null
+        mean: null
+      toss_6:
+        traj: null
+        mean: null
+      toss_7:
+        traj: null
+        mean: null
+      toss_8:
+        traj: null
+        mean: null
+      toss_9:
+        traj: null
+        mean: null
+      toss_10:
+        traj: null
+        mean: null
+
 
 ##### Performance results for pose estimation.
 tracking_metrics:

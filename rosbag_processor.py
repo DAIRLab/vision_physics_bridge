@@ -356,13 +356,13 @@ def get_all_camera_intrinsics(raw_bag_file):
         topics=ALL_CAMERA_INFO_TOPICS):
         camera = 'realsense' if _topic==REALSENSE_CAMERA_INFO_TOPIC else \
             msg.header.frame_id[-4:]
-        if intrinsics[camera] == None:
+        if type(intrinsics[camera]) != np.ndarray:
             intrinsics[camera] = np.array(msg.P)
 
-            if (intrinsics['cam0'] is not None) and \
-               (intrinsics['cam1'] is not None) and \
-               (intrinsics['cam2'] is not None) and \
-               (intrinsics['realsense'] is not None):
+            if (type(intrinsics['cam0']) != np.ndarray) and \
+               (type(intrinsics['cam1']) != np.ndarray) and \
+               (type(intrinsics['cam2']) != np.ndarray) and \
+               (type(intrinsics['realsense']) != np.ndarray):
                 break
 
     return intrinsics
