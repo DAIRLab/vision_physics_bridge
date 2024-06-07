@@ -1644,12 +1644,15 @@ def process_auc_command():
         # Load the results.
         results = file_utils.load_results_yaml_in_subdir(subdir)
 
-        # Add AUC to the results.
-        add_auc_to_results(results)
+        try:
+            # Add AUC to the results.
+            add_auc_to_results(results)
 
-        # Save the results.
-        file_utils.save_results_to_yaml(results, eval_subdir)
-        print(f'done.')
+            # Save the results.
+            file_utils.save_results_to_yaml(results, eval_subdir)
+            print(f'done.')
+        except Exception as e:
+            print(f'ISSUE: {e}')
 
 
 # Use 'gather' command to gather all the results into yaml files, one for

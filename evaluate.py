@@ -279,6 +279,20 @@ class TrajectoryPerformanceEvaluator:
     def _write_aligned_true_geometry_obj(self, obj_name: str):
         """Use the MeshProcessor class to align the ground truth mesh to the
         BundleSDF-generated mesh."""
+        # First handle the toss 2+ case, where the GT geometry is reused from
+        # transformed toss 1 GT geometry generated via ICP.  For these tosses
+        # 2+, the script gt_mesh_from_toss_1.py needed to have been run to
+        # generate this mesh.
+        if self.start_toss > 1:
+            assert op.exists(op.join(self.eval_dir, 'true_geom_aligned.obj')), \
+                f'Did not find expected true_geom_aligned.obj in ' + \
+                f'{self.eval_dir}'
+            true_mesh = icp.load_mesh_from_obj(op.join(
+                self.eval_dir, 'true_geom_aligned.obj'))
+            point_cloud_object = true_mesh.sample_points_poisson_disk(2000)
+            self.aligned_true_cloud = np.asarray(point_cloud_object.points)
+            return
+
         if REUSE_ALIGNED_GT_GEOMETRY:
             print(f'Reusing aligned GT geometry from PLL ID 09 (TagSLAM).')
             other_bsdf_eval_dir = file_utils.evaluation_subdir(
@@ -1606,12 +1620,14 @@ class DynamicsPredictorFromFiles(DynamicsPredictor):
     def load_saved_predictions(self):
         self.predicted_trajs = {}
         self.bundlesdf_trajs = None
-        if 'bundlesdf_toss_1.pt' in os.listdir(self.eval_dir):
+        if f'bundlesdf_toss_{self.start_toss}.pt' in os.listdir(
+            self.eval_dir):
             self.bundlesdf_trajs = {}
             self.single_step_bsdf_targets = {}
             self.single_step_bsdf_predictions = {}
 
-        if 'tagslam_b_toss_1.pt' in os.listdir(self.eval_dir):
+        if f'tagslam_b_toss_{self.start_toss}.pt' in os.listdir(
+            self.eval_dir):
             self.tagslam_b_trajs = {}
             self.single_step_tagslam_targets = {}
             self.single_step_tagslam_predictions = {}

@@ -47,7 +47,7 @@ class OverlayVideoGenerator:
                  bsdf_only: bool = False, remote: bool = False):
         # First decode the system and start/end tosses from the provided asset
         # directory.
-        assert cycle_iteration > 0, f'Invalid {cycle_iteration=}.'
+        assert cycle_iteration >= 0, f'Invalid {cycle_iteration=}.'
         assert '_' in vision_asset, f'Invalid {vision_asset=}.'
         object = vision_asset.split('_')[0]
 
