@@ -107,6 +107,14 @@ def chamfer_distance(point_cloud_1, point_cloud_2):
     dists2, _indices2 = kdtree2.query(point_cloud_1)
     return 0.5*(dists1.mean()+dists2.mean())
 
+def point_wise_chamfer_distance(point_cloud_1, point_cloud_2):
+    """Point-wise chamfer distance between two point clouds."""
+    kdtree1 = cKDTree(point_cloud_1)
+    dists_from_2_to_1, _indices1 = kdtree1.query(point_cloud_2)
+    kdtree2 = cKDTree(point_cloud_2)
+    dists_from_1_to_2, _indices2 = kdtree2.query(point_cloud_1)
+    return dists_from_2_to_1, dists_from_1_to_2
+
 def extract_mesh_from_support_points(support_points: Tensor):
     """Given a set of convex polytope vertices, extracts a vertex/face mesh.
 
