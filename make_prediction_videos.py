@@ -45,6 +45,7 @@ LOWER_DISTANCE = 0.004
 
 COLOR_MAP = 'rainbow'  # Other good ones: YlGnBu_r, cool, bwr, Spectral_r
 N_TOTAL_SPIN_UNITS = 2080  # 2040 maybe too low, 2160 too high, 1920 too low
+NUM_SPIN_IMAGES = 100
 
 
 def get_camera_intrinsics(vision_asset: str):
@@ -216,7 +217,8 @@ def make_colorized_mesh_spin_video(
         learned_mesh_path = op.join(eval_dir, 'bsdf_mesh.obj')
         if not op.exists(learned_mesh_path):
             learned_mesh_path = op.join(eval_dir, 'pll_mesh.obj')
-        assert op.exists(learned_mesh_path), f'Could not find {learned_mesh_path}.'
+        assert op.exists(learned_mesh_path), f'Could not find ' + \
+            f'{learned_mesh_path}.'
         learned_mesh = load_viewable_mesh(learned_mesh_path)
 
         # Get the GT mesh from the eval directory.
@@ -225,8 +227,8 @@ def make_colorized_mesh_spin_video(
         true_mesh = load_viewable_mesh(true_mesh_path)
 
         if do_error_color:
-            # Compute the chamfer distance between the learned mesh's vertices and
-            # sampled points on the true mesh.
+            # Compute the chamfer distance between the learned mesh's vertices
+            # and sampled points on the true mesh.
             true_mesh_samples = true_mesh.sample_points_poisson_disk(2000)
             _, learned_dists = eval_utils.point_wise_chamfer_distance(
                 np.asarray(learned_mesh.vertices),
@@ -235,7 +237,7 @@ def make_colorized_mesh_spin_video(
 
             cmap = plt.get_cmap(COLOR_MAP)
             dists_to_scale = np.clip(
-                (learned_dists - LOWER_DISTANCE)/(UPPER_DISTANCE - LOWER_DISTANCE),
+                (learned_dists-LOWER_DISTANCE)/(UPPER_DISTANCE-LOWER_DISTANCE),
                 0, 1
             )
             colors = cmap(dists_to_scale)[:, :3]
@@ -265,7 +267,7 @@ def make_colorized_mesh_spin_video(
         mesh_video_path = op.join(
             op.dirname(mesh_video_path), f'{object_name}_true.mp4')
 
-    rotate_and_capture(mesh_to_vis, 36, mesh_video_path)
+    rotate_and_capture(mesh_to_vis, NUM_SPIN_IMAGES, mesh_video_path)
 
 
 #######################################################################
