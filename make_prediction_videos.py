@@ -40,7 +40,7 @@ OPACITY_OVER_TIME = [255]*10 + \
     [int((i+1) * 1.0 / 40 * 255) for i in reversed(range(40))] + [0]*200
 COM_TRAJ_COLORS_OVER_TIME = [f'#FF80D5{opacity:02x}' for opacity in OPACITY_OVER_TIME]
 
-UPPER_DISTANCE = 0.01
+UPPER_DISTANCE = 0.013  # Reference: Vysics/BSDF CD averages are 0.0126/0.0136
 LOWER_DISTANCE = 0.004
 
 COLOR_MAP = 'rainbow'  # Other good ones: YlGnBu_r, cool, bwr, Spectral_r
@@ -208,36 +208,64 @@ def rotate_and_capture(mesh, num_images: int, output_file: str):
         os.system(f'ffmpeg -y -r 30 -i {tmpdir}/image_%07d.png -vcodec ' + \
                   f'libx264 -preset slow -crf 18 {output_file}')
 
-def make_colorized_mesh_spin_video(eval_dir: str, mesh_video_path: str):
-    # Get the mesh from the eval directory.
-    learned_mesh_path = op.join(eval_dir, 'bsdf_mesh.obj')
-    if not op.exists(learned_mesh_path):
-        learned_mesh_path = op.join(eval_dir, 'pll_mesh.obj')
-    assert op.exists(learned_mesh_path), f'Could not find {learned_mesh_path}.'
-    learned_mesh = load_viewable_mesh(learned_mesh_path)
+def make_colorized_mesh_spin_video(
+        eval_dir: str, mesh_video_path: str, do_error_color: bool,
+        do_learned_mesh: bool = True):
+    if do_learned_mesh:
+        # Get the mesh from the eval directory.
+        learned_mesh_path = op.join(eval_dir, 'bsdf_mesh.obj')
+        if not op.exists(learned_mesh_path):
+            learned_mesh_path = op.join(eval_dir, 'pll_mesh.obj')
+        assert op.exists(learned_mesh_path), f'Could not find {learned_mesh_path}.'
+        learned_mesh = load_viewable_mesh(learned_mesh_path)
 
-    # Get the GT mesh from the eval directory.
-    true_mesh_path = op.join(eval_dir, 'true_geom_aligned.obj')
-    assert op.exists(true_mesh_path), f'Could not find {true_mesh_path}.'
-    true_mesh = load_viewable_mesh(true_mesh_path)
+        # Get the GT mesh from the eval directory.
+        true_mesh_path = op.join(eval_dir, 'true_geom_aligned.obj')
+        assert op.exists(true_mesh_path), f'Could not find {true_mesh_path}.'
+        true_mesh = load_viewable_mesh(true_mesh_path)
 
-    # Compute the chamfer distance between the learned mesh's vertices and
-    # sampled points on the true mesh.
-    true_mesh_samples = true_mesh.sample_points_poisson_disk(2000)
-    _, learned_dists = eval_utils.point_wise_chamfer_distance(
-        np.asarray(learned_mesh.vertices),
-        np.asarray(true_mesh_samples.points)
-    )
+        if do_error_color:
+            # Compute the chamfer distance between the learned mesh's vertices and
+            # sampled points on the true mesh.
+            true_mesh_samples = true_mesh.sample_points_poisson_disk(2000)
+            _, learned_dists = eval_utils.point_wise_chamfer_distance(
+                np.asarray(learned_mesh.vertices),
+                np.asarray(true_mesh_samples.points)
+            )
 
-    cmap = plt.get_cmap(COLOR_MAP)
-    dists_to_scale = np.clip(
-        (learned_dists - LOWER_DISTANCE) / (UPPER_DISTANCE - LOWER_DISTANCE),
-        0, 1
-    )
-    colors = cmap(dists_to_scale)[:, :3]
-    learned_mesh.vertex_colors = o3d.utility.Vector3dVector(colors)
+            cmap = plt.get_cmap(COLOR_MAP)
+            dists_to_scale = np.clip(
+                (learned_dists - LOWER_DISTANCE)/(UPPER_DISTANCE - LOWER_DISTANCE),
+                0, 1
+            )
+            colors = cmap(dists_to_scale)[:, :3]
+            learned_mesh.vertex_colors = o3d.utility.Vector3dVector(colors)
 
-    rotate_and_capture(learned_mesh, 36, mesh_video_path)
+        else:
+            if not learned_mesh.has_vertex_colors():
+                learned_mesh.compute_vertex_normals()
+
+            # Check if the mesh has face normals; if not, compute them.
+            if not learned_mesh.has_triangle_normals():
+                learned_mesh.compute_triangle_normals()
+
+            # Rename the video to indicate it's not colored.
+            mesh_video_path = mesh_video_path.replace('.mp4', '_uncolored.mp4')
+
+        mesh_to_vis = learned_mesh
+
+    else:
+        # Get the GT mesh from the eval directory.
+        true_mesh_path = op.join(eval_dir, 'true_geom_aligned.obj')
+        assert op.exists(true_mesh_path), f'Could not find {true_mesh_path}.'
+        mesh_to_vis = load_viewable_mesh(true_mesh_path)
+
+        # Make sure the video path uses the right name.
+        object_name = op.basename(mesh_video_path).split('_')[0]
+        mesh_video_path = op.join(
+            op.dirname(mesh_video_path), f'{object_name}_true.mp4')
+
+    rotate_and_capture(mesh_to_vis, 36, mesh_video_path)
 
 
 #######################################################################
@@ -270,9 +298,19 @@ def cli():
               default=1,
               help="BundleSDF iteration number (can't choose 0 since that " + \
                 "means use TagSLAM poses).")
+@click.option('--color/--no-color',
+              type=bool,
+              default=True,
+              help="whether to color the mesh according to vertex-wise CD " + \
+                "error.")
+@click.option('--learned-mesh/--true-mesh',
+              type=bool,
+              default=True,
+              help="whether to visualize the learned or true mesh.")
 
 def main_command(vision_asset: str, bundlesdf_id: str, nerf_bundlesdf_id: str,
-                 pll_id: str, cycle_iteration: int):
+                 pll_id: str, cycle_iteration: int, color: bool,
+                 learned_mesh: bool):
     if cycle_iteration == 0:
         assert pll_id is not None, f'Need {pll_id=} if cycle_iteration is 0.'
         assert bundlesdf_id is None, f'Cannot have {bundlesdf_id=} if ' + \
@@ -318,7 +356,9 @@ def main_command(vision_asset: str, bundlesdf_id: str, nerf_bundlesdf_id: str,
         pll_id=pll_id, create=True
     )
 
-    make_colorized_mesh_spin_video(eval_dir, mesh_video_path)
+    make_colorized_mesh_spin_video(
+        eval_dir, mesh_video_path, do_error_color=color,
+        do_learned_mesh=learned_mesh)
 
 
 @cli.command('video')
