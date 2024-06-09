@@ -199,10 +199,14 @@ class MeshProcessor:
                       f'libx264 -preset slow -crf 18 {save_dir}/' + \
                       f'reference.mp4')
 
+        # Putting the learned cloud in the interactive window will help with
+        # alignment.
+        learned_cloud = self.learned_mesh.sample_points_poisson_disk(2000)
+
         # Use an interactive visualizer with key callbacks to do a manual
         # alignment of the true mesh to the learned mesh.  Refer back to the
         # reference video for the target pose to match the learned mesh.
-        interactive_vis = InteractiveVisualizer(self.true_mesh)
+        interactive_vis = InteractiveVisualizer(self.true_mesh, learned_cloud)
         interactive_vis.run()
 
         manual_adjustments = interactive_vis.total_transformation
@@ -215,15 +219,14 @@ class MeshProcessor:
         # Now do ICP, starting with this as an initialization.
         # Need to do ICP on 3D points instead of the mesh directly.
         true_cloud = self.true_mesh.sample_points_poisson_disk(2000)
-        learned_cloud = self.learned_mesh.sample_points_poisson_disk(2000)
 
         # Visualize the initial alignment.
         o3d.visualization.draw_geometries(
             [true_cloud, learned_cloud], window_name="Initial Comparison")
 
         centered_transform = np.eye(4)
-        centered_transform[:3, 3] = learned_cloud.get_center() - \
-            true_cloud.get_center()
+        # centered_transform[:3, 3] = learned_cloud.get_center() - \
+        #     true_cloud.get_center()
         transform_to_apply = manual_adjustments @ centered_transform
         true_cloud.transform(transform_to_apply)
         # Visualize the initial alignment.
@@ -414,13 +417,16 @@ class MeshProcessor:
 
 
 class InteractiveVisualizer:
-    def __init__(self, mesh):
+    def __init__(self, mesh, learned_point_cloud):
         self.mesh = copy.deepcopy(mesh)
         self.vis = o3d.visualization.VisualizerWithKeyCallback()
         self.vis.create_window()
 
         # Add the mesh to the visualizer
         self.vis.add_geometry(self.mesh)
+
+        # Add the learned geometry's point cloud, to help with alignment.
+        self.vis.add_geometry(learned_point_cloud)
 
         # Transformation matrix
         self.total_transformation = np.eye(4)
@@ -441,32 +447,32 @@ class InteractiveVisualizer:
 
     def translate_forward(self, vis):
         self.new_transformation = np.eye(4)
-        self.new_transformation[:3, 3] += [0, 0, -0.1]
+        self.new_transformation[:3, 3] += [0, 0, -0.05]
         self.update_mesh()
 
     def translate_backward(self, vis):
         self.new_transformation = np.eye(4)
-        self.new_transformation[:3, 3] += [0, 0, 0.1]
+        self.new_transformation[:3, 3] += [0, 0, 0.05]
         self.update_mesh()
 
     def translate_left(self, vis):
         self.new_transformation = np.eye(4)
-        self.new_transformation[:3, 3] += [-0.1, 0, 0]
+        self.new_transformation[:3, 3] += [-0.05, 0, 0]
         self.update_mesh()
 
     def translate_right(self, vis):
         self.new_transformation = np.eye(4)
-        self.new_transformation[:3, 3] += [0.1, 0, 0]
+        self.new_transformation[:3, 3] += [0.05, 0, 0]
         self.update_mesh()
 
     def translate_up(self, vis):
         self.new_transformation = np.eye(4)
-        self.new_transformation[:3, 3] += [0, 0.1, 0]
+        self.new_transformation[:3, 3] += [0, 0.05, 0]
         self.update_mesh()
 
     def translate_down(self, vis):
         self.new_transformation = np.eye(4)
-        self.new_transformation[:3, 3] += [0, -0.1, 0]
+        self.new_transformation[:3, 3] += [0, -0.05, 0]
         self.update_mesh()
 
     def rotate_left(self, vis):
@@ -926,7 +932,12 @@ def process_manual_icp_command(vision_asset: str, bundlesdf_id: str,
 
 
 @cli.command('distribute_alignments')
-def process_distribute_alignments_command():
+@click.option('--distribute/--just-gather',
+              type=bool,
+              default=True,
+              help="Whether to distribute the aligned meshes to every " + \
+                "evaluation folder, or just gather them.")
+def process_distribute_alignments_command(distribute: bool):
     """This command looks for every true_geom_aligned_assist.obj in any
     evaluation/{vision_asset}_02_02_2/ directories, and writes a corresponding
     assets/object_scans/true_aligned_to_experiments/{vision_asset}.obj file."""
@@ -946,6 +957,10 @@ def process_distribute_alignments_command():
                     aligned_scan_dir, f'{vision_asset}.obj')
                 shutil.copyfile(in_eval_path, in_aligned_path)
                 print(f'  {vision_asset}')
+
+    if not distribute:
+        print(f'Will not distribute.  Done.')
+        exit()
 
     # Now copy all of the aligned meshes to every experiment's evaluation
     # folder.
