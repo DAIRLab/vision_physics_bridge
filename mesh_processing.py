@@ -12,7 +12,7 @@ import shutil
 from tempfile import TemporaryDirectory
 from tqdm import tqdm
 
-import file_utils, icp
+import eval_utils, file_utils, icp
 
 
 # ICP hyperparameters
@@ -963,7 +963,17 @@ def process_distribute_alignments_command():
             aligned_path,
             op.join(eval_dir, eval_subdir, 'true_geom_aligned_assist.obj')
         )
+
+        # Also need to update the URDF file to refer to this new geometry file.
+        urdf_filepath = op.join(
+            eval_dir, eval_subdir, 'true_mesh_pll_params.urdf')
+        eval_utils.overwrite_mesh_name_in_urdf(
+            urdf_filepath, 'true_geom_aligned_assist.obj')
+
         print(f'  {eval_subdir}')
+
+        # TODO will need to edit the true_mesh_pll_params.urdf to refer to this
+        # new geometry file.
 
 
 

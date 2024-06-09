@@ -23,6 +23,7 @@ from eval_utils import MultibodyLearnableSystem
 INERTIA_THETA_KEY = 'multibody_terms.lagrangian_terms.inertial_parameters'
 FRICTION_KEY = 'multibody_terms.contact_terms.friction_params'
 
+FORCE_USE_ALIGNED_GT_GEOMETRY = True
 REUSE_ALIGNED_GT_GEOMETRY = True
 
 
@@ -279,7 +280,29 @@ class TrajectoryPerformanceEvaluator:
     def _write_aligned_true_geometry_obj(self, obj_name: str):
         """Use the MeshProcessor class to align the ground truth mesh to the
         BundleSDF-generated mesh."""
-        # First handle the toss 2+ case, where the GT geometry is reused from
+        # First, check if aligned GT geometry is supposed to already exist and
+        # use it.
+        if FORCE_USE_ALIGNED_GT_GEOMETRY:
+            # Check for true_geom_aligned_assist.obj first.
+            true_mesh_filepath = op.join(
+                self.eval_dir, 'true_geom_aligned_assist.obj')
+            if not op.exists(true_mesh_filepath):
+                true_mesh_filepath = op.join(
+                    self.eval_dir, 'true_geom_aligned.obj')
+            assert op.exists(true_mesh_filepath), f'Checked for true ' + \
+                f'geometry at {true_mesh_filepath=} and _assist but did not' + \
+                f' find either.'
+            true_mesh = icp.load_mesh_from_obj(true_mesh_filepath)
+            point_cloud_object = true_mesh.sample_points_poisson_disk(2000)
+            self.aligned_true_cloud = np.asarray(point_cloud_object.points)
+            self.true_mesh_filename = op.basename(true_mesh_filepath)
+            return
+
+        raise NotImplementedError('Need to handle _assist.obj file cases if' + \
+                                  ' FORCE_USE_ALIGNED_GT_GEOMETRY is False.')
+        # TODO: Includes needing to store self.true_mesh_filename.
+
+        # Next handle the toss 2+ case, where the GT geometry is reused from
         # transformed toss 1 GT geometry generated via ICP.  For these tosses
         # 2+, the script gt_mesh_from_toss_1.py needed to have been run to
         # generate this mesh.
@@ -418,7 +441,7 @@ class TrajectoryPerformanceEvaluator:
 
             # Overwrite the geometry in the URDF to refer to the new obj.
             eval_utils.overwrite_mesh_name_in_urdf(
-                new_urdf_path, 'true_geom_aligned.obj')
+                new_urdf_path, self.true_mesh_filename)
             print(f'TRAJ: Wrote URDF to {new_urdf_path}')
 
             # Create the system.
@@ -697,10 +720,15 @@ class TrajectoryPerformanceEvaluatorFromFiles(TrajectoryPerformanceEvaluator):
 
     def _get_aligned_true_cloud(self):
         if not hasattr(self, 'aligned_true_cloud'):
-            # Compute it from stored GT mesh.
-            mesh_path = op.join(self.eval_dir, 'true_geom_aligned.obj')
-            assert op.exists(mesh_path), f'Need {mesh_path} to exist to ' + \
-                f'recompute results from existing files.'
+            # Compute it from stored GT mesh.  Always first try to use
+            # true_geom_aligned_assist.obj.
+            mesh_path = op.join(
+                self.eval_dir, 'true_geom_aligned_assist.obj')
+            if not op.exists(mesh_path):
+                mesh_path = op.join(self.eval_dir, 'true_geom_aligned.obj')
+            assert op.exists(mesh_path), f'Checked for true geometry at ' + \
+                f'{mesh_path=} and _assist but did not find either -- ' + \
+                f'needed to recompute results from files.'
 
             true_mesh = icp.load_mesh_from_obj(mesh_path)
             point_cloud_object = true_mesh.sample_points_poisson_disk(2000)
@@ -712,7 +740,7 @@ class TrajectoryPerformanceEvaluatorFromFiles(TrajectoryPerformanceEvaluator):
 class GeometryEvaluator:
     """Evaluate the learned geometry.  This requires the following to already be
     present in the evaluation directory:
-        - true_geom_aligned.obj
+        - true_geom_aligned_assist.obj or true_geom_aligned.obj
         - bsdf_mesh.obj if last run was BundleSDF, else pll_mesh.obj
     """
     def __init__(self, vision_asset: str, history: dict,
@@ -760,10 +788,15 @@ class GeometryEvaluator:
             f'does not exist.'
         self.learned_mesh = icp.load_mesh_from_obj(learned_mesh_path)
 
-        # Ground truth mesh.
-        true_mesh_path = op.join(self.eval_dir, 'true_geom_aligned.obj')
-        assert op.exists(true_mesh_path), f'GeometryEvaluator requires ' + \
-            f'{true_mesh_path=} to exist, but does not exist.'
+        # Ground truth mesh.  Always first try to use
+        # true_geom_aligned_assist.obj.
+        true_mesh_path = op.join(
+            self.eval_dir, 'true_geom_aligned_assist.obj')
+        if not op.exists(true_mesh_path):
+            true_mesh_path = op.join(self.eval_dir, 'true_geom_aligned.obj')
+        assert op.exists(true_mesh_path), f'Checked for true geometry at ' + \
+            f'{true_mesh_path=} and _assist but did not find either -- ' + \
+            f'needed to recompute results from files.'
         self.true_mesh = icp.load_mesh_from_obj(true_mesh_path)
 
         # Get each of their convex hulls too.
@@ -773,6 +806,8 @@ class GeometryEvaluator:
     def _handle_pll_geometry(self):
         """When using TagSLAM tracking, need to handle the geometry differently
         since trajectory metrics are not available."""
+        raise NotImplementedError('Need to handle _assist.obj cases for when' +\
+                                  'FORCE_USE_ALIGNED_GT_GEOMETRY is False.')
         # Get the true mesh aligned to a former BundleSDF run, then transform
         # to this run's body origin.
 
@@ -802,10 +837,12 @@ class GeometryEvaluator:
             )
 
         other_bsdf_true_mesh_path = op.join(
-            other_bsdf_eval_dir, 'true_geom_aligned.obj')
+            other_bsdf_eval_dir, 'true_geom_aligned_assist.obj')
         if not op.exists(other_bsdf_true_mesh_path):
-            raise FileNotFoundError(
-                f'Cannot find {other_bsdf_true_mesh_path=}.')
+            other_bsdf_true_mesh_path = op.join(
+                other_bsdf_eval_dir, 'true_geom_aligned.obj')
+        assert op.exists(other_bsdf_true_mesh_path), f'Cannot find ' + \
+            f'{other_bsdf_true_mesh_path=} or _assist but needs one.'
 
         # Load the true mesh from the associated BundleSDF run.
         self.true_mesh = icp.load_mesh_from_obj(other_bsdf_true_mesh_path)
@@ -878,6 +915,7 @@ class GeometryEvaluator:
             new_urdf_path = op.join(self.eval_dir, 'true_mesh_pll_params.urdf')
             os.system(f'cp {old_urdf_path} {new_urdf_path}')
 
+            raise NotImplementedError(f'Need to check for _assist.obj first.')
             assert op.exists(op.join(self.eval_dir, 'true_geom_aligned.obj')), \
                 f'Expected true geometry to already exist but did not find ' + \
                 f'true_geom_aligned.ob in {self.eval_dir}.'
@@ -957,10 +995,12 @@ class GeometryEvaluatorFromFiles(GeometryEvaluator):
         super().__init__(vision_asset, history, nerf_bundlesdf_id)
 
     def _handle_pll_geometry(self):
-        # Ground truth mesh.
-        true_mesh_path = op.join(self.eval_dir, 'true_geom_aligned.obj')
+        # Ground truth mesh.  First always look for _assist.obj.
+        true_mesh_path = op.join(self.eval_dir, 'true_geom_aligned_assist.obj')
+        if not op.exists(true_mesh_path):
+            true_mesh_path = op.join(self.eval_dir, 'true_geom_aligned.obj')
         assert op.exists(true_mesh_path), f'GeometryEvaluator requires ' + \
-            f'{true_mesh_path=} to exist, but does not exist.'
+            f'{true_mesh_path=} or _assist.obj to exist, but neither exists.'
         self.true_mesh = icp.load_mesh_from_obj(true_mesh_path)
 
         # Create the hull from the loaded true mesh.
