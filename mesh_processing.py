@@ -1,12 +1,16 @@
 """Utilities to help with processing ground truth meshes."""
 
 import click
+import copy
+import matplotlib.pyplot as plt
 import numpy as np
 import open3d as o3d
 import os
 import os.path as op
 import pdb
-import trimesh
+import shutil
+from tempfile import TemporaryDirectory
+from tqdm import tqdm
 
 import file_utils, icp
 
@@ -34,7 +38,7 @@ SCALING = {
 class MeshProcessor:
     """Mesh processing to align ground truth and learned meshes.  For shapes
     that are already relatively accurate, ICP works very well.
-    
+
     TODO:  Needs to be tested on partial/bad mesh estimates, shapes from PLL
     only.
     """
@@ -54,7 +58,7 @@ class MeshProcessor:
         # Get the meshes.
         self._load_meshes()
         self.did_alignment_to_bundlesdf = False
-        
+
     def _load_meshes(self):
         true_obj_file = file_utils.object_scan_filepath(self.object)
         self.true_mesh = icp.load_mesh_from_obj(true_obj_file)
@@ -157,6 +161,390 @@ class MeshProcessor:
             )
             if op.exists(material_filepath):
                 os.system(f'rm {material_filepath}')
+
+    def beautify_meshes(self):
+        # Check if the mesh has vertex normals; if not, compute them.
+        if not self.learned_mesh.has_vertex_normals():
+            self.learned_mesh.compute_vertex_normals()
+        # Check if the mesh has face normals; if not, compute them.
+        if not self.learned_mesh.has_triangle_normals():
+            self.learned_mesh.compute_triangle_normals()
+
+        # Same thing for true mesh.
+        if not self.true_mesh.has_vertex_normals():
+            self.true_mesh.compute_vertex_normals()
+        if not self.true_mesh.has_triangle_normals():
+            self.true_mesh.compute_triangle_normals()
+
+    def interactive_align_true_to_learned_mesh_with_icp2(self, save_dir: str):
+        self.beautify_meshes()
+
+        # First, save a video of the learned mesh starting from its canonical
+        # pose.
+        vis = o3d.visualization.Visualizer()
+        vis.create_window(visible=False)
+        vis.add_geometry(self.learned_mesh)
+        view_control = vis.get_view_control()
+        with TemporaryDirectory(prefix="mesh-images-") as tmpdir:
+            print(f'Storing temporary files at {tmpdir}')
+            # Loop to rotate the mesh and capture images.
+            for i in tqdm(range(20)):
+                view_control.rotate(1000/20, 0.0)
+                vis.poll_events()
+                vis.update_renderer()
+                image = vis.capture_screen_float_buffer(do_render=True)
+                plt.imsave(f"{tmpdir}/image_{i+1:07d}.png", np.asarray(image))
+            vis.destroy_window()
+            os.system(f'ffmpeg -y -r 30 -i {tmpdir}/image_%07d.png -vcodec ' + \
+                      f'libx264 -preset slow -crf 18 {save_dir}/' + \
+                      f'reference.mp4')
+
+        # Use an interactive visualizer with key callbacks to do a manual
+        # alignment of the true mesh to the learned mesh.  Refer back to the
+        # reference video for the target pose to match the learned mesh.
+        interactive_vis = InteractiveVisualizer(self.true_mesh)
+        interactive_vis.run()
+
+        manual_adjustments = interactive_vis.total_transformation
+        print(f'Total transformation: {manual_adjustments}')
+
+        # Double check the aggregate transformation from the little steps is
+        # correct.
+        interactive_vis.check_total_transformation(self.true_mesh)
+
+        # Now do ICP, starting with this as an initialization.
+        # Need to do ICP on 3D points instead of the mesh directly.
+        true_cloud = self.true_mesh.sample_points_poisson_disk(2000)
+        learned_cloud = self.learned_mesh.sample_points_poisson_disk(2000)
+
+        # Visualize the initial alignment.
+        o3d.visualization.draw_geometries(
+            [true_cloud, learned_cloud], window_name="Initial Comparison")
+
+        centered_transform = np.eye(4)
+        centered_transform[:3, 3] = learned_cloud.get_center() - \
+            true_cloud.get_center()
+        transform_to_apply = manual_adjustments @ centered_transform
+        true_cloud.transform(transform_to_apply)
+        # Visualize the initial alignment.
+        o3d.visualization.draw_geometries(
+            [true_cloud, learned_cloud], window_name="Before ICP")
+        true_cloud.transform(np.linalg.inv(transform_to_apply))
+
+        # Apply ICP.
+        reg_p2p = o3d.pipelines.registration.registration_icp(
+            true_cloud, learned_cloud, ICP_THRESHOLD, transform_to_apply,
+            o3d.pipelines.registration.TransformationEstimationPointToPoint(),
+            o3d.pipelines.registration.ICPConvergenceCriteria(max_iteration=2000)
+        )
+        print(f'FITNESS SCORE:  {reg_p2p.fitness}')
+
+        # Transform the true mesh's point cloud by the solved transform and
+        # view the results.
+        true_cloud.transform(reg_p2p.transformation)
+        o3d.visualization.draw_geometries(
+            [true_cloud, learned_cloud],
+            window_name=f'After ICP, starting from manual adjustments')
+
+        print(f'Solved TF matrix:\n{reg_p2p.transformation}')
+
+        # Save the transformation.
+        np.savetxt(
+            op.join(save_dir, 'true_to_learned_tf_assist.txt'),
+            reg_p2p.transformation
+        )
+
+        # Save the transformed mesh to file.
+        if op.exists(op.join(save_dir, 'true_geom_aligned_assist.obj')):
+            print(f'Found true_geom_aligned_assist.obj already in ' + \
+                  f'{save_dir}.')
+            pdb.set_trace()
+        self.true_mesh.transform(reg_p2p.transformation)
+        o3d.io.write_triangle_mesh(
+            op.join(save_dir, 'true_geom_aligned_assist.obj'),
+            self.true_mesh, write_triangle_uvs=False, write_vertex_colors=False
+        )
+        print(f'Saved ground truth mesh transformed to align with ' + \
+              f'BundleSDF mesh, as true_geom_aligned_assist.obj in ' + \
+              f'{save_dir}.')
+
+        material_filepath = op.join(
+            save_dir, 'true_geom_aligned_assist.mtl')
+        if op.exists(material_filepath):
+            os.system(f'rm {material_filepath}')
+
+    def interactive_align_true_to_learned_mesh_with_icp(
+            self, save_dir: str = None,
+            obj_name: str = 'true_geom_aligned_assist.obj'):
+        """Goal is to create a ground truth mesh that shares the same body
+        origin as the learned mesh.  To do this, use ICP to register the true
+        mesh to the learned mesh."""
+        # Need to do ICP on 3D points instead of the mesh directly.
+        true_cloud = self.true_mesh.sample_points_poisson_disk(2000)
+        learned_cloud = self.learned_mesh.sample_points_poisson_disk(2000)
+
+        # Visualize the initial alignment.
+        o3d.visualization.draw_geometries(
+            [true_cloud, learned_cloud], window_name="Initial Comparison")
+        if save_dir is not None:
+            vis = o3d.visualization.Visualizer()
+            vis.create_window(visible=False)
+            vis.add_geometry(true_cloud)
+            vis.add_geometry(learned_cloud)
+            vis.poll_events()
+            vis.update_renderer()
+            image = vis.capture_screen_float_buffer(do_render=True)
+            o3d.io.write_image(
+                op.join(save_dir, 'alignment_before_icp.png'),
+                o3d.geometry.Image((255 * np.asarray(image)).astype(np.uint8))
+            )
+            vis.destroy_window()
+
+        do_manual_adjust = input('Manual adjustment?  ') == 'y'
+        adjustments = 0
+        total_manual_adjustments = np.eye(4)
+
+        manual_adjs_str = ''
+
+        while do_manual_adjust:
+            adjustments += 1
+            manual_transformation = np.eye(4)
+            rot = input('Rotation (r) or Translation (other):  ') == 'r'
+            axis = input('Axis (x, y, z):  ')
+            if rot:
+                angle = float(input('Angle (degrees):  '))
+                manual_adjs_str += f'Adjustment {adjustments}: ' + \
+                    f'{angle} about {axis}\n'
+                if axis == 'x':
+                    manual_transformation[:3, :3] = \
+                        o3d.geometry.get_rotation_matrix_from_xyz(
+                            (np.radians(angle), 0, 0))
+                elif axis == 'y':
+                    manual_transformation[:3, :3] = \
+                        o3d.geometry.get_rotation_matrix_from_xyz(
+                            (0, np.radians(angle), 0))
+                elif axis == 'z':
+                    manual_transformation[:3, :3] = \
+                        o3d.geometry.get_rotation_matrix_from_xyz(
+                            (0, 0, np.radians(angle)))
+                else:
+                    print(f'Invalid axis {axis}.')
+            else:
+                translation = float(input('Translation (meters):  '))
+                manual_adjs_str += f'Adjustment {adjustments}: ' + \
+                    f'{translation} along {axis}\n'
+                if axis == 'x':
+                    manual_transformation[0, 3] = translation
+                elif axis == 'y':
+                    manual_transformation[1, 3] = translation
+                elif axis == 'z':
+                    manual_transformation[2, 3] = translation
+                else:
+                    print(f'Invalid axis {axis}.')
+
+            true_cloud.transform(manual_transformation)
+            o3d.visualization.draw_geometries(
+                [true_cloud, learned_cloud],
+                window_name=f"Manual Adjustment {adjustments}")
+
+            # Keep track of all the manual adjustments.
+            total_manual_adjustments = \
+                manual_transformation @ total_manual_adjustments
+            do_manual_adjust = input('Manual adjustment?  ') == 'y'
+
+        true_cloud.transform(np.linalg.inv(total_manual_adjustments))
+        o3d.visualization.draw_geometries(
+            [true_cloud, learned_cloud], window_name="Undid manual adjustments")
+
+        # Coarse initial alignment to get the true mesh's cloud centroid to the
+        # the same location as the learned mesh's cloud centroid.
+        centered_transform = np.eye(4)
+        centered_transform[:3, 3] = learned_cloud.get_center() - \
+            true_cloud.get_center()
+        transform_to_apply = total_manual_adjustments @ centered_transform
+        true_cloud.transform(transform_to_apply)
+        # Visualize the initial alignment.
+        o3d.visualization.draw_geometries(
+            [true_cloud, learned_cloud], window_name="Before ICP")
+        true_cloud.transform(np.linalg.inv(transform_to_apply))
+
+        # Apply ICP.
+        reg_p2p = o3d.pipelines.registration.registration_icp(
+            true_cloud, learned_cloud, ICP_THRESHOLD, transform_to_apply,
+            o3d.pipelines.registration.TransformationEstimationPointToPoint(),
+            o3d.pipelines.registration.ICPConvergenceCriteria(max_iteration=2000)
+        )
+        print(f'FITNESS SCORE:  {reg_p2p.fitness}')
+
+        # Transform the true mesh's point cloud by the solved transform and
+        # view the results.
+        true_cloud.transform(reg_p2p.transformation)
+        o3d.visualization.draw_geometries(
+            [true_cloud, learned_cloud],
+            window_name=f'After ICP, with {adjustments} manual adjustments')
+
+        print(f'Solved TF matrix:\n{reg_p2p.transformation}')
+        if save_dir is not None:
+            np.savetxt(
+                op.join(save_dir, 'true_to_learned_tf_assist.txt'),
+                reg_p2p.transformation
+            )
+            with open(op.join(save_dir, 'manual_inputs.txt'), 'w') as txt_file:
+                txt_file.write(manual_adjs_str)
+            print(f'Wrote to {op.join(save_dir, "manual_inputs.txt")}')
+
+
+        if save_dir is not None:
+            if op.exists(op.join(save_dir, obj_name)):
+                print(f'Found {obj_name} already in {save_dir}.')
+                pdb.set_trace()
+            self.true_mesh.transform(reg_p2p.transformation)
+            o3d.io.write_triangle_mesh(
+                op.join(save_dir, obj_name), self.true_mesh,
+                write_triangle_uvs=False, write_vertex_colors=False
+            )
+            print(f'Saved ground truth mesh transformed to align with ' + \
+                f'BundleSDF mesh, as {obj_name} in {save_dir}.')
+
+            material_filepath = op.join(
+                save_dir, f'{obj_name.split(".")[0]}.mtl'
+            )
+            if op.exists(material_filepath):
+                os.system(f'rm {material_filepath}')
+
+
+class InteractiveVisualizer:
+    def __init__(self, mesh):
+        self.mesh = copy.deepcopy(mesh)
+        self.vis = o3d.visualization.VisualizerWithKeyCallback()
+        self.vis.create_window()
+
+        # Add the mesh to the visualizer
+        self.vis.add_geometry(self.mesh)
+
+        # Transformation matrix
+        self.total_transformation = np.eye(4)
+
+        # Register key callbacks
+        self.vis.register_key_callback(ord("W"), self.translate_forward)
+        self.vis.register_key_callback(ord("S"), self.translate_backward)
+        self.vis.register_key_callback(ord("A"), self.translate_left)
+        self.vis.register_key_callback(ord("D"), self.translate_right)
+        self.vis.register_key_callback(ord("Q"), self.translate_up)
+        self.vis.register_key_callback(ord("E"), self.translate_down)
+        self.vis.register_key_callback(ord("J"), self.rotate_left)
+        self.vis.register_key_callback(ord("L"), self.rotate_right)
+        self.vis.register_key_callback(ord("I"), self.rotate_up)
+        self.vis.register_key_callback(ord("K"), self.rotate_down)
+        self.vis.register_key_callback(ord("O"), self.rotate_clockwise)
+        self.vis.register_key_callback(ord("U"), self.rotate_counterclockwise)
+
+    def translate_forward(self, vis):
+        self.new_transformation = np.eye(4)
+        self.new_transformation[:3, 3] += [0, 0, -0.1]
+        self.update_mesh()
+
+    def translate_backward(self, vis):
+        self.new_transformation = np.eye(4)
+        self.new_transformation[:3, 3] += [0, 0, 0.1]
+        self.update_mesh()
+
+    def translate_left(self, vis):
+        self.new_transformation = np.eye(4)
+        self.new_transformation[:3, 3] += [-0.1, 0, 0]
+        self.update_mesh()
+
+    def translate_right(self, vis):
+        self.new_transformation = np.eye(4)
+        self.new_transformation[:3, 3] += [0.1, 0, 0]
+        self.update_mesh()
+
+    def translate_up(self, vis):
+        self.new_transformation = np.eye(4)
+        self.new_transformation[:3, 3] += [0, 0.1, 0]
+        self.update_mesh()
+
+    def translate_down(self, vis):
+        self.new_transformation = np.eye(4)
+        self.new_transformation[:3, 3] += [0, -0.1, 0]
+        self.update_mesh()
+
+    def rotate_left(self, vis):
+        self.new_transformation = np.eye(4)
+        R = self.get_rotation_matrix(np.deg2rad(5), [0, 1, 0])
+        self.new_transformation[:3, :3] = R @ self.new_transformation[:3, :3]
+        self.update_mesh()
+
+    def rotate_right(self, vis):
+        self.new_transformation = np.eye(4)
+        R = self.get_rotation_matrix(np.deg2rad(-5), [0, 1, 0])
+        self.new_transformation[:3, :3] = R @ self.new_transformation[:3, :3]
+        self.update_mesh()
+
+    def rotate_up(self, vis):
+        self.new_transformation = np.eye(4)
+        R = self.get_rotation_matrix(np.deg2rad(5), [1, 0, 0])
+        self.new_transformation[:3, :3] = R @ self.new_transformation[:3, :3]
+        self.update_mesh()
+
+    def rotate_down(self, vis):
+        self.new_transformation = np.eye(4)
+        R = self.get_rotation_matrix(np.deg2rad(-5), [1, 0, 0])
+        self.new_transformation[:3, :3] = R @ self.new_transformation[:3, :3]
+        self.update_mesh()
+
+    def rotate_clockwise(self, vis):
+        self.new_transformation = np.eye(4)
+        R = self.get_rotation_matrix(np.deg2rad(5), [0, 0, 1])
+        self.new_transformation[:3, :3] = R @ self.new_transformation[:3, :3]
+        self.update_mesh()
+
+    def rotate_counterclockwise(self, vis):
+        self.new_transformation = np.eye(4)
+        R = self.get_rotation_matrix(np.deg2rad(-5), [0, 0, 1])
+        self.new_transformation[:3, :3] = R @ self.new_transformation[:3, :3]
+        self.update_mesh()
+
+    def get_rotation_matrix(self, angle, axis):
+        axis = np.array(axis)
+        axis = axis / np.linalg.norm(axis)
+        cos_theta = np.cos(angle)
+        sin_theta = np.sin(angle)
+        one_minus_cos_theta = 1 - cos_theta
+        ux, uy, uz = axis
+
+        R = np.array([
+            [cos_theta + ux**2 * one_minus_cos_theta, ux*uy * one_minus_cos_theta - uz*sin_theta, ux*uz * one_minus_cos_theta + uy*sin_theta],
+            [uy*ux * one_minus_cos_theta + uz*sin_theta, cos_theta + uy**2 * one_minus_cos_theta, uy*uz * one_minus_cos_theta - ux*sin_theta],
+            [uz*ux * one_minus_cos_theta - uy*sin_theta, uz*uy * one_minus_cos_theta + ux*sin_theta, cos_theta + uz**2 * one_minus_cos_theta]
+        ])
+        return R
+
+    def update_mesh(self):
+        self.mesh.transform(self.new_transformation)
+        self.vis.update_geometry(self.mesh)
+        self.vis.poll_events()
+        self.vis.update_renderer()
+
+        self.total_transformation = self.new_transformation @ \
+            self.total_transformation
+        self.new_transformation = np.eye(4)  # Reset new transformation after applying
+
+    def run(self):
+        self.vis.run()
+        self.vis.destroy_window()
+
+    def check_total_transformation(self, mesh_again):
+        mesh_again = copy.deepcopy(mesh_again)
+
+        # Visualize before.
+        o3d.visualization.draw_geometries(
+            [mesh_again], window_name="Before transformation")
+
+        # Then apply the transform and visualize again.
+        mesh_again.transform(self.total_transformation)
+        o3d.visualization.draw_geometries(
+            [mesh_again], window_name="After transformation")
 
 
 class UnscaledMeshProcessor(MeshProcessor):
@@ -488,7 +876,12 @@ class MeshInspector:
 
 
 #######################################################################
-@click.command()
+@click.group()
+def cli():
+    pass
+
+
+@cli.command('manual_icp')
 @click.option('--vision-asset',
               type=str,
               default=None,
@@ -508,8 +901,8 @@ class MeshInspector:
               help="BundleSDF iteration number (can't choose 0 since that " + \
                 "means use TagSLAM poses).")
 
-def main_command(vision_asset: str, bundlesdf_id: str, nerf_bundlesdf_id: str,
-                 cycle_iteration: int):
+def process_manual_icp_command(vision_asset: str, bundlesdf_id: str,
+                               nerf_bundlesdf_id: str, cycle_iteration: int):
     # Decode the BundleSDF run ID.
     tracking_bundlesdf_id = bundlesdf_id
     if tracking_bundlesdf_id[:13] != 'bundlesdf_id_':
@@ -519,11 +912,59 @@ def main_command(vision_asset: str, bundlesdf_id: str, nerf_bundlesdf_id: str,
     elif nerf_bundlesdf_id[:13] != 'bundlesdf_id_':
         nerf_bundlesdf_id = f'bundlesdf_id_{nerf_bundlesdf_id}'
 
+    eval_dir = file_utils.evaluation_subdir(
+        dataset=vision_asset, cycle_iteration=cycle_iteration,
+        tracking_bundlesdf_id=tracking_bundlesdf_id,
+        nerf_bundlesdf_id=nerf_bundlesdf_id
+    )
+
     mesh_processor = MeshProcessor(
         vision_asset, tracking_bundlesdf_id, nerf_bundlesdf_id, cycle_iteration)
 
-    mesh_processor.align_true_to_learned_mesh_with_icp()
-    pdb.set_trace()
+    mesh_processor.interactive_align_true_to_learned_mesh_with_icp2(
+        save_dir=eval_dir)
+
+
+@cli.command('distribute_alignments')
+def process_distribute_alignments_command():
+    """This command looks for every true_geom_aligned_assist.obj in any
+    evaluation/{vision_asset}_02_02_2/ directories, and writes a corresponding
+    assets/object_scans/true_aligned_to_experiments/{vision_asset}.obj file."""
+    eval_dir = file_utils.evaluation_dir()
+    aligned_scan_dir = file_utils.aligned_object_scan_dir()
+
+    # First gather all of the existing aligned meshes from the BundleSDF ID 02,
+    # cycle iteration 2 results.
+    print(f'Copying aligned meshes to aligned scan directory:')
+    for eval_subdir in os.listdir(eval_dir):
+        if eval_subdir.endswith('02_02_2'):
+            in_eval_path = op.join(
+                eval_dir, eval_subdir, 'true_geom_aligned_assist.obj')
+            if op.exists(in_eval_path):
+                vision_asset = eval_subdir.split('_02_02_2')[0]
+                in_aligned_path = op.join(
+                    aligned_scan_dir, f'{vision_asset}.obj')
+                shutil.copyfile(in_eval_path, in_aligned_path)
+                print(f'  {vision_asset}')
+
+    # Now copy all of the aligned meshes to every experiment's evaluation
+    # folder.
+    print(f'\nCopying aligned meshes to every experiment\'s evaluation folder:')
+    for eval_subdir in os.listdir(eval_dir):
+        if not op.isdir(op.join(eval_dir, eval_subdir)):
+            continue
+        vision_asset = eval_subdir.split('_02_02_2')[0]
+        aligned_path = op.join(aligned_scan_dir, f'{vision_asset}.obj')
+        if not op.exists(aligned_path):
+            print(f'  Skipping {eval_subdir}:  could not find aligned for ' + \
+                  f'{vision_asset}.')
+            continue
+        shutil.copyfile(
+            aligned_path,
+            op.join(eval_dir, eval_subdir, 'true_geom_aligned_assist.obj')
+        )
+        print(f'  {eval_subdir}')
+
 
 
 if __name__ == '__main__':
@@ -543,9 +984,9 @@ if __name__ == '__main__':
     #     mesh_processor = MeshScalingProcessor(object=object)
     #     mesh_processor.scale_manually(show=True)
 
-    mi = MeshInspector(object='milk')
-    mi.load_bsdf_and_tagslam_pll_meshes()
-    mi.view_true_bsdf_tagslam_pll_meshes()
+    # mi = MeshInspector(object='milk')
+    # mi.load_bsdf_and_tagslam_pll_meshes()
+    # mi.view_true_bsdf_tagslam_pll_meshes()
 
 
-    main_command()  # pylint: disable=no-value-for-parameter
+    cli()  # pylint: disable=no-value-for-parameter

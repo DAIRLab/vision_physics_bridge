@@ -527,6 +527,20 @@ def object_scan_filepath(object: str) -> str:
     print(f'No scan found for {object} in {scan_dir}.')
     return None
 
+def aligned_object_scan_dir() -> str:
+    """Directory for all object scans."""
+    return assure_created(
+        op.join(object_scan_dir(), 'true_aligned_to_experiments'))
+
+def aligned_true_geometry_filepath(vision_asset: str, check_exists: bool =True
+                                   ) -> str:
+    """Return the filepath of an object's ground truth scan."""
+    aligned_filepath = op.join(aligned_object_scan_dir(), f'{vision_asset}.obj')
+    if check_exists:
+        assert op.exists(aligned_filepath), f'No aligned scan found for ' + \
+            f'{vision_asset} in {aligned_object_scan_dir()}.'
+    return aligned_filepath
+
 def template_urdf_filepath() -> str:
     """Get the PLL template URDF filepath."""
     return pll_file_utils.get_vision_urdf_template_path()
