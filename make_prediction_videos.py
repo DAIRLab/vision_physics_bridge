@@ -12,7 +12,8 @@ from tempfile import TemporaryDirectory
 from tqdm import tqdm
 
 import evaluate, eval_utils, file_utils, math_utils, rosbag_processor
-from eval_utils import PredictionOverlayGenerator
+from eval_utils import PredictionOverlayGenerator, \
+    OfficialVideoPredictionOverlayGenerator
 
 NUMBERS = ['1', '1-2', '1-3', '1-4', '1-5']
 OBJECTS = ['bakingbox', 'cardboard', 'crushedcan', 'gallon', 'greencan',
@@ -491,9 +492,18 @@ def process_video_comand():
               default=1,
               help="BundleSDF iteration number (can't choose 0 since that " + \
                 "means use TagSLAM poses).")
+@click.option('--image-only/--full-video',
+              type=bool,
+              default=True,
+              help="whether to just save the image or also the video.")
+@click.option('--remote/--local',
+              type=bool,
+              default=False,
+              help="whether to generate the videos remotely or locally.")
 
 def main_command(vision_asset: str, bundlesdf_id: str, nerf_bundlesdf_id: str,
-                 pll_id: str, cycle_iteration: int):
+                 pll_id: str, cycle_iteration: int, image_only: bool,
+                 remote: bool):
     if cycle_iteration == 0:
         assert pll_id is not None, f'Need {pll_id=} if cycle_iteration is 0.'
         assert bundlesdf_id is None, f'Cannot have {bundlesdf_id=} if ' + \
@@ -539,57 +549,65 @@ def main_command(vision_asset: str, bundlesdf_id: str, nerf_bundlesdf_id: str,
 
     start_toss = int(vision_asset.split('_')[1].split('-')[0])
 
-    # Do the overlay generation.
-    pgen = PredictionOverlayGenerator(
-        vision_asset=vision_asset, history=history,
-        nerf_bundlesdf_id=nerf_bundlesdf_id, bsdf_only=False, remote=True)
+    if image_only:
+        # Do the overlay generation.
+        pgen = PredictionOverlayGenerator(
+            vision_asset=vision_asset, history=history,
+            nerf_bundlesdf_id=nerf_bundlesdf_id, bsdf_only=False, remote=remote)
 
-    # Iterate over all tosses.
-    pgen._get_absolute_frames()
-    for toss_i_0, toss_frame_1 in enumerate(pgen.start_frames):
-        # Get the first image of the toss.
-        toss_i = toss_i_0 + start_toss  # convert to 1-indexed
-        toss_frame_0 = toss_frame_1 - 1  # convert to 0-indexed
-        first_image = pgen.rgb_images[toss_frame_0]
+        # Iterate over all tosses.
+        pgen._get_absolute_frames()
+        for toss_i_0, toss_frame_1 in enumerate(pgen.start_frames):
+            # Get the first image of the toss.
+            toss_i = toss_i_0 + start_toss  # convert to 1-indexed
+            toss_frame_0 = toss_frame_1 - 1  # convert to 0-indexed
+            first_image = pgen.rgb_images[toss_frame_0]
 
-        # The predicted and BundleSDF trajectories are stored under
-        # pgen.predicted_trajs and pgen.bundlesdf_trajs, both dictionaries with
-        # toss number keys.  These are 4x4 transformation matrices in world
-        # frame.
-        predicted_traj = pgen.predicted_trajs[toss_i]
-        bundlesdf_traj = pgen.bundlesdf_trajs[toss_i]
+            # The predicted and BundleSDF trajectories are stored under
+            # pgen.predicted_trajs and pgen.bundlesdf_trajs, both dictionaries
+            # with toss number keys.  These are 4x4 transformation matrices in
+            # world frame.
+            predicted_traj = pgen.predicted_trajs[toss_i]
+            bundlesdf_traj = pgen.bundlesdf_trajs[toss_i]
 
-        # Convert to camera frame.
-        predicted_traj_cam = convert_world_tfs_to_camera(
-            vision_asset, predicted_traj)
-        bundlesdf_traj_cam = convert_world_tfs_to_camera(
-            vision_asset, bundlesdf_traj)
+            # Convert to camera frame.
+            predicted_traj_cam = convert_world_tfs_to_camera(
+                vision_asset, predicted_traj)
+            bundlesdf_traj_cam = convert_world_tfs_to_camera(
+                vision_asset, bundlesdf_traj)
 
-        # Convert to 3D points in camera frame of the xyz axes of the triad.
-        # These wil be of size (3_xyz, n_timesteps, 2, 3).
-        predicted_axes_cam = get_xyz_axis_locations_over_time_from_poses(
-            predicted_traj_cam)
-        bundlesdf_axes_cam = get_xyz_axis_locations_over_time_from_poses(
-            bundlesdf_traj_cam) * TRACKING_TO_PRED_AXIS_SIZE_RATIO
+            # Convert to 3D points in camera frame of the xyz axes of the triad.
+            # These wil be of size (3_xyz, n_timesteps, 2, 3).
+            predicted_axes_cam = get_xyz_axis_locations_over_time_from_poses(
+                predicted_traj_cam)
+            bundlesdf_axes_cam = get_xyz_axis_locations_over_time_from_poses(
+                bundlesdf_traj_cam) * TRACKING_TO_PRED_AXIS_SIZE_RATIO
 
-        # Get in camera pixels.
-        intrinsics_P_mat = get_camera_intrinsics(vision_asset)
-        predicted_pixels = convert_triad_points_to_camera_pixels(
-            predicted_axes_cam, intrinsics_P_mat)
-        bundlesdf_pixels = convert_triad_points_to_camera_pixels(
-            bundlesdf_axes_cam, intrinsics_P_mat)
+            # Get in camera pixels.
+            intrinsics_P_mat = get_camera_intrinsics(vision_asset)
+            predicted_pixels = convert_triad_points_to_camera_pixels(
+                predicted_axes_cam, intrinsics_P_mat)
+            bundlesdf_pixels = convert_triad_points_to_camera_pixels(
+                bundlesdf_axes_cam, intrinsics_P_mat)
 
-        # Plot the image.
-        plt.figure()
-        plt.imshow(first_image)
-        plot_pose_pos_over_time(bundlesdf_pixels)
-        plot_pose_axes_over_time(predicted_pixels, linewidth=LINEWIDTH)
-        plt.savefig(file_utils.inspection_triad_image_filepath(
-            vision_asset, bundlesdf_id, nerf_bundlesdf_id, cycle_iteration,
-            f'pred_gt_{toss_i}'))
-        print(f'Wrote image for toss {toss_i}.')
-        plt.close()
+            # Plot the image.
+            plt.figure()
+            plt.imshow(first_image)
+            plot_pose_pos_over_time(bundlesdf_pixels)
+            plot_pose_axes_over_time(predicted_pixels, linewidth=LINEWIDTH)
+            plt.savefig(file_utils.inspection_triad_image_filepath(
+                vision_asset, bundlesdf_id, nerf_bundlesdf_id, cycle_iteration,
+                f'pred_gt_{toss_i}'))
+            print(f'Wrote image for toss {toss_i}.')
+            plt.close()
 
+    else:
+        print(f'Making overlay video.')
+        # Do the overlay generation.
+        pgen = OfficialVideoPredictionOverlayGenerator(
+            vision_asset=vision_asset, history=history,
+            nerf_bundlesdf_id=nerf_bundlesdf_id, bsdf_only=False, remote=remote)
+        pgen.make_overlay_video()
 
 
 

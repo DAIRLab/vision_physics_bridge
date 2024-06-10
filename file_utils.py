@@ -292,6 +292,22 @@ def bundlesdf_video_mask_dir(dataset: str, check_exists: bool = True) -> str:
     return bsdf_file_utils.video_mask_dir(
         dataset, check_parent_exists=check_exists)
 
+def pink_triad_obj_filepath():
+    """Path to the pink triad for official video overlays."""
+    return op.join(DATA_GEN_DIR, 'assets', 'triad_pink.obj')
+
+def x_axis_obj_filepath():
+    """Path to the x-axis obj file for official video overlays."""
+    return op.join(DATA_GEN_DIR, 'assets', 'x_axis.obj')
+
+def y_axis_obj_filepath():
+    """Path to the y-axis obj file for official video overlays."""
+    return op.join(DATA_GEN_DIR, 'assets', 'y_axis.obj')
+
+def z_axis_obj_filepath():
+    """Path to the z-axis obj file for official video overlays."""
+    return op.join(DATA_GEN_DIR, 'assets', 'z_axis.obj')
+
 
 """Manual inspection directories."""
 def inspection_dir() -> str:

@@ -43,6 +43,19 @@ POSITION_AUC_THRESHOLD = 0.1
 ORIENTATION_AUC_THRESHOLD = np.pi / 2
 PENETRATION_AUC_THRESHOLD = 0.02    # TODO BIBIT the results seem really low
 
+# Triad trails.
+TRAIL_LENGTH = 10
+BUNDLESDF_TRIAD_TRAIL_NAMES = [
+    f'bundlesdf_triad_{i}' for i in range(TRAIL_LENGTH)]
+DYNAMICS_X_AXIS_TRAIL_NAMES = [
+    f'dynamics_x_triad_{i}' for i in range(TRAIL_LENGTH)]
+DYNAMICS_Y_AXIS_TRAIL_NAMES = [
+    f'dynamics_y_triad_{i}' for i in range(TRAIL_LENGTH)]
+DYNAMICS_Z_AXIS_TRAIL_NAMES = [
+    f'dynamics_z_triad_{i}' for i in range(TRAIL_LENGTH)]
+# TODO Can figure out later if we think we need to how to get the trail to be of
+# fading opacities.
+OPACITY_OVER_TIME = [(i+1)/TRAIL_LENGTH for i in range(TRAIL_LENGTH)]
 
 
 #================================== METRICS ===================================#
@@ -416,13 +429,13 @@ def get_pll_tagslam_trajectories_pll_format(object: str) -> dict:
             trajectory = torch.load(op.join(tagslam_dir, f'{toss_i}.pt'))
             trajectories[toss_i] = trajectory
         return trajectories
-    
+
     print(f'{object}_1-10 not found; trying individual tosses instead.')
     for toss_i in range(1, 11):
         vision_asset = f'{object}_{toss_i}'
         tagslam_dir = file_utils.contactnets_input_dir_tagslam(
             vision_asset, full=False, create=False)
-        
+
         if op.exists(tagslam_dir):
             trajectory = torch.load(op.join(tagslam_dir, f'{toss_i}.pt'))
             trajectories[toss_i] = trajectory
@@ -449,7 +462,7 @@ def get_bundlesdf_trajectories_pll_format(
             trajectories[toss_i] = trajectory
 
     return trajectories
-    
+
 def get_synced_bsdf_tagslam_toss_poses(
         vision_asset: str, bundlesdf_id: str, cycle_iteration: int,
         desired_toss_num: int) -> Tensor:
@@ -461,7 +474,7 @@ def get_synced_bsdf_tagslam_toss_poses(
     start_toss = int(vision_asset.split('_')[1].split('-')[0])
     end_toss = start_toss if '-' not in vision_asset else \
         int(vision_asset.split('-')[1])
-    
+
     # First try to use the first frame of the exact toss.
     if desired_toss_num in range(start_toss, end_toss+1):
         bsdf_dir = file_utils.contactnets_input_dir_bundlesdf(
@@ -840,6 +853,119 @@ class PredictionOverlayGenerator(OverlayVideoGenerator):
 
             self.vis["dynamics_triad"].set_transform(out_of_view_tf)
             self.vis["dynamics_mesh"].set_transform(out_of_view_tf)
+
+
+class OfficialVideoPredictionOverlayGenerator(PredictionOverlayGenerator):
+    """Make an overlay video showing the tracked BundleSDF poses as a small pink
+    triad and the dynamics predictions as a larger RGB triad.  Have both of
+    these triads make a disappearing trail of their past positions."""
+    def __init__(self, vision_asset: str, history: dict, nerf_bundlesdf_id: str,
+                 bsdf_only: bool = False, remote: bool = False):
+        super().__init__(
+            vision_asset=vision_asset, history=history,
+            nerf_bundlesdf_id=nerf_bundlesdf_id, bsdf_only=bsdf_only,
+            remote=remote
+        )
+
+        # Keep track of what trail index to next update.
+        self.next_trail_index_to_update = 0
+
+    def _add_meshcat_objects(self, vis: meshcat.Visualizer) -> None:
+        """Only visualize triads, no learned/true geometries."""
+        out_of_view_tf = tf.translation_matrix([0, 0, -1]) @ \
+            tf.rotation_matrix(np.pi, (0,0,1)) @ \
+            tf.translation_matrix([0, 0, -1])
+        for bsdf_triad_name in BUNDLESDF_TRIAD_TRAIL_NAMES:
+            vis[bsdf_triad_name].set_object(
+                g.ObjMeshGeometry.from_file(
+                    file_utils.pink_triad_obj_filepath()),
+                g.MeshLambertMaterial(
+                    color=0xff80d5, reflectivity=0.0, transparent=0,
+                    opacity=1.0))
+            vis[bsdf_triad_name].set_transform(out_of_view_tf)
+        for dynamics_x_name in DYNAMICS_X_AXIS_TRAIL_NAMES:
+            vis[dynamics_x_name].set_object(
+                g.ObjMeshGeometry.from_file(file_utils.x_axis_obj_filepath()),
+                g.MeshLambertMaterial(
+                    color=0xff0000, reflectivity=0.0, transparent=0,
+                    opacity=1.0))
+            vis[dynamics_x_name].set_transform(out_of_view_tf)
+        for dynamics_y_name in DYNAMICS_Y_AXIS_TRAIL_NAMES:
+            vis[dynamics_y_name].set_object(
+                g.ObjMeshGeometry.from_file(file_utils.y_axis_obj_filepath()),
+                g.MeshLambertMaterial(
+                    color=0x00ff00, reflectivity=0.0, transparent=0,
+                    opacity=1.0))
+            vis[dynamics_y_name].set_transform(out_of_view_tf)
+        for dynamics_z_name in DYNAMICS_Z_AXIS_TRAIL_NAMES:
+            vis[dynamics_z_name].set_object(
+                g.ObjMeshGeometry.from_file(file_utils.z_axis_obj_filepath()),
+                g.MeshLambertMaterial(
+                    color=0x0000ff, reflectivity=0.0, transparent=0,
+                    opacity=1.0))
+            vis[dynamics_z_name].set_transform(out_of_view_tf)
+
+    def _set_meshcat_object_poses(self, frame_i: int, T_WA: np.ndarray,
+                                  T_CB: np.ndarray) -> None:
+        """Set the poses of the objects.  Since they are implemented as trails,
+        Update the last trail item's pose."""
+        # First handle the tracked BundleSDF pose.
+        if T_CB is not None:
+            self.vis[f'bundlesdf_triad_{self.next_trail_index_to_update}'
+                ].set_transform(self.T_MC @ T_CB)
+        else:
+            out_of_view_tf = self.T_MC @ tf.translation_matrix([0, 0, -1])
+            self.vis[f'bundlesdf_triad_{self.next_trail_index_to_update}'
+                ].set_transform(out_of_view_tf)
+
+        # Second handle the predicted pose:  starting by determining if the
+        # frame is within a toss.
+        toss_i = self._within_which_toss(image_frame_i=frame_i+1)
+
+        if (toss_i is not None) and (toss_i in self.prediction_tosses):
+            # Get the predicted pose.
+            toss_frame = frame_i+1 - self.start_frames[toss_i - self.start_toss]
+            T_WP = self.predicted_trajs[toss_i][toss_frame]
+
+            self.vis[f'dynamics_x_triad_{self.next_trail_index_to_update}'
+                ].set_transform(self.T_MW @ T_WP)
+            self.vis[f'dynamics_y_triad_{self.next_trail_index_to_update}'
+                ].set_transform(self.T_MW @ T_WP)
+            self.vis[f'dynamics_z_triad_{self.next_trail_index_to_update}'
+                ].set_transform(self.T_MW @ T_WP)
+
+        # If not showing a prediction, move the predicted geometry out of view.
+        else:
+            out_of_view_tf = self.T_MC @ tf.translation_matrix([0, 0, -1])
+            self.vis[f'dynamics_x_triad_{self.next_trail_index_to_update}'
+                ].set_transform(out_of_view_tf)
+            self.vis[f'dynamics_y_triad_{self.next_trail_index_to_update}'
+                ].set_transform(out_of_view_tf)
+            self.vis[f'dynamics_z_triad_{self.next_trail_index_to_update}'
+                ].set_transform(out_of_view_tf)
+
+        # Update the next index.
+        self.next_trail_index_to_update += 1
+        if self.next_trail_index_to_update == TRAIL_LENGTH:
+            self.next_trail_index_to_update = 0
+
+        # Update the opacities.
+        self._update_meshcat_object_opacities()
+
+    def _update_meshcat_object_opacities(self) -> None:
+        """This already assumes the next trail index to update has been
+        incremented.  Update the opacities of the trails so the most recently
+        updated one is the most prominent."""
+        for i in range(TRAIL_LENGTH):
+            trail_index = (self.next_trail_index_to_update + i) % TRAIL_LENGTH
+            self.vis[f'bundlesdf_triad_{trail_index}'].set_property(
+                'color', [1, 0.5, 0.84, OPACITY_OVER_TIME[i]])
+            self.vis[f'dynamics_x_triad_{trail_index}'].set_property(
+                'color', [1, 0, 0, OPACITY_OVER_TIME[i]])
+            self.vis[f'dynamics_y_triad_{trail_index}'].set_property(
+                'color', [0, 1, 0, OPACITY_OVER_TIME[i]])
+            self.vis[f'dynamics_z_triad_{trail_index}'].set_property(
+                'color', [0, 0, 1, OPACITY_OVER_TIME[i]])
 
 
 class TagSLAMTrajectoryConverter(TrajectoryConverterBundleSDFToPLL):
