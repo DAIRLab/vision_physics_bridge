@@ -44,7 +44,7 @@ ORIENTATION_AUC_THRESHOLD = np.pi / 2
 PENETRATION_AUC_THRESHOLD = 0.02    # TODO BIBIT the results seem really low
 
 # Triad trails.
-TRAIL_LENGTH = 10
+TRAIL_LENGTH = 20
 BUNDLESDF_TRIAD_TRAIL_NAMES = [
     f'bundlesdf_triad_{i}' for i in range(TRAIL_LENGTH)]
 DYNAMICS_X_AXIS_TRAIL_NAMES = [
@@ -869,6 +869,15 @@ class OfficialVideoPredictionOverlayGenerator(PredictionOverlayGenerator):
 
         # Keep track of what trail index to next update.
         self.next_trail_index_to_update = 0
+
+        # Update the filepath so the evaluation directory can keep its debugging
+        # overlay video.
+        self.output_file = file_utils.inspection_presentable_video_filepath(
+            dataset=vision_asset,
+            tracking_bundlesdf_id=self.tracking_bundlesdf_id,
+            nerf_bundlesdf_id=self.nerf_bundlesdf_id,
+            cycle_iteration=self.cycle_iteration
+        )
 
     def _add_meshcat_objects(self, vis: meshcat.Visualizer) -> None:
         """Only visualize triads, no learned/true geometries."""

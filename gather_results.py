@@ -231,7 +231,7 @@ BSDF_ONLY_COLOR = '#f9a602'  #'#a1b8e1'  #'#8eaadb'  #'#4472c4'  #'cd5b45'
 PLL_VISION_COLOR = '#833785'
 PLL_SIZE_COLOR = '#4a0042'
 PLL_BLIND_B_COLOR = '#92668d'
-PLL_BLIND_T_COLOR = '##95001a'
+PLL_BLIND_T_COLOR = '#95001a'
 
 BSDF_PLL_LABEL = 'Vysics'
 NERF_ON_LABEL = 'BundleSDF-PLL NeRF Online'
@@ -1727,8 +1727,8 @@ def process_gather_command():
 
 # Use 'plot' command to load the previously generated yaml files with results
 # and to generate plots with them.
-PLOT_TRACKING = False
-PLOT_DYNAMICS = False
+PLOT_TRACKING = True
+PLOT_DYNAMICS = True
 PLOT_GEOMETRY = False
 PLOT_GEOMETRY_SCATTERS = True
 @cli.command('plot')

@@ -335,6 +335,23 @@ def inspection_overlay_video_filepath(
 
     return op.join(overlay_video_dir, filename)
 
+def inspection_presentable_video_filepath(
+        dataset: str, tracking_bundlesdf_id: str, nerf_bundlesdf_id: str,
+        cycle_iteration: int) -> str:
+    """The directory for all overlay videos."""
+    overlay_video_dir = op.join(inspection_dir(), 'presentable_overlay_videos')
+    assure_created(overlay_video_dir)
+
+    if tracking_bundlesdf_id.startswith('bundlesdf_id_'):
+        tracking_bundlesdf_id = tracking_bundlesdf_id[13:]
+    if nerf_bundlesdf_id.startswith('bundlesdf_id_'):
+        nerf_bundlesdf_id = nerf_bundlesdf_id[13:]
+
+    filename = f'{dataset}_{tracking_bundlesdf_id}_{nerf_bundlesdf_id}_' + \
+        f'{cycle_iteration}.mp4'
+
+    return op.join(overlay_video_dir, filename)
+
 def inspection_keyframe_overlay_image_dir(
         dataset: str, tracking_bundlesdf_id: str, nerf_bundlesdf_id: str,
         cycle_iteration: int) -> str:
