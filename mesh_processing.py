@@ -945,50 +945,71 @@ def process_distribute_alignments_command(distribute: bool):
     aligned_scan_dir = file_utils.aligned_object_scan_dir()
 
     # First gather all of the existing aligned meshes from the BundleSDF ID 02,
-    # cycle iteration 2 results.
+    # cycle iteration 2 results or from the BundleSDF ID 00, cycle iteration 1
+    # results.
     print(f'Copying aligned meshes to aligned scan directory:')
     for eval_subdir in os.listdir(eval_dir):
-        if eval_subdir.endswith('02_02_2'):
+        if eval_subdir.endswith('02_02_2') or eval_subdir.endswith('00_00_1'):
             in_eval_path = op.join(
                 eval_dir, eval_subdir, 'true_geom_aligned_assist.obj')
             if op.exists(in_eval_path):
-                vision_asset = eval_subdir.split('_02_02_2')[0]
-                in_aligned_path = op.join(
-                    aligned_scan_dir, f'{vision_asset}.obj')
+                if eval_subdir.endswith('02_02_2'):
+                    vision_asset = eval_subdir.split('_02_02_2')[0]
+                    in_aligned_path = op.join(
+                        aligned_scan_dir, f'{vision_asset}_cycle_2.obj')
+                    print(f'  Cycle 2, ', end='')
+                elif eval_subdir.endswith('00_00_1'):
+                    vision_asset = eval_subdir.split('_bsdf_00_00_1')[0]
+                    in_aligned_path = op.join(
+                        aligned_scan_dir, f'{vision_asset}_cycle_1.obj')
+                    print(f'  Cycle 1, ', end='')
                 shutil.copyfile(in_eval_path, in_aligned_path)
-                print(f'  {vision_asset}')
+                print(vision_asset)
 
     if not distribute:
         print(f'Will not distribute.  Done.')
         exit()
 
     # Now copy all of the aligned meshes to every experiment's evaluation
-    # folder.
+    # folder.  Skip those that already have an aligned mesh.  Try to use an
+    # aligned mesh from the same cycle.  If not, reuse cycle 2.
     print(f'\nCopying aligned meshes to every experiment\'s evaluation folder:')
     for eval_subdir in os.listdir(eval_dir):
+        if op.exists(op.join(
+            eval_dir, eval_subdir, 'true_geom_aligned_assist.obj')):
+            print(f'  Already has aligned mesh in {eval_subdir}.')
+            continue
+
         if not op.isdir(op.join(eval_dir, eval_subdir)):
             continue
-        vision_asset = eval_subdir.split('_02_02_2')[0]
-        aligned_path = op.join(aligned_scan_dir, f'{vision_asset}.obj')
+        vision_asset = '_'.join(eval_subdir.split('_')[:2])
+        cycle = eval_subdir.split('_')[-1]
+        aligned_path = op.join(
+            aligned_scan_dir, f'{vision_asset}_cycle_{cycle}.obj')
         if not op.exists(aligned_path):
-            print(f'  Skipping {eval_subdir}:  could not find aligned for ' + \
-                  f'{vision_asset}.')
-            continue
-        shutil.copyfile(
-            aligned_path,
-            op.join(eval_dir, eval_subdir, 'true_geom_aligned_assist.obj')
+            if cycle in [1, 0]:
+                # Try using the cycle 2 aligned mesh instead.
+                aligned_path = op.join(
+                    aligned_scan_dir, f'{vision_asset}_cycle_2.obj')
+                if not op.exists(aligned_path):
+                    print(f'  Skipping {eval_subdir}:  could not find ' + \
+                          f'aligned for {vision_asset}.')
+                    continue
+            else:
+                print(f'  Skipping {eval_subdir}:  could not find aligned ' + \
+                      f'for {vision_asset}.')
+                continue
+        shutil.copyfile(aligned_path, op.join(
+            eval_dir, eval_subdir, 'true_geom_aligned_assist_copied.obj')
         )
 
         # Also need to update the URDF file to refer to this new geometry file.
         urdf_filepath = op.join(
             eval_dir, eval_subdir, 'true_mesh_pll_params.urdf')
         eval_utils.overwrite_mesh_name_in_urdf(
-            urdf_filepath, 'true_geom_aligned_assist.obj')
+            urdf_filepath, 'true_geom_aligned_assist_copied.obj')
 
         print(f'  {eval_subdir}')
-
-        # TODO will need to edit the true_mesh_pll_params.urdf to refer to this
-        # new geometry file.
 
 
 

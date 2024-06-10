@@ -312,6 +312,7 @@ def overwrite_mesh_name_in_urdf(urdf_path: str, new_obj_name: str) -> None:
                 ).replace('"test.obj"', f'"{new_obj_name}"'
                 ).replace('"bundlesdf_mesh.obj"', f'"{new_obj_name}"'
                 ).replace('"true_geom_aligned.obj"', f'"{new_obj_name}"'
+                ).replace('"true_geom_aligned_assist.obj"', f'"{new_obj_name}"'
                 ).replace('"test_best.obj"', f'"{new_obj_name}"')
             write_file.write(line)
 

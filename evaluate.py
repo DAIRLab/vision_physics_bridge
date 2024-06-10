@@ -283,15 +283,19 @@ class TrajectoryPerformanceEvaluator:
         # First, check if aligned GT geometry is supposed to already exist and
         # use it.
         if FORCE_USE_ALIGNED_GT_GEOMETRY:
-            # Check for true_geom_aligned_assist.obj first.
+            # Check for true_geom_aligned_assist.obj first, then the copied
+            # version, then just the default aligned.
             true_mesh_filepath = op.join(
                 self.eval_dir, 'true_geom_aligned_assist.obj')
             if not op.exists(true_mesh_filepath):
                 true_mesh_filepath = op.join(
+                    self.eval_dir, 'true_geom_aligned_assist_copied.obj')
+            if not op.exists(true_mesh_filepath):
+                true_mesh_filepath = op.join(
                     self.eval_dir, 'true_geom_aligned.obj')
             assert op.exists(true_mesh_filepath), f'Checked for true ' + \
-                f'geometry at {true_mesh_filepath=} and _assist but did not' + \
-                f' find either.'
+                f'geometry at {true_mesh_filepath=}, _assist, and _copied ' + \
+                f' but did not find either.'
             true_mesh = icp.load_mesh_from_obj(true_mesh_filepath)
             point_cloud_object = true_mesh.sample_points_poisson_disk(2000)
             self.aligned_true_cloud = np.asarray(point_cloud_object.points)
@@ -721,14 +725,18 @@ class TrajectoryPerformanceEvaluatorFromFiles(TrajectoryPerformanceEvaluator):
     def _get_aligned_true_cloud(self):
         if not hasattr(self, 'aligned_true_cloud'):
             # Compute it from stored GT mesh.  Always first try to use
-            # true_geom_aligned_assist.obj.
+            # true_geom_aligned_assist.obj, then the copied version, before
+            # defaulting to the base aligned version.
             mesh_path = op.join(
                 self.eval_dir, 'true_geom_aligned_assist.obj')
             if not op.exists(mesh_path):
+                mesh_path = op.join(
+                    self.eval_dir, 'true_geom_aligned_assist_copied.obj')
+            if not op.exists(mesh_path):
                 mesh_path = op.join(self.eval_dir, 'true_geom_aligned.obj')
             assert op.exists(mesh_path), f'Checked for true geometry at ' + \
-                f'{mesh_path=} and _assist but did not find either -- ' + \
-                f'needed to recompute results from files.'
+                f'{mesh_path=}, _assist, and _assist_copied but did not ' + \
+                f'find any -- needed to recompute results from files.'
 
             true_mesh = icp.load_mesh_from_obj(mesh_path)
             point_cloud_object = true_mesh.sample_points_poisson_disk(2000)
@@ -740,7 +748,8 @@ class TrajectoryPerformanceEvaluatorFromFiles(TrajectoryPerformanceEvaluator):
 class GeometryEvaluator:
     """Evaluate the learned geometry.  This requires the following to already be
     present in the evaluation directory:
-        - true_geom_aligned_assist.obj or true_geom_aligned.obj
+        - true_geom_aligned_assist.obj, or _assist_copied.obj, or just
+            aligned.obj
         - bsdf_mesh.obj if last run was BundleSDF, else pll_mesh.obj
     """
     def __init__(self, vision_asset: str, history: dict,
@@ -793,10 +802,13 @@ class GeometryEvaluator:
         true_mesh_path = op.join(
             self.eval_dir, 'true_geom_aligned_assist.obj')
         if not op.exists(true_mesh_path):
+            true_mesh_path = op.join(
+                self.eval_dir, 'true_geom_aligned_assist_copied.obj')
+        if not op.exists(true_mesh_path):
             true_mesh_path = op.join(self.eval_dir, 'true_geom_aligned.obj')
         assert op.exists(true_mesh_path), f'Checked for true geometry at ' + \
-            f'{true_mesh_path=} and _assist but did not find either -- ' + \
-            f'needed to recompute results from files.'
+            f'{true_mesh_path=}, _assist, and _assist_copied but did not ' + \
+            f'find any -- needed to recompute results from files.'
         self.true_mesh = icp.load_mesh_from_obj(true_mesh_path)
 
         # Get each of their convex hulls too.
@@ -838,6 +850,9 @@ class GeometryEvaluator:
 
         other_bsdf_true_mesh_path = op.join(
             other_bsdf_eval_dir, 'true_geom_aligned_assist.obj')
+        if not op.exists(other_bsdf_true_mesh_path):
+            other_bsdf_true_mesh_path = op.join(
+                other_bsdf_eval_dir, 'true_geom_aligned_assist_copied.obj')
         if not op.exists(other_bsdf_true_mesh_path):
             other_bsdf_true_mesh_path = op.join(
                 other_bsdf_eval_dir, 'true_geom_aligned.obj')
@@ -998,9 +1013,13 @@ class GeometryEvaluatorFromFiles(GeometryEvaluator):
         # Ground truth mesh.  First always look for _assist.obj.
         true_mesh_path = op.join(self.eval_dir, 'true_geom_aligned_assist.obj')
         if not op.exists(true_mesh_path):
+            true_mesh_path = op.join(
+                self.eval_dir, 'true_geom_aligned_assist_copied.obj')
+        if not op.exists(true_mesh_path):
             true_mesh_path = op.join(self.eval_dir, 'true_geom_aligned.obj')
         assert op.exists(true_mesh_path), f'GeometryEvaluator requires ' + \
-            f'{true_mesh_path=} or _assist.obj to exist, but neither exists.'
+            f'{true_mesh_path=}, _assist, or _assist_copied to exist, but ' + \
+            f'neither exists.'
         self.true_mesh = icp.load_mesh_from_obj(true_mesh_path)
 
         # Create the hull from the loaded true mesh.
