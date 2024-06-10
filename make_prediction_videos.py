@@ -225,8 +225,12 @@ def make_colorized_mesh_spin_video(
         # Get the GT mesh from the eval directory.
         true_mesh_path = op.join(eval_dir, 'true_geom_aligned_assist.obj')
         if not op.exists(true_mesh_path):
+            true_mesh_path = op.join(
+                eval_dir, 'true_geom_aligned_assist_copied.obj')
+        if not op.exists(true_mesh_path):
             true_mesh_path = op.join(eval_dir, 'true_geom_aligned.obj')
-        assert op.exists(true_mesh_path), f'Could not find {true_mesh_path}.'
+        assert op.exists(true_mesh_path), f'Could not find {true_mesh_path},' +\
+            f' checked for _assist, _assist_copied, and just _aligned.'
         true_mesh = load_viewable_mesh(true_mesh_path)
 
         if do_error_color:
@@ -263,8 +267,12 @@ def make_colorized_mesh_spin_video(
         # Get the GT mesh from the eval directory.
         true_mesh_path = op.join(eval_dir, 'true_geom_aligned_assist.obj')
         if not op.exists(true_mesh_path):
+            true_mesh_path = op.join(
+                eval_dir, 'true_geom_aligned_assist_copied.obj')
+        if not op.exists(true_mesh_path):
             true_mesh_path = op.join(eval_dir, 'true_geom_aligned.obj')
-        assert op.exists(true_mesh_path), f'Could not find {true_mesh_path}.'
+        assert op.exists(true_mesh_path), f'Could not find {true_mesh_path},' +\
+            f' checked for _assist, _assist_copied, and just _aligned.'
         mesh_to_vis = load_viewable_mesh(true_mesh_path)
 
         # Make sure the video path uses the right name.
