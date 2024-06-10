@@ -40,8 +40,9 @@ OPACITY_OVER_TIME = [255]*10 + \
     [int((i+1) * 1.0 / 40 * 255) for i in reversed(range(40))] + [0]*200
 COM_TRAJ_COLORS_OVER_TIME = [f'#FF80D5{opacity:02x}' for opacity in OPACITY_OVER_TIME]
 
-UPPER_DISTANCE = 0.013  # Reference: Vysics/BSDF CD averages are 0.0126/0.0136
-LOWER_DISTANCE = 0.004
+# UPPER_DISTANCE = 0.013  # Reference: Vysics/BSDF CD averages are 0.0126/0.0136 <-- OUTDATED 6/9
+UPPER_DISTANCE = 0.010
+LOWER_DISTANCE = 0.005
 
 COLOR_MAP = 'rainbow'  # Other good ones: YlGnBu_r, cool, bwr, Spectral_r
 N_TOTAL_SPIN_UNITS = 2080  # 2040 maybe too low, 2160 too high, 1920 too low
@@ -222,7 +223,9 @@ def make_colorized_mesh_spin_video(
         learned_mesh = load_viewable_mesh(learned_mesh_path)
 
         # Get the GT mesh from the eval directory.
-        true_mesh_path = op.join(eval_dir, 'true_geom_aligned.obj')
+        true_mesh_path = op.join(eval_dir, 'true_geom_aligned_assist.obj')
+        if not op.exists(true_mesh_path):
+            true_mesh_path = op.join(eval_dir, 'true_geom_aligned.obj')
         assert op.exists(true_mesh_path), f'Could not find {true_mesh_path}.'
         true_mesh = load_viewable_mesh(true_mesh_path)
 
@@ -258,7 +261,9 @@ def make_colorized_mesh_spin_video(
 
     else:
         # Get the GT mesh from the eval directory.
-        true_mesh_path = op.join(eval_dir, 'true_geom_aligned.obj')
+        true_mesh_path = op.join(eval_dir, 'true_geom_aligned_assist.obj')
+        if not op.exists(true_mesh_path):
+            true_mesh_path = op.join(eval_dir, 'true_geom_aligned.obj')
         assert op.exists(true_mesh_path), f'Could not find {true_mesh_path}.'
         mesh_to_vis = load_viewable_mesh(true_mesh_path)
 

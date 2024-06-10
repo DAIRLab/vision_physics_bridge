@@ -983,11 +983,23 @@ def process_distribute_alignments_command(distribute: bool):
         if not op.isdir(op.join(eval_dir, eval_subdir)):
             continue
         vision_asset = '_'.join(eval_subdir.split('_')[:2])
-        cycle = eval_subdir.split('_')[-1]
+        cycle_str = eval_subdir.split('_')[-1]
+        if not cycle_str.isdigit():
+            # Skip an unintended directory, since all must end with cycle iteration.
+            continue
+        cycle = int(cycle_str)
         aligned_path = op.join(
             aligned_scan_dir, f'{vision_asset}_cycle_{cycle}.obj')
         if not op.exists(aligned_path):
-            if cycle in [1, 0]:
+            if cycle == 0:
+                # Try using the cycle 1 aligned mesh instead.
+                aligned_path = op.join(
+                    aligned_scan_dir, f'{vision_asset}_cycle_1.obj')
+                if not op.exists(aligned_path):
+                    print(f'  Skipping {eval_subdir}:  could not find ' + \
+                          f'aligned for {vision_asset}.')
+                    continue
+            elif cycle == 1:
                 # Try using the cycle 2 aligned mesh instead.
                 aligned_path = op.join(
                     aligned_scan_dir, f'{vision_asset}_cycle_2.obj')
@@ -1006,6 +1018,9 @@ def process_distribute_alignments_command(distribute: bool):
         # Also need to update the URDF file to refer to this new geometry file.
         urdf_filepath = op.join(
             eval_dir, eval_subdir, 'true_mesh_pll_params.urdf')
+        if not op.exists(urdf_filepath):
+            print(f'  {eval_subdir} -- but no true geom URDF exists.')
+            continue
         eval_utils.overwrite_mesh_name_in_urdf(
             urdf_filepath, 'true_geom_aligned_assist_copied.obj')
 
