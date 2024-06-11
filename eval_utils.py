@@ -1180,14 +1180,18 @@ class InputVideoGenerator(OverlayVideoGenerator):
               type=str,
               default=None,
               help="asset name e.g. cube_2.")
+@click.option('--remote/--local',
+              type=bool,
+              default=False,
+              help="whether to generate the videos remotely or locally.")
 
-def main_command(vision_asset: str):
+def main_command(vision_asset: str, remote: bool):
     print(f'Processing {vision_asset}')
     # tagslam_converter = TagSLAMTrajectoryConverter(vision_asset)
     # tagslam_converter.do_process()
     # tagslam_converter.save_data()
 
-    input_video_generator = InputVideoGenerator(vision_asset)
+    input_video_generator = InputVideoGenerator(vision_asset, remote=remote)
     input_video_generator.make_overlay_video()
 
 
