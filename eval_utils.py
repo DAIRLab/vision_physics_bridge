@@ -1137,6 +1137,43 @@ class TagSLAMTrajectoryConverter(TrajectoryConverterBundleSDFToPLL):
         self.bsdf_only = False
         super().save_data(save_bundlesdf=False, save_tagslam=True)
 
+
+class InputVideoGenerator(OverlayVideoGenerator):
+    """Generate a video out of the input data for a particular vision asset.
+    There is no overlay necessary, but inheriting from the OverlayVideoGenerator
+    class eliminates the need to rewrite a good bit of code."""
+    def __init__(self, vision_asset: str, remote: bool = False):
+        # Initialize the parent class with some dummy values, since these won't
+        # matter for generating the video.
+        super().__init__(
+            vision_asset,
+            tracking_bundlesdf_id='bundlesdf_id_00',
+            nerf_bundlesdf_id='bundlesdf_id_00',
+            cycle_iteration=1,
+            bsdf_only=False, remote=remote)
+        
+        # Overwrite the output file.
+        self.output_file = file_utils.inspection_input_video_filepath(
+            vision_asset)
+        
+    def _add_meshcat_objects(self, vis: meshcat.Visualizer) -> None:
+        """No meshcat objects are needed for the input video."""
+        pass
+
+    def _set_up_meshcat(self) -> None:
+        """No meshcat setup is needed for the input video."""
+        pass
+
+    def _clean_up_meshcat(self) -> None:
+        """No meshcat cleanup is needed for the input video."""
+        pass
+
+    def _render_one_image(self, frame_i: int, T_WA: np.ndarray,
+                          T_CB: np.ndarray) -> Image:
+        """This can do nothing except load the camera image."""
+        return Image.fromarray(self.rgb_images[frame_i]).convert('RGB')
+
+
 #######################################################################
 @click.command()
 @click.option('--vision-asset',
@@ -1146,9 +1183,12 @@ class TagSLAMTrajectoryConverter(TrajectoryConverterBundleSDFToPLL):
 
 def main_command(vision_asset: str):
     print(f'Processing {vision_asset}')
-    tagslam_converter = TagSLAMTrajectoryConverter(vision_asset)
-    tagslam_converter.do_process()
-    tagslam_converter.save_data()
+    # tagslam_converter = TagSLAMTrajectoryConverter(vision_asset)
+    # tagslam_converter.do_process()
+    # tagslam_converter.save_data()
+
+    input_video_generator = InputVideoGenerator(vision_asset)
+    input_video_generator.make_overlay_video()
 
 
 if __name__ == '__main__':

@@ -317,6 +317,11 @@ def inspection_dir() -> str:
     consolidated_results/."""
     return assure_created(op.join(DATA_GEN_DIR, 'consolidated_results'))
 
+def inspection_input_video_filepath(vision_asset: str) -> str:
+    """The directory for all input videos."""
+    input_video_dir = assure_created(op.join(inspection_dir(), 'input_videos'))
+    return op.join(input_video_dir, f'{vision_asset}.mp4')
+
 def inspection_overlay_video_filepath(
         dataset: str, tracking_bundlesdf_id: str, nerf_bundlesdf_id: str,
         cycle_iteration: int) -> str:
