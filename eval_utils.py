@@ -1,11 +1,11 @@
 """Utilities for evaluations."""
 
-from PIL import Image
 import numpy as np
 import os
 import os.path as op
 import pdb
 import pickle
+from PIL import Image, ImageDraw
 from scipy.optimize import linprog
 from scipy.spatial import ConvexHull, HalfspaceIntersection, cKDTree
 import sys
@@ -56,6 +56,10 @@ DYNAMICS_Z_AXIS_TRAIL_NAMES = [
 # TODO Can figure out later if we think we need to how to get the trail to be of
 # fading opacities.
 OPACITY_OVER_TIME = [(i+1)/TRAIL_LENGTH for i in range(TRAIL_LENGTH)]
+
+PHYSICS_GREEN = '#7dab54'
+VYSICS_PURPLE = '#68379A'
+TOSS_BORDER = 10
 
 
 #================================== METRICS ===================================#
@@ -606,7 +610,11 @@ def get_pll_single_step_predictions_and_targets(
 
 class PredictionOverlayGenerator(OverlayVideoGenerator):
     """Make an overlay video showing the tracked BundleSDF poses and the
-    dynamics predictions during the tosses."""
+    dynamics predictions during the tosses.
+
+    TODO:  Currently this is not working for experiments that were trained on
+    tosses starting after toss 1.
+    """
     def __init__(self, vision_asset: str, history: dict, nerf_bundlesdf_id: str,
                  bsdf_only: bool = False, remote: bool = False):
         # Extract the relevant tracking, NeRF, and PLL IDs.
@@ -708,6 +716,8 @@ class PredictionOverlayGenerator(OverlayVideoGenerator):
             relative_start_frames, bundlesdf_times, start_ros_times)
         self.end_frames = math_utils.convert_relative_frames_to_absolute(
             relative_end_frames, bundlesdf_times, start_ros_times)
+        self.relative_start_frames = relative_start_frames
+        self.relative_end_frames = relative_end_frames
 
         # Need to extend the video.  Only extend to the end of the last toss
         # that has a prediction.
@@ -858,7 +868,10 @@ class PredictionOverlayGenerator(OverlayVideoGenerator):
 class OfficialVideoPredictionOverlayGenerator(PredictionOverlayGenerator):
     """Make an overlay video showing the tracked BundleSDF poses as a small pink
     triad and the dynamics predictions as a larger RGB triad.  Have both of
-    these triads make a disappearing trail of their past positions."""
+    these triads make a disappearing trail of their past positions.
+    Additionally, give the image a green border to indicate when the video is
+    part of an autonomous dynamics portion, and a purple border to indicate when
+    the video is featuring unseen data."""
     def __init__(self, vision_asset: str, history: dict, nerf_bundlesdf_id: str,
                  bsdf_only: bool = False, remote: bool = False):
         super().__init__(
@@ -932,7 +945,6 @@ class OfficialVideoPredictionOverlayGenerator(PredictionOverlayGenerator):
         toss_i = self._within_which_toss(image_frame_i=frame_i+1)
 
         if (toss_i is not None) and (toss_i in self.prediction_tosses):
-            # Get the predicted pose.
             toss_frame = frame_i+1 - self.start_frames[toss_i - self.start_toss]
             T_WP = self.predicted_trajs[toss_i][toss_frame]
 
@@ -975,6 +987,46 @@ class OfficialVideoPredictionOverlayGenerator(PredictionOverlayGenerator):
                 'color', [0, 1, 0, OPACITY_OVER_TIME[i]])
             self.vis[f'dynamics_z_triad_{trail_index}'].set_property(
                 'color', [0, 0, 1, OPACITY_OVER_TIME[i]])
+
+    def _determine_if_unseen_frame(self, image_frame_i: int) -> bool:
+        if self.end_toss + 1 not in self.prediction_tosses:
+            return False
+
+        first_unseen_frame = self.start_frames[self.end_toss] - \
+            self.relative_start_frames[self.end_toss]
+        return image_frame_i >= first_unseen_frame
+
+    def _add_watermark(self, im: Image, image_frame_i: int) -> Image:
+        """Add a label to the image to specify whether the portion of the video
+        is part of the PLL toss or not (green border) or if it is unseen data
+        (purple border)."""
+        # Determine if the frame index is within a PLL toss.
+        toss_i = self._within_which_toss(image_frame_i)
+
+        # If the system is outside of the training data, draw a purple frame.
+        if self._determine_if_unseen_frame(image_frame_i):
+            fill_color = VYSICS_PURPLE
+
+        # If the system is within a training set toss, draw a green frame.
+        elif toss_i is not None:
+            fill_color = PHYSICS_GREEN
+
+        else:
+            return im
+
+        # Add a border border to the image.
+        draw = ImageDraw.Draw(im)
+        draw.polygon([
+            (0, 0), (0, self.image_height),
+            (self.image_width, self.image_height), (self.image_width, 0),
+            (TOSS_BORDER, 0), (TOSS_BORDER, TOSS_BORDER),
+            (self.image_width-TOSS_BORDER, TOSS_BORDER),
+            (self.image_width-TOSS_BORDER, self.image_height-TOSS_BORDER),
+            (TOSS_BORDER, self.image_height-TOSS_BORDER),
+            (TOSS_BORDER, 0), (0, 0)],
+            fill=fill_color)
+
+        return im
 
 
 class TagSLAMTrajectoryConverter(TrajectoryConverterBundleSDFToPLL):

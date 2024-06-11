@@ -82,6 +82,12 @@ class OverlayVideoGenerator:
         self.object = object
         self.bsdf_only = bsdf_only
 
+        # Introduce a start frame offset.  For this class, this will always be
+        # zero.  However for prediction videos which can feature images before
+        # the first prediction/tracking, this offset can determine when the
+        # tracking starts into the video.
+        self.start_frame_offset = 0
+
         # Get the camera intrinsics and extrinsics.
         self.fx, self.fy, self.cx, self.cy = file_utils.load_camera_intrinsics(
             self.object)
@@ -386,9 +392,10 @@ class OverlayVideoGenerator:
                 # Get the transformations of BundleSDF and/or TagSLAM tracking
                 # for annotations.
                 try:
+                    index = max(i - self.start_frame_offset, 0)
                     T_WA = None if not hasattr(self, 'tagslam_poses_in_world') \
-                        else self.tagslam_poses_in_world[i]
-                    T_CB = self.bundlesdf_poses_in_cam[i]
+                        else self.tagslam_poses_in_world[index]
+                    T_CB = self.bundlesdf_poses_in_cam[index]
 
                 # If the video is longer than the BundleSDF tracking, still
                 # render the video but without annotated poses.
