@@ -2131,8 +2131,15 @@ def main_command(vision_asset: str, bundlesdf_id: str, nerf_bundlesdf_id: str,
     dynamics_predictor = DynamicsPredictor(
         vision_asset, history, nerf_bundlesdf_id, bsdf_only)
     dynamics_predictor._create_pll_sim_system()
-    geometry_evaluator = GeometryEvaluator(
-        vision_asset, history, nerf_bundlesdf_id)
+    try:
+        geometry_evaluator = GeometryEvaluatorFromFiles(
+            vision_asset=vision_asset, history=history,
+            nerf_bundlesdf_id=nerf_bundlesdf_id)
+    except Exception as e:
+        print(f'Need to make GeometryEvaluator from scratch (got "{e}" when' + \
+              f' trying to make from files).')
+        geometry_evaluator = GeometryEvaluator(
+            vision_asset, history, nerf_bundlesdf_id)
 
     ### Dynamics predictions.
     # Compute dynamics metrics if last run was PLL or PLL was ever run.
