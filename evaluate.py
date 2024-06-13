@@ -1259,15 +1259,59 @@ class DynamicsPredictor:
             self.bundlesdf_trajs = \
                 eval_utils.get_bundlesdf_trajectories_pll_format(
                     self.vision_asset, cycle_iteration=self.last_bsdf_iteration,
-                    bundlesdf_id=self.pll_last_tracking_bsdf_id
+                    bundlesdf_id=last_bsdf_id
                 )
         else:
             last_bsdf_id = self.last_tracking_bsdf_id
             self.bundlesdf_trajs = \
                 eval_utils.get_bundlesdf_trajectories_pll_format(
                     self.vision_asset, cycle_iteration=self.last_bsdf_iteration,
-                    bundlesdf_id=self.last_tracking_bsdf_id
+                    bundlesdf_id=last_bsdf_id
                 )
+
+        # See if we can get extended BundleSDF trajectories using a BundleSDF
+        # experiment with longer input data -- only necessary for tagless
+        # objects since TagSLAM serves this purpose for tagged ones.
+        # NOTE:  Temporary restriction that we will only do this for experiments
+        # whose training dataset starts with toss 1 since we can guarantee the
+        # experiments share an image index with a NeRF keyframe.
+        if (self.start_toss == 1) and (self.end_toss < 5) and \
+            (self.object in file_utils.TAGLESS_OBJECTS):
+            longer_vision_asset = f'{self.object}_1-5'
+            extended_bundlesdf_trajs = \
+                eval_utils.get_bundlesdf_trajectories_pll_format(
+                    longer_vision_asset, cycle_iteration=1,
+                    bundlesdf_id='bundlesdf_id_00'
+                )
+            self.extended_bundlesdf_trajs = {}
+
+            # Convert to be represented with respect to this experiment's
+            # BundleSDF body origin.
+            for toss_key, extended_traj in extended_bundlesdf_trajs.items():
+                # Skip any tosses for which this BundleSDF experiment already
+                # has tracking results.
+                if toss_key in self.bundlesdf_trajs.keys():
+                    continue
+
+                # Get synchronized geometry poses.  These are both in camera
+                # frame.
+                ext_b_mat = eval_utils.get_first_trans_mat(
+                    longer_vision_asset, cycle_iteration=1,
+                    tracking_bundlesdf_id='bundlesdf_id_00',
+                    nerf_bundlesdf_id='bundlesdf_id_00')
+                b_mat = eval_utils.get_first_trans_mat(
+                    self.vision_asset, cycle_iteration=self.last_bsdf_iteration,
+                    tracking_bundlesdf_id=self.last_tracking_bsdf_id,
+                    nerf_bundlesdf_id=self.last_nerf_bsdf_id)
+
+                # Convert the trajectory to this BundleSDF experiment's origin.
+                # We can reuse the TagSLAM-intended conversion.
+                self.extended_bundlesdf_trajs[toss_key] = \
+                    math_utils.transform_t_origin_to_b_origin_pll_format(
+                        full_tagslam_trajectory=extended_traj,
+                        synced_bsdf_pose=b_mat,
+                        synced_tagslam_pose=ext_b_mat
+                    )
 
         # Get ground truth trajectories from TagSLAM.  All TagSLAM trajectories
         # stored in PLL assets directory along with corresponding BundleSDF runs
@@ -1292,15 +1336,14 @@ class DynamicsPredictor:
                     t_mat = math_utils.pll_format_to_trans_mat(tagslam_traj[0])
 
                 elif last_bsdf_id is not None:
-                    #print(f'Need to synchronize at start for toss {toss_key}.')
-                    print(f'Will use a BundleSDF keyframe to synchronize for toss {toss_key}.')
+                    print(f'Will use a BundleSDF keyframe to synchronize for' +\
+                          f' toss {toss_key}.')
                     b_mat, t_mat = \
                         eval_utils.get_synced_bsdf_keyframe_tagslam_toss_poses(
                             vision_asset=self.vision_asset,
                             tracking_bundlesdf_id=last_bsdf_id,
                             nerf_bundlesdf_id=last_bsdf_id,
                             cycle_iteration=self.last_bsdf_iteration,
-                            #desired_toss_num=toss_key
                         )
 
                 else:
@@ -1330,6 +1373,8 @@ class DynamicsPredictor:
         pred_trajs_of_b_origin = {}
         trajs = self.bundlesdf_trajs if not hasattr(self, 'tagslam_b_trajs') \
             else self.tagslam_b_trajs
+        if hasattr(self, 'extended_bundlesdf_trajs'):
+            trajs.update(self.extended_bundlesdf_trajs)
 
         for toss_key, target_traj in trajs.items():
             start_adjust = file_utils.load_field_from_yaml(
@@ -1367,6 +1412,23 @@ class DynamicsPredictor:
             # Store the targets and predictions.
             self.single_step_bsdf_predictions = pred_bsdf_steps
             self.single_step_bsdf_targets = target_bsdf_steps
+
+        # Do the same thing against extended BundleSDF trajectories, if
+        # available.
+        if hasattr(self, 'extended_bundlesdf_trajs'):
+            pred_extended_steps = {}
+            target_extended_steps = {}
+            bundlesdf_trajs = self.extended_bundlesdf_trajs
+
+            for toss_key, target_bsdf_traj in bundlesdf_trajs.items():
+                pred_extended_steps[toss_key], target_extended_steps[toss_key] = \
+                    eval_utils.get_pll_single_step_predictions_and_targets(
+                        system=self.pll_system, full_traj=Tensor(target_bsdf_traj))
+
+            # Store the targets and predictions.
+            self.single_step_extended_bsdf_predictions = pred_extended_steps
+            self.single_step_extended_bsdf_targets = target_extended_steps
+
 
         # Do the same thing against TagSLAM, if available.
         if not hasattr(self, 'tagslam_b_trajs'):
@@ -1411,6 +1473,24 @@ class DynamicsPredictor:
                 torch.save(step_preds, op.join(self.eval_dir, filename))
                 print(f'\t{filename}')
 
+        if hasattr(self, 'extended_bundlesdf_trajs'):
+            for toss_num, ex_bsdf_traj in self.extended_bundlesdf_trajs.items():
+                filename = f'extended_bundlesdf_toss_{toss_num}.pt'
+                torch.save(ex_bsdf_traj, op.join(self.eval_dir, filename))
+                print(f'\t{filename}')
+
+            for toss_num, step_targets in \
+                self.single_step_extended_bsdf_targets.items():
+                filename = f'step_target_extended_bsdf_toss_{toss_num}.pt'
+                torch.save(step_targets, op.join(self.eval_dir, filename))
+                print(f'\t{filename}')
+
+            for toss_num, step_preds in \
+                self.single_step_extended_bsdf_predictions.items():
+                filename = f'step_prediction_extended_bsdf_toss_{toss_num}.pt'
+                torch.save(step_preds, op.join(self.eval_dir, filename))
+                print(f'\t{filename}')
+
         if hasattr(self, 'tagslam_b_trajs'):
             for toss_num, target_traj in self.tagslam_b_trajs.items():
                 filename = f'tagslam_b_toss_{toss_num}.pt'
@@ -1438,6 +1518,8 @@ class DynamicsPredictor:
         )
         prediction_overlay.make_overlay_video()
 
+    # TODO:  Right now this doesn't store dynamics metrics for tosses outside
+    # the training set for tagless objects.
     def store_dynamics_metrics(
             self, results: dict, geom_evaluator: GeometryEvaluator
     ) -> None:
@@ -1896,7 +1978,9 @@ def recompute_results_from_existing_files(
 @click.option('--overwrite',
               type=str,
               default='none',
-              help="whether to overwrite or keep previously generated results")
+              help="whether to overwrite or keep previously generated " + \
+                "results:  results_yaml, all, tracking, tracking_geometry, " + \
+                "dynamics")
 
 def main_command(vision_asset: str, bundlesdf_id: str, nerf_bundlesdf_id: str,
                  pll_id: str, cycle_iteration: int, do_videos: bool,
@@ -2060,6 +2144,7 @@ def main_command(vision_asset: str, bundlesdf_id: str, nerf_bundlesdf_id: str,
         dynamics_predictor.save_predictions()
         dynamics_predictor.store_dynamics_metrics(results, geometry_evaluator)
         if do_videos:
+            pdb.set_trace()
             dynamics_predictor.make_prediction_video()
         else:
             print(f'Skipping video generation for {vision_asset=}, ' + \

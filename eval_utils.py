@@ -607,6 +607,32 @@ def get_pll_single_step_predictions_and_targets(
     end_states = end_states.squeeze()
     return simulated_states, end_states
 
+def get_first_trans_mat(
+        vision_asset: str, tracking_bundlesdf_id: str, nerf_bundlesdf_id: str,
+        cycle_iteration: int) -> Tensor:
+    # First load the keyframes:  get the adjusted keyframe poses from the
+    # BundleSDF NeRF results' poses_after_nerf.txt.
+    keyframe_tfs = \
+        file_utils.load_optimized_keyframe_poses_from_nerf_results(
+            dataset=vision_asset, cycle_iteration=cycle_iteration,
+            tracking_bundlesdf_id=tracking_bundlesdf_id,
+            nerf_bundlesdf_id=nerf_bundlesdf_id
+        )
+
+    # Use the first keyframe.
+    b_trans_mat_camera = keyframe_tfs[0]
+
+    # Get the keyframe indices from the BundleSDF tracking results' last frame
+    # directory, in keyframes.yml.
+    keyframe_idx_1_indexed = \
+        file_utils.load_keyframe_indices_from_nerf_results_yml(
+            vision_asset, cycle_iteration, tracking_bundlesdf_id)
+    keyframe_idx = [i-1 for i in keyframe_idx_1_indexed]
+    keyframe_i = keyframe_idx[0]
+    assert keyframe_i == 0, f'Expected initial image to be in keyframe pool.'
+
+    return b_trans_mat_camera
+
 
 class PredictionOverlayGenerator(OverlayVideoGenerator):
     """Make an overlay video showing the tracked BundleSDF poses and the
