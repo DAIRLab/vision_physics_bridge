@@ -108,7 +108,7 @@ class DepthPlaneViewer:
     def __init__(self, vision_asset: str, bsdf_only: bool = False) -> None:
         self.vision_asset = vision_asset
         object = vision_asset.split('_')[:-1]
-        object = object[0] if len(object) == 1 else f'{object[0]}_{object[1]}'
+        object = '_'.join(object)
         self.object = object
         
         # Locate all the related files and directories for the given vision
@@ -486,11 +486,13 @@ class ROSBagDepthPlaneViewer(DepthPlaneViewer):
     def __init__(self, vision_asset: str, bsdf_only: bool = False) -> None:
         self.vision_asset = vision_asset
         object = vision_asset.split('_')[:-1]
-        object = object[0] if len(object) == 1 else f'{object[0]}_{object[1]}'
+        object = object[0] if len(object) == 1 else '_'.join(object)
+        self.object = object
 
-        start_toss = int(vision_asset.split('_')[-1].split('-')[0])
-        end_toss = start_toss if '-' not in vision_asset else \
-            int(vision_asset.split('-')[1])
+        toss_key = vision_asset.split('_')[-1]
+        start_toss = int(toss_key.split('-')[0])
+        end_toss = start_toss if '-' not in toss_key else \
+            int(toss_key.split('-')[1])
         assert start_toss <= end_toss, f'Invalid toss range: {start_toss} ' + \
             f'-{end_toss} inferred from {vision_asset=}.'
 
@@ -590,9 +592,10 @@ def process_single_command(vision_asset: str, visualize: bool, bsdf_only: bool,
     # each toss independently.
     object = vision_asset.split('_')[:-1]
     object = '_'.join(object)
-    start_toss = int(vision_asset.split('_')[-1].split('-')[0])
-    end_toss = start_toss if '-' not in vision_asset else \
-        int(vision_asset.split('-')[1])
+    toss_key = vision_asset.split('_')[-1]
+    start_toss = int(toss_key.split('-')[0])
+    end_toss = start_toss if '-' not in toss_key else \
+        int(toss_key.split('-')[1])
     toss_nums = range(start_toss, end_toss+1)
 
     for toss_i in toss_nums:

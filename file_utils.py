@@ -49,6 +49,7 @@ TAGLESS_OBJECTS = ['bakingbox', 'burger', 'cardboard', 'chocolate', 'cream',
                    'croc', 'crushedcan', 'duck', 'gallon', 'greencan', 'hotdog',
                    'icetray', 'mug', 'oatly', 'pinkcan', 'stapler', 'styrofoam',
                    'toothpaste']
+ROBOT_OBJECTS = ['bakingbox_sticky_A']
 
 
 """Directory utilities."""
@@ -187,7 +188,8 @@ def contactnets_input_dir_tagslam(
     """ContactNets' input directory for a particular experiment from TagSLAM."""
     traj_subdir = 'full' if full else 'toss'
     track_subdir = '' if full else 'tagslam'
-    object = dataset.split('_')[0]
+    object = dataset.split('_')[:-1]
+    object = '_'.join(object)
     cn_input_dir = op.join(
         contactnets_input_dir(object), dataset, traj_subdir, track_subdir)
 
@@ -204,7 +206,8 @@ def contactnets_input_dir_bundlesdf(
     traj_subdir = 'full' if full else 'toss'
     iteration_subdir = f'bundlesdf_iteration_{iteration}'
     id_subdir = '' if full else bundlesdf_id
-    object = dataset.split('_')[0]
+    object = dataset.split('_')[:-1]
+    object = '_'.join(object)
 
     cn_input_dir = op.join(
         contactnets_input_dir(object), dataset, traj_subdir, iteration_subdir,
@@ -223,7 +226,8 @@ def contactnets_input_dir_keyframes(
     traj_subdir = 'keyframe_toss'
     iteration_subdir = f'bundlesdf_iteration_{iteration}'
     id_subdir = bundlesdf_id
-    object = dataset.split('_')[0]
+    object = dataset.split('_')[:-1]
+    object = '_'.join(object)
 
     cn_input_dir = op.join(
         contactnets_input_dir(object), dataset, traj_subdir, iteration_subdir,
@@ -237,7 +241,8 @@ def contactnets_input_geometry_dir(
         dataset: str, iteration: int, bundlesdf_id: str,
         create: bool = True) -> str:
     """ContactNets' input directory for geometry information from BundleSDF."""
-    object = dataset.split('_')[0]
+    object = dataset.split('_')[:-1]
+    object = '_'.join(object)
     pll_asset_subdirs = op.join(f'vision_{object}', dataset)
     geom_for_pll_dir = pll_file_utils.geom_for_pll_dir(
         pll_asset_subdirs, bundlesdf_id, iteration, check_exists=False)
@@ -248,7 +253,8 @@ def contactnets_input_geometry_dir(
 def contactnets_output_dir(dataset: str, cycle_iteration: int, pll_id: str
                            ) -> str:
     """PLL's geometry output directory for a particular experiment."""
-    object = dataset.split('_')[0]
+    object = dataset.split('_')[:-1]
+    object = '_'.join(object)
     results_dir = op.join(
         pll_file_utils.RESULTS_DIR, f'vision_{object}', dataset)
     subdir = 'tagslam' if cycle_iteration <= 0 else \
@@ -645,6 +651,9 @@ def load_camera_extrinsics(object: str) -> Tuple[np.ndarray, np.ndarray]:
         camera_extrinsics_filename = 'realsense_pose_cube_hand_60_3.yaml'
     if object in TAGLESS_OBJECTS:
         camera_extrinsics_filename = 'realsense_pose_tagless.yaml'
+    if object in ROBOT_OBJECTS:
+        camera_extrinsics_filename = 'realsense_pose_robot.yaml'
+    print(f'Using {camera_extrinsics_filename} for {object}.')
     camera_extrinsics_file = op.join(DATA_GEN_DIR, 'assets',
                                      camera_extrinsics_filename)
 
@@ -670,6 +679,9 @@ def get_camera_intrinsics_filepath(object: str) -> str:
     filename = 'cam_K.txt'
     if object in TAGLESS_OBJECTS:
         filename = 'cam_K_tagless.txt'
+    elif object in ROBOT_OBJECTS:
+        filename = 'cam_K_robot.txt'
+    print(f'Using {filename} for {object}.')
     return op.join(DATA_GEN_DIR, 'assets', filename)
 
 def load_camera_intrinsics(object: str, as_matrix: bool = False):

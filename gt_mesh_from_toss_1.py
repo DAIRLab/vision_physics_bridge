@@ -143,7 +143,9 @@ def get_gt_aligned_geometry(
     )
 
     # Get another experiment that already has aligned geometry.
-    other_vision_asset = vision_asset.split('_')[0] + '_1-5'
+    object = vision_asset.split('_')[:-1]
+    object = '_'.join(object)
+    other_vision_asset = object + '_1-5'
     other_cycle_iteration = 1
     other_bundlesdf_id = 'bundlesdf_id_00'
 
@@ -203,7 +205,8 @@ def main_command(vision_asset: str, bundlesdf_id: str, nerf_bundlesdf_id: str,
         f'single-toss experiments in mind.'
     toss_num = int(vision_asset.split('_')[-1])
     assert toss_num != 1, f'Already have GT aligned geometry for toss 1.'
-    obj = vision_asset.split('_')[0]
+    obj = vision_asset.split('_')[:-1]
+    obj = '_'.join(obj)
 
     # Decode the BundleSDF run ID.
     if bundlesdf_id[:13] != 'bundlesdf_id_':

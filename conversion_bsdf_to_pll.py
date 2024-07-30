@@ -10,7 +10,12 @@ import torch
 from scipy import signal
 from scipy.spatial.transform import Rotation
 import matplotlib
-#matplotlib.use('TkAgg')
+matplotlib.use('TkAgg') # if not used, might see the following error: 
+# QObject::moveToThread: Current thread (0x55e00d8db800) is not the object's thread (0x55e00db6f700).                                                                         
+# Cannot move to target thread (0x55e00d8db800)                                                                                                                               
+                                                                                                                                                                            
+# qt.qpa.plugin: Could not load the Qt platform plugin "xcb" in "/opt/conda/envs/py38/lib/python3.8/site-packages/cv2/qt/plugins" even though it was found.                   
+# This application failed to start because no Qt platform plugin could be initialized. Reinstalling the application may fix this problem.
 import matplotlib.pyplot as plt
 import pdb
 import trimesh
@@ -94,7 +99,8 @@ class TrajectoryConverterBundleSDFToPLL:
         self.object = object
         self.cycle_iteration = cycle_iteration
 
-        if object in file_utils.TAGLESS_OBJECTS and not bsdf_only:
+        if (object in file_utils.TAGLESS_OBJECTS or \
+            object in file_utils.ROBOT_OBJECTS) and not bsdf_only:
             bsdf_only = True
             print(f'Overriding to set {bsdf_only=} for tagless {object=}.')
         self.bsdf_only = bsdf_only
@@ -1432,11 +1438,13 @@ def main_command(vision_asset: str, bundlesdf_id: str, nerf_bundlesdf_id: str,
     # directory.
     assert cycle_iteration > 0, f'Invalid cycle iteration: {cycle_iteration}.'
     assert '_' in vision_asset, f'Invalid asset directory: {vision_asset}.'
-    object = vision_asset.split('_')[0]
+    object = vision_asset.split('_')[:-1]
+    object = '_'.join(object)
 
-    start_toss = int(vision_asset.split('_')[1].split('-')[0])
-    end_toss = start_toss if '-' not in vision_asset else \
-        int(vision_asset.split('-')[1])
+    toss_key = vision_asset.split('_')[-1]
+    start_toss = int(toss_key.split('-')[0])
+    end_toss = start_toss if '-' not in toss_key else \
+        int(toss_key.split('-')[1])
     assert start_toss <= end_toss, f'Invalid toss range: {start_toss} ' + \
             f'-{end_toss} inferred from {vision_asset=}.'
 
@@ -1450,8 +1458,9 @@ def main_command(vision_asset: str, bundlesdf_id: str, nerf_bundlesdf_id: str,
 
     # Automatically detect if BundleSDF-only is necessary based on if the object
     # is a tagless one.
-    object = vision_asset.split('_')[0]
-    if object in file_utils.TAGLESS_OBJECTS:
+    object = vision_asset.split('_')[:-1]
+    object = '_'.join(object)
+    if object in file_utils.TAGLESS_OBJECTS or object in file_utils.ROBOT_OBJECTS:
         bsdf_only = True
         print(f'Automatically setting {bsdf_only=} for tagless {object=}.')
 

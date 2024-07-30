@@ -48,7 +48,8 @@ class MeshProcessor:
         # directory.
         assert cycle_iteration > 0, f'Invalid {cycle_iteration=}.'
         assert '_' in vision_asset, f'Invalid {vision_asset=}.'
-        self.object = vision_asset.split('_')[0]
+        self.object = vision_asset.split('_')[:-1]
+        self.object = '_'.join(self.object)
 
         self.vision_asset = vision_asset
         self.tracking_bundlesdf_id = tracking_bundlesdf_id
@@ -982,7 +983,12 @@ def process_distribute_alignments_command(distribute: bool):
 
         if not op.isdir(op.join(eval_dir, eval_subdir)):
             continue
-        vision_asset = '_'.join(eval_subdir.split('_')[:2])
+        if 'bsdf' in eval_subdir:
+            vision_asset = eval_subdir.split('_bsdf_')[0]
+        elif 'pll' in eval_subdir:
+            vision_asset = eval_subdir.split('_pll_')[0]
+        else:
+            vision_asset = '_'.join(eval_subdir.split('_')[:-3])
         cycle_str = eval_subdir.split('_')[-1]
         if not cycle_str.isdigit():
             # Skip an unintended directory, since all must end with cycle iteration.

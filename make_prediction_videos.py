@@ -51,10 +51,12 @@ NUM_SPIN_IMAGES = 100
 
 
 def get_camera_intrinsics(vision_asset: str):
-    object = vision_asset.split('_')[0]
-    start_toss = int(vision_asset.split('_')[1].split('-')[0])
-    end_toss = start_toss if '-' not in vision_asset else \
-        int(vision_asset.split('-')[1])
+    object = vision_asset.split('_')[:-1]
+    object = '_'.join(object)
+    toss_key = vision_asset.split('_')[-1]
+    start_toss = int(toss_key.split('-')[0])
+    end_toss = start_toss if '-' not in toss_key else \
+        int(toss_key.split('-')[1])
     
     rosbag_number = file_utils.load_rosbag_number_from_yaml(
         object, start_toss, second_toss_number=end_toss)
@@ -69,7 +71,8 @@ def convert_world_tfs_to_camera(vision_asset: str, world_tfs: np.ndarray):
     assert world_tfs.shape[1] == 4 and world_tfs.shape[2] == 4
 
     # Get extrinsics.
-    object = vision_asset.split('_')[0]
+    object = vision_asset.split('_')[:-1]
+    object = '_'.join(object)
     cam_trans, cam_axis_angle = file_utils.load_camera_extrinsics(object)
 
     cam_tfs = np.zeros_like(world_tfs)
@@ -277,7 +280,8 @@ def make_colorized_mesh_spin_video(
         mesh_to_vis = load_viewable_mesh(true_mesh_path)
 
         # Make sure the video path uses the right name.
-        object_name = op.basename(mesh_video_path).split('_')[0]
+        object_name = op.basename(mesh_video_path).split('_')[:-1]
+        object_name = '_'.join(object_name)
         mesh_video_path = op.join(
             op.dirname(mesh_video_path), f'{object_name}_true.mp4')
 
@@ -547,7 +551,7 @@ def main_command(vision_asset: str, bundlesdf_id: str, nerf_bundlesdf_id: str,
     for key, val in history.items():
         print(f'\t{key} : {val}')
 
-    start_toss = int(vision_asset.split('_')[1].split('-')[0])
+    start_toss = int(vision_asset.split('_')[-1].split('-')[0])
 
     if image_only:
         # Do the overlay generation.
