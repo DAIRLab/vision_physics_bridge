@@ -48,8 +48,7 @@ class MeshProcessor:
         # directory.
         assert cycle_iteration > 0, f'Invalid {cycle_iteration=}.'
         assert '_' in vision_asset, f'Invalid {vision_asset=}.'
-        self.object = vision_asset.split('_')[:-1]
-        self.object = '_'.join(self.object)
+        self.object = '_'.join(vision_asset.split('_')[:-1])
 
         self.vision_asset = vision_asset
         self.tracking_bundlesdf_id = tracking_bundlesdf_id

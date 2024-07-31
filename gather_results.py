@@ -344,10 +344,8 @@ def add_experiment_to_overall_results(experiment_results, add_to_results):
     # First interpret the experiment's object and training data so can narrow
     # down to the place in the overall results.
     vision_asset = experiment_results['_overview']['vision_asset']
-    object = vision_asset.split('_')[:-1]
-    object = '_'.join(object)
-    tag_key = 'tagless_objects' if object in file_utils.TAGLESS_OBJECTS \
-        or object in file_utils.ROBOT_OBJECTS else \
+    object = '_'.join(vision_asset.split('_')[:-1])
+    tag_key = 'tagless_objects' if object in file_utils.TAGLESS_OBJECTS else \
         'tagged_objects'
 
     toss_key = vision_asset.split('_')[-1]

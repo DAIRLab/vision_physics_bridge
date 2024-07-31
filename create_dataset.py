@@ -65,15 +65,16 @@ class DatasetCreator:
         # Parse the system and start/end tosses from the provided asset name.
         assert '_' in vision_asset, f'Invalid asset directory: {vision_asset}.'
         # want to split {xxx_xxx_..._xxx}_{x-x} into object={xxx_xxx_..._xxx}
-        # and {x-x}
+        # and tosses={x-x}
         # need to only split on the last underscore
-        object = vision_asset.split('_')[:-1]
-        self.object = '_'.join(object)
+        self.object = '_'.join(vision_asset.split('_')[:-1])
 
-        toss_key = vision_asset.split('_')[-1]
-        start_toss = int(toss_key.split('-')[0])
-        end_toss = start_toss if '-' not in toss_key else \
-            int(toss_key.split('-')[1])
+        # Determine if the experiment has robot interactions or not.
+        self.has_robot_interactions = vision_asset.startswith('robot')
+
+        start_toss = int(vision_asset.split('_')[-1].split('-')[0])
+        end_toss = start_toss if '-' not in vision_asset else \
+            int(vision_asset.split('-')[1])
         assert start_toss <= end_toss, f'Invalid toss range: {start_toss} ' + \
             f'-{end_toss} inferred from {vision_asset=}.'
         self.start_toss = start_toss
@@ -135,10 +136,15 @@ class DatasetCreator:
 
         if not self.tagslam_only:
             self._create_images()
+
         if not self.bsdf_only:
             self._create_tagslam_poses()
             self._create_synchronized_tagslam_poses()
             self._create_annotated_poses()
+
+        if self.has_robot_interactions:
+            self._create_franka_states()
+            self._create_synchronized_franka_states()
 
         if not self.tagslam_only:
             # Copy the camera intrinsics.
@@ -152,12 +158,108 @@ class DatasetCreator:
         else:
             print(f'Finished creating TagSLAM data for {self.vision_asset}.')
 
+    def _create_franka_states(self):
+        robot_bag_file = file_utils.get_robot_bag_filename(self.rosbag_number)
+
+        # Extract the Franka joint states and end effector positions, writing
+        # them to cnets-data-generation/dataset/{vision_asset}/.
+        rosbag_processor.extract_franka_joints(
+            start_time=self.start_time, end_time=self.end_time,
+            bag_file=robot_bag_file,
+            franka_joint_states_output_dir=self.cnets_data_gen_dir
+        )
+
+    def _create_synchronized_franka_states(self):
+        """Synchronizes the Franka states at the timestamps of the RGBD images.
+        This is done by linearly interpolating the Franka data to the timestamps
+        of the RGBD images, and writing the synchronized positions to
+        bundlenets/cnets-data-generation/dataset/{vision_asset}/
+        synced_{VALUE}.txt."""
+        # First load the BundleSDF timestamps.
+        bsdf_times = np.loadtxt(
+            op.join(self.cnets_data_gen_dir, 'bundlesdf_timestamps.txt'))
+
+        # Load the Franka data.
+        franka_times = np.loadtxt(
+            op.join(self.cnets_data_gen_dir, 'joint_times.txt'))
+        franka_ee_positions = np.loadtxt(
+            op.join(self.cnets_data_gen_dir, 'ee_positions.txt'))
+        franka_joint_angles = np.loadtxt(
+            op.join(self.cnets_data_gen_dir, 'joint_angles.txt'))
+        franka_joint_velocities = np.loadtxt(
+            op.join(self.cnets_data_gen_dir, 'joint_velocities.txt'))
+        franka_joint_efforts = np.loadtxt(
+            op.join(self.cnets_data_gen_dir, 'joint_efforts.txt'))
+        franka_data = [franka_ee_positions, franka_joint_angles,
+                       franka_joint_velocities, franka_joint_efforts]
+
+        # Estimate each end effector position at the BundleSDF timestamps.
+        synced_ee_positions = np.zeros((len(bsdf_times), 3))
+        synced_joint_angles = np.zeros((
+            len(bsdf_times), franka_joint_angles.shape[1]))
+        synced_joint_velocities = np.zeros((
+            len(bsdf_times), franka_joint_velocities.shape[1]))
+        synced_joint_efforts = np.zeros((
+            len(bsdf_times), franka_joint_efforts.shape[1]))
+        synced_franka_data = [synced_ee_positions, synced_joint_angles,
+                              synced_joint_velocities, synced_joint_efforts]
+
+        for i, bsdf_time in enumerate(bsdf_times):
+            # Find the two Franka times that sandwich the current BSDF time.
+            try:
+                after_idx = np.where(franka_times > bsdf_time)[0][0]
+            except IndexError:
+                after_idx = len(franka_times) - 1
+                print(f'bsdf frame {i} is after the last TagSLAM pose.')
+            try:
+                before_idx = np.where(franka_times < bsdf_time)[0][-1]
+            except IndexError:
+                before_idx = 0
+                print(f'bsdf frame {i} is before the first TagSLAM pose.')
+
+            # Linearly interpolate the Franka quantity.
+            t1 = franka_times[before_idx]
+            t2 = franka_times[after_idx]
+
+            for quantity, synced_quantity in zip(
+                franka_data, synced_franka_data):
+                p1 = quantity[before_idx]
+                p2 = quantity[after_idx]
+                if t1 == t2:
+                    assert (before_idx == 0 and after_idx == 0) or \
+                        (before_idx == len(franka_times)-1) and \
+                        (after_idx == len(franka_times)-1), \
+                        f'Expected {t1=} == {t2=} only at the beginning or end.'
+                    interpolated_position = p1
+                else:
+                    assert after_idx-before_idx == 1, f'Expected 1 between ' + \
+                        f'{before_idx=} and {after_idx=}.'
+                    fraction = (bsdf_time - t1) / (t2 - t1)
+                    interpolated_position = p1 + fraction*(p2 - p1)
+
+                # Store the synchronized quantity.
+                synced_quantity[i] = interpolated_position
+
+        # Write the synchronized quantities to file.
+        filepath = op.join(self.cnets_data_gen_dir, 'synced_ee_positions.txt')
+        np.savetxt(filepath, synced_ee_positions)
+        filepath = op.join(self.cnets_data_gen_dir, 'synced_joint_angles.txt')
+        np.savetxt(filepath, synced_joint_angles)
+        filepath = op.join(self.cnets_data_gen_dir,
+                           'synced_joint_velocities.txt')
+        np.savetxt(filepath, synced_joint_velocities)
+        filepath = op.join(self.cnets_data_gen_dir, 'synced_joint_efforts.txt')
+        np.savetxt(filepath, synced_joint_efforts)
+
+        print(f'Wrote synchronized robot data to {filepath}.')
+
     def _create_images(self):
         depth_bag_file = file_utils.get_depth_bag_filename(self.rosbag_number)
 
-        # Get the depth offset -- if doing BundleSDF only, no need to subtract
-        # anything out.
-        self.depth_offset_mm = 0 if self.bsdf_only else -12
+        # Get the depth offset -- no need to subtract anything out unless doing
+        # BundleSDF only and the experiment is not robot interaction.
+        self.depth_offset_mm = 0 if \
+            (self.bsdf_only and not self.has_robot_interactions) else -12
         print(f'NOTE: Using {self.depth_offset_mm=} mm.\n')
 
         # Extract the synchronized RGB and depth images, writing them to
@@ -194,7 +296,7 @@ class DatasetCreator:
         """
         # First load the BundleSDF timestamps.
         bsdf_times = np.loadtxt(
-            op.join(op.dirname(self.tagslam_dir), 'bundlesdf_timestamps.txt'))
+            op.join(self.cnets_data_gen_dir, 'bundlesdf_timestamps.txt'))
 
         # Load the TagSLAM data.
         tagslam_data = np.loadtxt(op.join(self.tagslam_dir, 'tagslam.txt'))
@@ -233,7 +335,8 @@ class DatasetCreator:
             p2 = tagslam_poses[after_idx]
             if t1 == t2:
                 assert (before_idx == 0 and after_idx == 0) or \
-                    (before_idx == len(tagslam_times)-1 and after_idx == len(tagslam_times)-1), \
+                    (before_idx == len(tagslam_times)-1) and \
+                    (after_idx == len(tagslam_times)-1), \
                     f'Expected {t1=} == {t2=} only at the beginning or end.'
                 interpolated_pose = p1
             else:
@@ -277,8 +380,8 @@ class DatasetCreator:
         # Visualize the depth offset with the ability to make adjustments for
         # future calls to create_dataset.
         if 'cube' in self.vision_asset and not self.bsdf_only:
-            print(f'Skip visualizing the results of {self.depth_offset_mm=} for ' + \
-                f'{self.vision_asset}.')
+            print(f'Skip visualizing the results of {self.depth_offset_mm=}' + \
+                  f' for {self.vision_asset}.')
             # import inspect_camera_alignments
             # inspect_camera_alignments.interactive_offset_adjustment(
             #     self.vision_asset, 1)
@@ -304,9 +407,11 @@ class DatasetCreator:
                    "system and tosses.")
 @click.option('--tagslam-only',
               is_flag=True,
+              default=False,
               help="whether to generate just TagSLAM-related data.")
 @click.option('--bsdf-only',
               is_flag=True,
+              default=False,
               help="whether to generate just BundleSDF-related data.")
 @click.option('--clear-data/--keep-data',
               default=False,
@@ -316,10 +421,10 @@ def main_command(vision_asset: str, tagslam_only: bool, bsdf_only: bool,
                  clear_data: bool):
     # Automatically detect if BundleSDF-only is necessary based on if the object
     # is a tagless one.
-    object = vision_asset.split('_')[:-1]
-    object = '_'.join(object)
-    if object in file_utils.TAGLESS_OBJECTS or object in file_utils.ROBOT_OBJECTS:
+    object = '_'.join(vision_asset.split('_')[:-1])
+    if object in file_utils.TAGLESS_OBJECTS or object.startswith('robot'):
         bsdf_only = True
+        tagslam_only = False
         print(f'Automatically setting {bsdf_only=} for tagless {object=}.')
 
     # Get the data and pose directories, checking if they already exist.

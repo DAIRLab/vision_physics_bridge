@@ -1,7 +1,5 @@
-import math
 import os
 import os.path as op
-import cv2
 import rosbag
 import rospy
 import pdb
@@ -9,11 +7,11 @@ import imageio
 from cv_bridge import CvBridge
 import numpy as np
 from tqdm import tqdm
-from dataclasses import dataclass
-from nav_msgs.msg import Odometry
 from scipy.spatial.transform import Rotation as R
 
-import math_utils
+from pydrake.all import MultibodyPlant, Parser, DiagramBuilder, RigidTransform
+
+import file_utils, math_utils
 
 
 DEPTH_ROS_TOPIC = "/camera/aligned_depth_to_color/image_raw"
@@ -87,7 +85,9 @@ def extract_synchronized_rgb_and_depth_images(
             # Incorporate the depth offset, excluding non-returns (depth=0).
             cv_img_depth[cv_img_depth != 0] += depth_offset_mm_formatted
             # If we want to smooth the depth map
-            # cv_img_depth = cv2.bilateralFilter(cv_img_depth.astype(np.float32), 20, 20, 10).astype(np.uint16)   # diameter, sigmaColor, sigmaSpace
+            # cv_img_depth = cv2.bilateralFilter(cv_img_depth.astype(
+            # np.float32), 20, 20, 10).astype(np.uint16)
+            # # diameter, sigmaColor, sigmaSpace
 
             # Store the result.
             depth_images[msg.header.stamp.to_sec()] = cv_img_depth
@@ -188,6 +188,112 @@ def extract_tagslam_poses(
 
     odom_bag.close()
 
+"""Extract the Franka joint states from a robot bag file between start and end
+times.  Called by create_dataset.py for interactive robot experiments."""
+def extract_franka_joints(
+        start_time: rospy.rostime.Time, end_time: rospy.rostime.Time,
+        bag_file: str, franka_joint_states_output_dir: str
+):
+    robot_bag = rosbag.Bag(bag_file, "r")
+
+    start_time = start_time.to_sec()
+    end_time = end_time.to_sec()
+    print(f"start_time: {start_time}, end_time: {end_time}")
+
+    # Extract the joint states, storing them exactly as reported in the bag.
+    joint_angles, joint_velocities, joint_efforts, times = [], [], [], []
+    joint_names = None
+    for (_topic, msg, _t) in tqdm(robot_bag.read_messages(
+        topics=[JOINT_STATE_ROS_TOPIC])):
+        # Skip messages before the start time; stop past the end time.  Add
+        # extra buffer in case the first or last closest joint state pose
+        # message is a bit outside this range.  This will get resolved
+        # afterwards with a synchronization step.
+        if msg.header.stamp.to_sec() < start_time - TIME_EXCESS_BUFFER:
+            continue
+        if msg.header.stamp.to_sec() > end_time + TIME_EXCESS_BUFFER:
+            break
+
+        if joint_names is None:
+            joint_names = msg.name
+
+        # Store the joint information from the message.
+        joint_angles.append(list(msg.position))
+        joint_velocities.append(list(msg.velocity))
+        joint_efforts.append(list(msg.effort))
+        times.append(msg.header.stamp.to_sec())
+
+    print(f'Extracted {len(joint_angles)} joint states from the odometry bag.')
+
+    # Write the joint states and timestamps to file.
+    joint_times = np.array(times).reshape(-1, 1)
+    joint_angles = np.array(joint_angles).reshape(-1, len(joint_names))
+    joint_velocities = np.array(joint_velocities).reshape(-1, len(joint_names))
+    joint_efforts = np.array(joint_efforts).reshape(-1, len(joint_names))
+    np.savetxt(op.join(franka_joint_states_output_dir, 'joint_times.txt'),
+               joint_times)
+    np.savetxt(op.join(franka_joint_states_output_dir, 'joint_angles.txt'),
+               joint_angles)
+    np.savetxt(op.join(franka_joint_states_output_dir, 'joint_velocities.txt'),
+               joint_velocities)
+    np.savetxt(op.join(franka_joint_states_output_dir, 'joint_efforts.txt'),
+               joint_efforts)
+    with open(op.join(franka_joint_states_output_dir, 'joint_names.txt'), 'w') \
+        as f:
+        f.write('\n'.join(joint_names))
+    print('Wrote Franka joint states and times to file.')
+
+    # Convert the joint angles to end effector positions.
+    ee_positions = convert_franka_joints_to_ee_positions(
+        joint_angles, joint_names)
+    np.savetxt(op.join(franka_joint_states_output_dir, 'ee_positions.txt'),
+               ee_positions)
+    print('Wrote Franka end effector positions to file.')
+
+    robot_bag.close()
+
+"""Convert Franka joint angles to the 3D world position of the end effector's
+center.  Assumes the Franka base is at the world origin, and uses the Franka and
+end effector geometry defined in assets/franka_with_ee.urdf.  This uses Drake to
+build a plant with the Franka, set the plant's joint angles, then query the
+position of the end effector tip's origin."""
+def convert_franka_joints_to_ee_positions(
+        joint_angles: np.ndarray, joint_names: list):
+    # Build a Drake plant with the Franka at the world origin.
+    builder = DiagramBuilder()
+    plant = MultibodyPlant(time_step=0.0)
+    parser = Parser(plant)
+    parser.AddModels(file_utils.franka_filepath())
+    plant.WeldFrames(
+        plant.world_frame(), plant.GetFrameByName("panda_link0"),
+        RigidTransform()
+    )
+    plant.Finalize()
+    builder.AddSystem(plant)
+    builder.Build()
+    context = plant.CreateDefaultContext()
+
+    # Get the indices of the joint names that correspond to the Franka joints.
+    sim_joint_names = plant.GetPositionNames()
+    sim_joint_indices = -1 * np.ones((len(sim_joint_names),), dtype=int)
+    for sim_joint_index, sim_joint_name in enumerate(sim_joint_names):
+        for recorded_joint_index, recorded_joint_name in enumerate(joint_names):
+            if recorded_joint_name in sim_joint_name:
+                sim_joint_indices[sim_joint_index] = recorded_joint_index
+                break
+    assert np.all(sim_joint_indices >= 0), 'Failed to find all joint ' + \
+        f'indices: {sim_joint_names=} vs. {joint_names=}.'
+
+    # Prepare to store the end effector positions.
+    ee_positions = np.zeros((joint_angles.shape[0], 3))
+
+    # Iterate over all the joint angles and read the corresponding EE position.
+    for i, joint_angle in enumerate(joint_angles):
+        plant.SetPositions(context, joint_angle[sim_joint_indices])
+        ee_positions[i] = plant.EvalBodyPoseInWorld(
+            context, plant.GetBodyByName("end_effector_tip")).translation()
+
+    return ee_positions
 
 """Write the initial TagSLAM origin pose, as reported by TagSLAM, expressed in
 camera frame.  This gets stored as a 4x4 transformation matrix titled 0000.txt
@@ -353,4 +459,8 @@ def get_all_camera_intrinsics(raw_bag_file):
 
 
 if __name__ == "__main__":
-    pass
+    extract_franka_joints(
+        None, None,
+        '/home/bibit/vision/bundlenets/cnets-data-generation/rosbags/' + \
+        'robot_bags/vision_bags/bakingbox_sticky/raw_201.bag',
+        None)

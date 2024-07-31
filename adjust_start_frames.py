@@ -59,9 +59,8 @@ class DynamicsStartAdjuster(DynamicsPredictor):
         # Automatically detect if BundleSDF-only is necessary based on if the
         # object is a tagless one.
         bsdf_only = False
-        object = vision_asset.split('_')[:-1]
-        object = '_'.join(object)
-        if object in file_utils.TAGLESS_OBJECTS or object in file_utils.ROBOT_OBJECTS:
+        object = '_'.join(vision_asset.split('_')[:-1])
+        if object in file_utils.TAGLESS_OBJECTS:
             bsdf_only = True
             print(f'Automatically setting {bsdf_only=} for tagless {object=}.')
         else:

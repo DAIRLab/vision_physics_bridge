@@ -366,8 +366,8 @@ dataset: #toss_id:rosbag_id
   # TODO annotate these to use the right number of interactions
   # TODO figure out how to handle multiple experiments per object.  For now I'm
   # adding a _A suffix, but we could just have multiple bags listed under a
-  # single bakingbox_sticky entry.
-  bakingbox_sticky_A: 
+  # single robot_bakingbox_sticky entry.
+  robot_bakingbox_sticky_A:
     0: 
     1: 201
     2: 201
@@ -3892,11 +3892,11 @@ tosses:
       end_frame: 87
       start_adjust: 2
 
-  # Tagless robot interaction experiments
+  # Robot interaction experiments
   # TODO annotate these to use the right number of interactions
   # TODO I removed start_frame, end_frame, and start_adjust from these robot
   # experiments; check that this doesn't break any code.
-  bakingbox_sticky_A:
+  robot_bakingbox_sticky_A:
     - toss: 0
     - toss: 1
       start_time:

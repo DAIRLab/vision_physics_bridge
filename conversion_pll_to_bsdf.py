@@ -71,10 +71,9 @@ class GeometryConverterPLLToBundleSDF:
 
         object = vision_asset.split('_')[:-1]
         object = '_'.join(object)
-        toss_key = vision_asset.split('_')[-1]
-        start_toss = int(toss_key.split('-')[0])
-        end_toss = start_toss if '-' not in toss_key else \
-            int(toss_key.split('-')[1])
+        start_toss = int(vision_asset.split('_')[-1].split('-')[0])
+        end_toss = start_toss if '-' not in vision_asset else \
+            int(vision_asset.split('-')[1])
 
         self.vision_asset = vision_asset
         self.object = object
@@ -334,10 +333,9 @@ def main_command(vision_asset: str, pll_id: str, cycle_iteration: int):
         f'trained with BundleSDF tracking) or -1 (PLL trained with TagSLAM ' + \
         f'tracking), but got {cycle_iteration=}.'
 
-    toss_key = vision_asset.split('_')[-1]
-    start_toss = int(toss_key.split('-')[0])
-    end_toss = start_toss if '-' not in toss_key else \
-        int(toss_key.split('-')[1])
+    start_toss = int(vision_asset.split('_')[-1].split('-')[0])
+    end_toss = start_toss if '-' not in vision_asset else \
+        int(vision_asset.split('-')[1])
     assert start_toss <= end_toss, f'Invalid toss range: {start_toss} ' + \
         f'-{end_toss} inferred from {vision_asset=}.'
     

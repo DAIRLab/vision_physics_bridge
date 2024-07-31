@@ -49,7 +49,6 @@ TAGLESS_OBJECTS = ['bakingbox', 'burger', 'cardboard', 'chocolate', 'cream',
                    'croc', 'crushedcan', 'duck', 'gallon', 'greencan', 'hotdog',
                    'icetray', 'mug', 'oatly', 'pinkcan', 'stapler', 'styrofoam',
                    'toothpaste']
-ROBOT_OBJECTS = ['bakingbox_sticky_A']
 
 
 """Directory utilities."""
@@ -297,6 +296,12 @@ def bundlesdf_video_mask_dir(dataset: str, check_exists: bool = True) -> str:
     """The BundleSDF input directory for RGB images for a particular dataset."""
     return bsdf_file_utils.video_mask_dir(
         dataset, check_parent_exists=check_exists)
+
+
+"""Asset filepaths."""
+def franka_filepath():
+    """Path to the Franka URDF file."""
+    return op.join(DATA_GEN_DIR, 'assets', 'franka_with_ee.urdf')
 
 def pink_triad_obj_filepath():
     """Path to the pink triad for official video overlays."""
@@ -647,13 +652,12 @@ def load_camera_extrinsics(object: str) -> Tuple[np.ndarray, np.ndarray]:
     camera_extrinsics_filename = f'realsense_pose_{object}.yaml'
     if object in ['milk', 'prism']:
         camera_extrinsics_filename = 'realsense_pose_milk_prism.yaml'
-    if object == 'cube_hand':
+    elif object == 'cube_hand':
         camera_extrinsics_filename = 'realsense_pose_cube_hand_60_3.yaml'
-    if object in TAGLESS_OBJECTS:
+    elif object in TAGLESS_OBJECTS:
         camera_extrinsics_filename = 'realsense_pose_tagless.yaml'
-    if object in ROBOT_OBJECTS:
+    elif object.startswith('robot'):
         camera_extrinsics_filename = 'realsense_pose_robot.yaml'
-    print(f'Using {camera_extrinsics_filename} for {object}.')
     camera_extrinsics_file = op.join(DATA_GEN_DIR, 'assets',
                                      camera_extrinsics_filename)
 
@@ -679,9 +683,8 @@ def get_camera_intrinsics_filepath(object: str) -> str:
     filename = 'cam_K.txt'
     if object in TAGLESS_OBJECTS:
         filename = 'cam_K_tagless.txt'
-    elif object in ROBOT_OBJECTS:
+    if object.startswith('robot'):
         filename = 'cam_K_robot.txt'
-    print(f'Using {filename} for {object}.')
     return op.join(DATA_GEN_DIR, 'assets', filename)
 
 def load_camera_intrinsics(object: str, as_matrix: bool = False):
@@ -843,6 +846,12 @@ def load_optimized_keyframe_poses_from_nerf_results(
 """ROS Bag utilities."""
 def get_depth_bag_filename(rosbag_number: int) -> str:
     """Get the filename of the ROS bag with the raw depth data."""
+    bag_filename = op.join(DATA_GEN_DIR, 'rosbags', f'raw_{rosbag_number}.bag')
+    assert op.exists(bag_filename), f'Did not find expected {bag_filename}'
+    return bag_filename
+
+def get_robot_bag_filename(rosbag_number: int) -> str:
+    """Get the filename of the ROS bag with the raw depth and robot data."""
     bag_filename = op.join(DATA_GEN_DIR, 'rosbags', f'raw_{rosbag_number}.bag')
     assert op.exists(bag_filename), f'Did not find expected {bag_filename}'
     return bag_filename

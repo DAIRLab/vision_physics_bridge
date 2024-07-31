@@ -476,10 +476,9 @@ def get_synced_bsdf_tagslam_toss_poses(
     asset, then the first frame of that toss is used.  Otherwise, the first
     frame of the full BundleSDF trajectory is used.  Returns both poses as 4x4
     transformation matrices."""
-    toss_key = vision_asset.split('_')[-1]
-    start_toss = int(toss_key.split('-')[0])
-    end_toss = start_toss if '-' not in toss_key else \
-        int(toss_key.split('-')[1])
+    start_toss = int(vision_asset.split('_')[-1].split('-')[0])
+    end_toss = start_toss if '-' not in vision_asset else \
+        int(vision_asset.split('-')[1])
 
     # First try to use the first frame of the exact toss.
     if desired_toss_num in range(start_toss, end_toss+1):
@@ -538,8 +537,7 @@ def get_synced_bsdf_keyframe_tagslam_toss_poses(
     b_trans_mat_camera = keyframe_tfs[-1]
 
     # Convert to world frame.
-    object = vision_asset.split('_')[:-1]
-    object = '_'.join(object)
+    object = '_'.join(vision_asset.split('_')[:-1])
     cam_trans, cam_rot_axis_angle = file_utils.load_camera_extrinsics(object)
     b_trans_mat = math_utils.camera_to_world(
         b_trans_mat_camera, translation=cam_trans, axis_vec=cam_rot_axis_angle)
@@ -1070,13 +1068,11 @@ class TagSLAMTrajectoryConverter(TrajectoryConverterBundleSDFToPLL):
         tagslam_converter.save_data()
     """
     def __init__(self, vision_asset: str):
-        object = vision_asset.split('_')[:-1]
-        object = '_'.join(object)
+        object = '_'.join(vision_asset.split('_')[:-1])
 
-        toss_key = vision_asset.split('_')[-1]
-        start_toss = int(toss_key.split('-')[0])
-        end_toss = start_toss if '-' not in toss_key else \
-            int(toss_key.split('-')[1])
+        start_toss = int(vision_asset.split('_')[-1].split('-')[0])
+        end_toss = start_toss if '-' not in vision_asset else \
+            int(vision_asset.split('-')[1])
         assert start_toss <= end_toss, f'Invalid toss range: {start_toss} ' + \
                 f'-{end_toss} inferred from {vision_asset=}.'
 
