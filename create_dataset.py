@@ -70,9 +70,10 @@ class DatasetCreator:
         object = vision_asset.split('_')[:-1]
         self.object = '_'.join(object)
 
-        start_toss = int(vision_asset.split('_')[-1].split('-')[0])
-        end_toss = start_toss if '-' not in vision_asset else \
-            int(vision_asset.split('-')[1])
+        toss_key = vision_asset.split('_')[-1]
+        start_toss = int(toss_key.split('-')[0])
+        end_toss = start_toss if '-' not in toss_key else \
+            int(toss_key.split('-')[1])
         assert start_toss <= end_toss, f'Invalid toss range: {start_toss} ' + \
             f'-{end_toss} inferred from {vision_asset=}.'
         self.start_toss = start_toss
@@ -315,8 +316,9 @@ def main_command(vision_asset: str, tagslam_only: bool, bsdf_only: bool,
                  clear_data: bool):
     # Automatically detect if BundleSDF-only is necessary based on if the object
     # is a tagless one.
-    object = vision_asset.split('_')[0]
-    if object in file_utils.TAGLESS_OBJECTS:
+    object = vision_asset.split('_')[:-1]
+    object = '_'.join(object)
+    if object in file_utils.TAGLESS_OBJECTS or object in file_utils.ROBOT_OBJECTS:
         bsdf_only = True
         print(f'Automatically setting {bsdf_only=} for tagless {object=}.')
 
@@ -344,6 +346,7 @@ def main_command(vision_asset: str, tagslam_only: bool, bsdf_only: bool,
     # Create the dataset.
     dataset_creator = DatasetCreator(vision_asset, tagslam_only, bsdf_only)
     dataset_creator.create()
+    dataset_creator._compute_table_offset()
 
 
 if __name__ == '__main__':

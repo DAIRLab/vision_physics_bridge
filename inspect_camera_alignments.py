@@ -84,7 +84,8 @@ def load_and_adjust_depth_readings_in_image(
 ) -> np.ndarray:
     """Apply a depth reading offset to a depth image, which causes in a shrink
     or expansion of the resulting 3D point cloud."""
-    object = vision_asset.split('_')[0]
+    object = vision_asset.split('_')[:-1]
+    object = '_'.join(object)
 
     # Get the camera intrinsics and extrinsics.
     fx, fy, cx, cy = file_utils.load_camera_intrinsics(object)
@@ -110,7 +111,8 @@ def load_depth_image_as_points(vision_asset: str, frame_num: int,
                                z_axis_offset_meters: float = 0.0, smoothing: bool =False) -> np.ndarray:
     """Load a depth image from the BundlesDF dataset as a set of 3D points in
     world frame."""
-    object = vision_asset.split('_')[0]
+    object = vision_asset.split('_')[:-1]
+    object = '_'.join(object)
 
     # Get the camera intrinsics and extrinsics.
     fx, fy, cx, cy = file_utils.load_camera_intrinsics(object)
@@ -163,10 +165,12 @@ def load_tagslam_pose(vision_asset: str, frame_num: int) -> np.ndarray:
 
 def load_poses_and_camera_images(vision_asset: str, frame_num: int):
     """Load the TagSLAM poses and camera images for a given frame."""
-    object = vision_asset.split('_')[0]
-    start_toss = int(vision_asset.split('_')[1].split('-')[0])
-    end_toss = start_toss if '-' not in vision_asset else \
-        int(vision_asset.split('-')[1])
+    object = vision_asset.split('_')[:-1]
+    object = '_'.join(object)
+    toss_key = vision_asset.split('_')[-1]
+    start_toss = int(toss_key.split('-')[0])
+    end_toss = start_toss if '-' not in toss_key else \
+        int(toss_key.split('-')[1])
     
     start_time = file_utils.load_toss_time_from_yaml(
         object, start_toss, 'start_time', as_ros_time=True)
@@ -213,10 +217,12 @@ def inspect_tagslam_times(vision_asset: str, frame_num: int):
 
 def get_all_camera_intrinsics_extrinsics(vision_asset: str):
     """Get the camera intrinsics and extrinsics for all four cameras."""
-    object = vision_asset.split('_')[0]
-    start_toss = int(vision_asset.split('_')[1].split('-')[0])
-    end_toss = start_toss if '-' not in vision_asset else \
-        int(vision_asset.split('-')[1])
+    object = vision_asset.split('_')[:-1]
+    object = '_'.join(object)
+    toss_key = vision_asset.split('_')[-1]
+    start_toss = int(toss_key.split('-')[0])
+    end_toss = start_toss if '-' not in toss_key else \
+        int(toss_key.split('-')[1])
     
     rosbag_number = file_utils.load_rosbag_number_from_yaml(
         object, start_toss, second_toss_number=end_toss)
@@ -380,7 +386,8 @@ def compute_camera_axes_in_world(cam_trans, cam_axis_angle):
 
 def compute_camera_z_normal(vision_asset: str) -> np.ndarray:
     """Compute the normal vector of the camera's z-axis in world frame."""
-    object = vision_asset.split('_')[0]
+    object = vision_asset.split('_')[:-1]
+    object = '_'.join(object)
     _cam_trans, cam_rot_axis_angle = file_utils.load_camera_extrinsics(object)
     cam_rot_axis_angle = cam_rot_axis_angle.squeeze()
 

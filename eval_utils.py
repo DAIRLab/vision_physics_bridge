@@ -364,9 +364,10 @@ def create_empty_results_dict(
     empty_results = file_utils.load_empty_results_yaml()
 
     # First modification:  Add the appropriate toss numbers.
-    start_toss = int(vision_asset.split('_')[-1].split('-')[0])
+    toss_key = vision_asset.split('_')[-1]
+    start_toss = int(toss_key.split('-')[0])
     end_toss = start_toss if '-' not in vision_asset else \
-        int(vision_asset.split('-')[1])
+        int(toss_key.split('-')[1])
 
     for category_key in METRICS_BY_TOSS:
         sub_results = empty_results[category_key]['against_bundlesdf']
@@ -387,7 +388,7 @@ def create_empty_results_dict(
     # Second modification:  Get rid of any against_tagslam entries if the object
     # is tagless.
     object = '_'.join(vision_asset.split('_')[:-1])
-    if object in file_utils.TAGLESS_OBJECTS:
+    if object in file_utils.TAGLESS_OBJECTS or object in file_utils.ROBOT_OBJECTS:
         for category_key in METRICS_BY_TOSS:
             del empty_results[category_key]['against_tagslam']
 
@@ -417,7 +418,7 @@ def get_pll_tagslam_trajectories_pll_format(object: str) -> dict:
     already in PLL format.  Returns a dictionary with toss numbers as keys and
     torch tensors (N, 13) as values.  Returns None if the object is tagless and
     thus there are no TagSLAM trajectories."""
-    if object in file_utils.TAGLESS_OBJECTS:
+    if object in file_utils.TAGLESS_OBJECTS or object in file_utils.ROBOT_OBJECTS:
         print(f'Object {object} is tagless; no TagSLAM trajectories.')
         return None
 
@@ -475,9 +476,10 @@ def get_synced_bsdf_tagslam_toss_poses(
     asset, then the first frame of that toss is used.  Otherwise, the first
     frame of the full BundleSDF trajectory is used.  Returns both poses as 4x4
     transformation matrices."""
-    start_toss = int(vision_asset.split('_')[1].split('-')[0])
-    end_toss = start_toss if '-' not in vision_asset else \
-        int(vision_asset.split('-')[1])
+    toss_key = vision_asset.split('_')[-1]
+    start_toss = int(toss_key.split('-')[0])
+    end_toss = start_toss if '-' not in toss_key else \
+        int(toss_key.split('-')[1])
 
     # First try to use the first frame of the exact toss.
     if desired_toss_num in range(start_toss, end_toss+1):
@@ -536,7 +538,8 @@ def get_synced_bsdf_keyframe_tagslam_toss_poses(
     b_trans_mat_camera = keyframe_tfs[-1]
 
     # Convert to world frame.
-    object = vision_asset.split('_')[0]
+    object = vision_asset.split('_')[:-1]
+    object = '_'.join(object)
     cam_trans, cam_rot_axis_angle = file_utils.load_camera_extrinsics(object)
     b_trans_mat = math_utils.camera_to_world(
         b_trans_mat_camera, translation=cam_trans, axis_vec=cam_rot_axis_angle)
@@ -1067,11 +1070,13 @@ class TagSLAMTrajectoryConverter(TrajectoryConverterBundleSDFToPLL):
         tagslam_converter.save_data()
     """
     def __init__(self, vision_asset: str):
-        object = vision_asset.split('_')[0]
+        object = vision_asset.split('_')[:-1]
+        object = '_'.join(object)
 
-        start_toss = int(vision_asset.split('_')[1].split('-')[0])
-        end_toss = start_toss if '-' not in vision_asset else \
-            int(vision_asset.split('-')[1])
+        toss_key = vision_asset.split('_')[-1]
+        start_toss = int(toss_key.split('-')[0])
+        end_toss = start_toss if '-' not in toss_key else \
+            int(toss_key.split('-')[1])
         assert start_toss <= end_toss, f'Invalid toss range: {start_toss} ' + \
                 f'-{end_toss} inferred from {vision_asset=}.'
 

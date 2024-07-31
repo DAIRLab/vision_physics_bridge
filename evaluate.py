@@ -123,11 +123,13 @@ class TrajectoryPerformanceEvaluator:
                  bsdf_only: bool):
         # First decode the system and start/end tosses from the provided asset
         # directory.
-        self.object = vision_asset.split('_')[0]
+        self.object = vision_asset.split('_')[:-1]
+        self.object = '_'.join(self.object)
 
-        start_toss = int(vision_asset.split('_')[1].split('-')[0])
-        end_toss = start_toss if '-' not in vision_asset else \
-            int(vision_asset.split('-')[1])
+        toss_key = vision_asset.split('_')[-1]
+        start_toss = int(toss_key.split('-')[0])
+        end_toss = start_toss if '-' not in toss_key else \
+            int(toss_key.split('-')[1])
         assert start_toss <= end_toss, f'Invalid toss range: {start_toss} ' + \
                 f'-{end_toss} inferred from {vision_asset=}.'
         self.start_toss = start_toss
@@ -1055,11 +1057,13 @@ class DynamicsPredictor:
                  bsdf_only: bool):
         # First decode the system and start/end tosses from the provided asset
         # directory.
-        self.object = vision_asset.split('_')[0]
+        self.object = vision_asset.split('_')[:-1]
+        self.object = '_'.join(self.object)
 
-        start_toss = int(vision_asset.split('_')[1].split('-')[0])
-        end_toss = start_toss if '-' not in vision_asset else \
-            int(vision_asset.split('-')[1])
+        toss_key = vision_asset.split('_')[-1]
+        start_toss = int(toss_key.split('-')[0])
+        end_toss = start_toss if '-' not in toss_key else \
+            int(toss_key.split('-')[1])
         assert start_toss <= end_toss, f'Invalid toss range: {start_toss} ' + \
                 f'-{end_toss} inferred from {vision_asset=}.'
         self.start_toss = start_toss
@@ -1276,7 +1280,8 @@ class DynamicsPredictor:
         # whose training dataset starts with toss 1 since we can guarantee the
         # experiments share an image index with a NeRF keyframe.
         if (self.start_toss == 1) and (self.end_toss < 5) and \
-            (self.object in file_utils.TAGLESS_OBJECTS):
+            (self.object in file_utils.TAGLESS_OBJECTS or \
+             self.object in file_utils.ROBOT_OBJECTS):
             longer_vision_asset = f'{self.object}_1-5'
             extended_bundlesdf_trajs = \
                 eval_utils.get_bundlesdf_trajectories_pll_format(
@@ -2044,8 +2049,9 @@ def main_command(vision_asset: str, bundlesdf_id: str, nerf_bundlesdf_id: str,
     # Automatically detect if BundleSDF-only is necessary based on if the object
     # is a tagless one.
     bsdf_only = False
-    object = vision_asset.split('_')[0]
-    if object in file_utils.TAGLESS_OBJECTS:
+    object = vision_asset.split('_')[:-1]
+    object = '_'.join(object)
+    if object in file_utils.TAGLESS_OBJECTS or object in file_utils.ROBOT_OBJECTS:
         bsdf_only = True
         print(f'Automatically setting {bsdf_only=} for tagless {object=}.')
     else:

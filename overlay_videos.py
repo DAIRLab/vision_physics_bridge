@@ -49,11 +49,13 @@ class OverlayVideoGenerator:
         # directory.
         assert cycle_iteration >= 0, f'Invalid {cycle_iteration=}.'
         assert '_' in vision_asset, f'Invalid {vision_asset=}.'
-        object = vision_asset.split('_')[0]
+        object = vision_asset.split('_')[:-1]
+        object = '_'.join(object)
 
-        start_toss = int(vision_asset.split('_')[1].split('-')[0])
-        end_toss = start_toss if '-' not in vision_asset else \
-            int(vision_asset.split('-')[1])
+        toss_key = vision_asset.split('_')[-1]
+        start_toss = int(toss_key.split('-')[0])
+        end_toss = start_toss if '-' not in toss_key else \
+            int(toss_key.split('-')[1])
         assert start_toss <= end_toss, f'Invalid toss range: {start_toss} ' + \
                 f'-{end_toss} inferred from {vision_asset=}.'
 
@@ -67,8 +69,9 @@ class OverlayVideoGenerator:
 
         # Automatically detect if BundleSDF-only is necessary based on if the
         # object is a tagless one.
-        object = vision_asset.split('_')[0]
-        if object in file_utils.TAGLESS_OBJECTS:
+        object = vision_asset.split('_')[:-1]
+        object = '_'.join(object)
+        if object in file_utils.TAGLESS_OBJECTS or file_utils.ROBOT_OBJECTS:
             bsdf_only = True
             print(f'Automatically setting {bsdf_only=} for tagless {object=}.')
         
