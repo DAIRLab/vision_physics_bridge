@@ -256,10 +256,11 @@ class DatasetCreator:
     def _create_images(self):
         depth_bag_file = file_utils.get_depth_bag_filename(self.rosbag_number)
 
-        # Get the depth offset -- no need to subtract anything out unless doing
-        # BundleSDF only and the experiment is not robot interaction.
-        self.depth_offset_mm = 0 if \
-            (self.bsdf_only and not self.has_robot_interactions) else -12
+        # Get the depth offset -- no need to subtract anything out if doing
+        # BundleSDF only.  Even though robot interaction experiments include the
+        # robot in some global coordinate system, the depth images appear to be
+        # consistent with the robot proprioception without any depth offset.
+        self.depth_offset_mm = 0 if self.bsdf_only else -12
         print(f'NOTE: Using {self.depth_offset_mm=} mm.\n')
 
         # Extract the synchronized RGB and depth images, writing them to

@@ -164,6 +164,15 @@ def load_tagslam_pose(vision_asset: str, frame_num: int) -> np.ndarray:
     tagslam_path = op.join(tagslam_dir, f"{frame_num:04d}.txt")
     return np.loadtxt(tagslam_path)
 
+def load_ee_location(vision_asset: str, frame_num: int) -> np.ndarray:
+    """Load an end effector location from the BundleSDF dataset."""
+    assert vision_asset.startswith('robot')
+    cnets_dataset_dir = file_utils.cnets_data_gen_dataset_dir(
+        vision_asset, check_exists=True)
+    ee_locations = np.loadtxt(
+        op.join(cnets_dataset_dir, 'synced_ee_positions.txt'))
+    return ee_locations[frame_num]
+
 def load_poses_and_camera_images(vision_asset: str, frame_num: int):
     """Load the TagSLAM poses and camera images for a given frame."""
     object = '_'.join(vision_asset.split('_')[:-1])
@@ -554,15 +563,24 @@ def compute_camera_z_normal(vision_asset: str) -> np.ndarray:
     R_WC = math_utils.axis_angle_to_rotation_matrix(cam_rot_axis_angle, theta)
     return R_WC[:, 2]
 
-def interactive_offset_adjustment(vision_asset: str, frame_num: int, smoothing: bool = False):
+def interactive_offset_adjustment(
+        vision_asset: str, frame_num: int, smoothing: bool = False):
     """Plot the depth image and the cube corners in world frame."""
     print(DEPTH_PLOT_HELP_PRINT)
 
+    if vision_asset.startswith('robot'):
+        ee_location = load_ee_location(vision_asset, frame_num)
+        ee_edges_in_world = get_ee_edges_in_3d(ee_location)
+        target_xyz = ee_location[:3]
+    else:
+        pose = load_tagslam_pose(vision_asset, frame_num)
+        cube_corners_world = compute_cube_corners_in_world(pose)
+        target_xyz = pose[:3]
+
     # Load the depth image, TagSLAM pose, camera z direction.
-    pose = load_tagslam_pose(vision_asset, frame_num)
-    cube_corners_world = compute_cube_corners_in_world(pose)
-    points_world = load_depth_image_as_points(vision_asset, frame_num, smoothing=smoothing)
-    points_world, mask = crop_point_cloud(points_world, cube_xyz=pose[:3])
+    points_world = load_depth_image_as_points(
+        vision_asset, frame_num, smoothing=smoothing)
+    points_world, mask = crop_point_cloud(points_world, cube_xyz=target_xyz[:3])
     camera_z_normal = compute_camera_z_normal(vision_asset)
 
     # Plot the depth image and cube corners.
@@ -577,19 +595,27 @@ def interactive_offset_adjustment(vision_asset: str, frame_num: int, smoothing: 
     points = ax.scatter(points_world[:, 0], points_world[:, 1],
                         points_world[:, 2], s=1, c=scalarMap.to_rgba(cs),
                         label='Depth Image')
-    ax.scatter(cube_corners_world[:, 0], cube_corners_world[:, 1],
-               cube_corners_world[:, 2], c='r', s=10,
-               label='Raw TagSLAM Cube Corners')
-    edges = ax.plot(cube_corners_world[CUBE_CORNERS_PLOTTABLE_INDICES, 0],
-                    cube_corners_world[CUBE_CORNERS_PLOTTABLE_INDICES, 1],
-                    cube_corners_world[CUBE_CORNERS_PLOTTABLE_INDICES, 2],
-                    c='r', label='Adjusted TagSLAM Cube Edges')[0]
+    if vision_asset.startswith('robot'):
+        ax.scatter(ee_edges_in_world[:, 0], ee_edges_in_world[:, 1],
+                   ee_edges_in_world[:, 2], c='r', s=8,
+                   label='Robot EE Surface')
+    else:
+        ax.scatter(cube_corners_world[:, 0], cube_corners_world[:, 1],
+                   cube_corners_world[:, 2], c='r', s=10,
+                   label='Raw TagSLAM Cube Corners')
+        edges = ax.plot(cube_corners_world[CUBE_CORNERS_PLOTTABLE_INDICES, 0],
+                        cube_corners_world[CUBE_CORNERS_PLOTTABLE_INDICES, 1],
+                        cube_corners_world[CUBE_CORNERS_PLOTTABLE_INDICES, 2],
+                        c='r', label='Adjusted TagSLAM Cube Edges')[0]
     ax.set_xlabel('X (m)')
     ax.set_ylabel('Y (m)')
     ax.set_zlabel('Z (m)')
-    ax.set_xlim([pose[0]-CUBE_EXTRA_BUFFER, pose[0]+CUBE_EXTRA_BUFFER])
-    ax.set_ylim([pose[1]-CUBE_EXTRA_BUFFER, pose[1]+CUBE_EXTRA_BUFFER])
-    ax.set_zlim([pose[2]-CUBE_EXTRA_BUFFER, pose[2]+CUBE_EXTRA_BUFFER])
+    ax.set_xlim([target_xyz[0] - CUBE_EXTRA_BUFFER,
+                 target_xyz[0] + CUBE_EXTRA_BUFFER])
+    ax.set_ylim([target_xyz[1] - CUBE_EXTRA_BUFFER,
+                 target_xyz[1] + CUBE_EXTRA_BUFFER])
+    ax.set_zlim([target_xyz[2] - CUBE_EXTRA_BUFFER,
+                 target_xyz[2] + CUBE_EXTRA_BUFFER])
     ELEV, AZIM = -1, -75
     ax.view_init(elev=ELEV, azim=AZIM)
     plt.legend()
@@ -609,17 +635,20 @@ def interactive_offset_adjustment(vision_asset: str, frame_num: int, smoothing: 
     def reset(flush=True):
         points._offsets3d = (points_world[:, 0], points_world[:, 1],
                              points_world[:, 2])
-        corners_plottable = cube_corners_world[CUBE_CORNERS_PLOTTABLE_INDICES]
-        edges.set_data_3d(corners_plottable[:, 0], corners_plottable[:, 1],
-                          corners_plottable[:, 2])
+        if not vision_asset.startswith('robot'):
+            corners_plottable = cube_corners_world[
+                CUBE_CORNERS_PLOTTABLE_INDICES]
+            edges.set_data_3d(corners_plottable[:, 0], corners_plottable[:, 1],
+                              corners_plottable[:, 2])
         update_title(0, 0, 0, 0, 0, flush=flush)
 
     def update(x, y, z):
         reset(flush=False)
-        offset_corners = cube_corners_world + np.array([x, y, z])
-        offset_plottable = offset_corners[CUBE_CORNERS_PLOTTABLE_INDICES]
-        edges.set_data_3d(offset_plottable[:, 0], offset_plottable[:, 1],
-                          offset_plottable[:, 2])
+        if not vision_asset.startswith('robot'):
+            offset_corners = cube_corners_world + np.array([x, y, z])
+            offset_plottable = offset_corners[CUBE_CORNERS_PLOTTABLE_INDICES]
+            edges.set_data_3d(offset_plottable[:, 0], offset_plottable[:, 1],
+                            offset_plottable[:, 2])
         update_title(x, y, z, 0, 0)
 
     def save_offset(x, y, z):
@@ -707,4 +736,6 @@ if __name__ == '__main__':
     # inspect_tagslam_times("cube_2", 1)
     # load_contact_information('cube_2', 1, 'pll_id_p10')
 
-    inspect_robot_pose_and_image('robot_bakingbox_sticky_A_1')
+    # inspect_robot_pose_and_image('robot_bakingbox_sticky_A_1')
+    interactive_offset_adjustment(
+        'robot_bakingbox_sticky_A_1', 1, smoothing=False)
