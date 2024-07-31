@@ -683,7 +683,7 @@ def get_camera_intrinsics_filepath(object: str) -> str:
     filename = 'cam_K.txt'
     if object in TAGLESS_OBJECTS:
         filename = 'cam_K_tagless.txt'
-    if object.startswith('robot'):
+    elif object.startswith('robot'):
         filename = 'cam_K_robot.txt'
     return op.join(DATA_GEN_DIR, 'assets', filename)
 

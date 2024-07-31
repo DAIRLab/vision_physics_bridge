@@ -379,12 +379,13 @@ class DatasetCreator:
     def _compute_table_offset(self):
         # Visualize the depth offset with the ability to make adjustments for
         # future calls to create_dataset.
-        if 'cube' in self.vision_asset and not self.bsdf_only:
-            print(f'Skip visualizing the results of {self.depth_offset_mm=}' + \
-                  f' for {self.vision_asset}.')
-            # import inspect_camera_alignments
-            # inspect_camera_alignments.interactive_offset_adjustment(
-            #     self.vision_asset, 1)
+        if (('cube' in self.vision_asset) and (not self.bsdf_only)) or \
+            ('robot' in self.vision_asset):
+            # print(f'Skip visualizing the results of {self.depth_offset_mm=}' + \
+            #       f' for {self.vision_asset}.')
+            import inspect_camera_alignments
+            inspect_camera_alignments.interactive_offset_adjustment(
+                self.vision_asset, 1)
         else:
             print(f'No ground truth geometry for {self.vision_asset} so ' + \
                   f'cannot visualize the results of the depth offset.')

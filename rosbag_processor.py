@@ -401,6 +401,45 @@ def extract_camera_images_and_poses(
     return pose_times, poses, image_times, image_msgs
 
 
+"""Extract the RGB images and robot end effector locations from a raw bag file
+between start and end times.  Called by inspect_camera_alignments.py."""
+def extract_camera_images_and_ee_locations(
+        start_time, end_time, robot_bag_file):
+    robot_bag = rosbag.Bag(robot_bag_file, "r")
+
+    bridge = CvBridge()
+
+    joint_times, joint_angles = [], []
+    joint_names = None
+    image_times, image_msgs = [], []
+    for (topic, msg, ts) in robot_bag.read_messages(
+        topics=[JOINT_STATE_ROS_TOPIC, RGB_ROS_TOPIC]):
+        # Skip messages before the start time; stop past the end time.
+        if ts.to_sec() < start_time.to_sec():  continue
+        if ts.to_sec() > end_time.to_sec():  break
+
+        if topic == JOINT_STATE_ROS_TOPIC:
+            if joint_names is None:
+                joint_names = msg.name
+
+            # Store the joint information from the message.
+            joint_times.append(ts.to_sec())
+            joint_angles.append(list(msg.position))
+
+        elif topic == RGB_ROS_TOPIC:
+            image = bridge.imgmsg_to_cv2(msg, desired_encoding="passthrough")
+
+            image_times.append(ts.to_sec())
+            image_msgs.append(image)
+
+    # Convert the joint angles to end effector positions.
+    joint_angles = np.array(joint_angles).reshape(-1, len(joint_names))
+    ee_positions = convert_franka_joints_to_ee_positions(
+        joint_angles, joint_names)
+
+    return joint_times, ee_positions, image_times, image_msgs
+
+
 """Extract the TagSLAM camera poses from an odometry bag file, which features
 the world-to-camX transformations in the /tf topic."""
 def get_tagslam_camera_extrinsics(odom_bag_file):

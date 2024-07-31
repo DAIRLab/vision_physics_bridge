@@ -17,6 +17,7 @@ import torch
 from torch import Tensor
 from typing import Tuple
 import cv2
+import rospy
 
 import file_utils, math_utils, rosbag_processor
 
@@ -28,7 +29,7 @@ CUBE_EXTRA_BUFFER = 0.2
 CUBE_CORNERS_PLOTTABLE_INDICES=[0, 1, 2, 3, 0, 4, 5, 6, 7, 4, 5, 1, 2, 6, 7, 3]
 
 DEPTH_PLOT_HELP_PRINT = \
-'''From past experience, the following offsets have looked reasonable for the 
+'''From past experience, the following offsets have looked reasonable for the
 cube experiments (verified against cube_2, cube_3, and cube_9):
     update(-0.008, 0.001, -0.011)
 
@@ -77,6 +78,8 @@ CAMERA_AXES_IN_CAMERA_FRAME = AXIS_SCALING * np.array([[[0, 0, 0], [1, 0, 0]],
 
 CAMERA_MARKER_COLORS = {'cam0': '#ff0000', 'cam1': '#00ff00', 'cam2': '#0000ff',
                         'realsense': '#ffff00'}
+
+EE_RADIUS = 0.0195
 
 
 def load_and_adjust_depth_readings_in_image(
@@ -127,7 +130,7 @@ def load_depth_image_as_points(vision_asset: str, frame_num: int,
     # Convert the depth image to point cloud.
     points_camera = math_utils.convert_depth_image_to_points(
         depth_image, fx, fy, cx, cy)
-    
+
     # Convert the points from camera frame to world frame.
     theta = np.linalg.norm(cam_rot_axis_angle)
     R_WC = math_utils.axis_angle_to_rotation_matrix(
@@ -146,7 +149,7 @@ def crop_point_cloud(point_cloud: np.ndarray, cube_xyz: np.ndarray = None
                (point_cloud[:, 2] > Z_LIMS[0]) & \
                (point_cloud[:, 2] < Z_LIMS[1])
         return point_cloud[mask], mask
-    
+
     mask = (point_cloud[:, 0] > cube_xyz[0] - CUBE_EXTRA_BUFFER) & \
            (point_cloud[:, 0] < cube_xyz[0] + CUBE_EXTRA_BUFFER) & \
            (point_cloud[:, 1] > cube_xyz[1] - CUBE_EXTRA_BUFFER) & \
@@ -167,12 +170,12 @@ def load_poses_and_camera_images(vision_asset: str, frame_num: int):
     start_toss = int(vision_asset.split('_')[-1].split('-')[0])
     end_toss = start_toss if '-' not in vision_asset else \
         int(vision_asset.split('-')[1])
-    
+
     start_time = file_utils.load_toss_time_from_yaml(
         object, start_toss, 'start_time', as_ros_time=True)
     end_time = file_utils.load_toss_time_from_yaml(
         object, end_toss, 'end_time', as_ros_time=True)
-    
+
     rosbag_number = file_utils.load_rosbag_number_from_yaml(
         object, start_toss, second_toss_number=end_toss)
     raw_bag_file = file_utils.get_depth_bag_filename(rosbag_number)
@@ -184,24 +187,51 @@ def load_poses_and_camera_images(vision_asset: str, frame_num: int):
         rosbag_processor.extract_camera_images_and_poses(
             start_time, end_time, raw_bag_file, odom_bag_file, odom_ros_topic
         )
-    
+
     pose_t, pose = pose_times[frame_num], poses[frame_num]
     image_t = {key: image_times[key][frame_num] for key in image_times.keys()}
     image = {key: image_msgs[key][frame_num] for key in image_msgs.keys()}
-    
+
     return pose_t, pose, image_t, image
-    
+
+def load_robot_poses_and_camera_images(vision_asset: str, frame_num: int):
+    """Load the robot poses and camera images for a given frame."""
+    assert vision_asset.startswith('robot')
+    object = '_'.join(vision_asset.split('_')[:-1])
+    start_toss = int(vision_asset.split('_')[-1].split('-')[0])
+    end_toss = start_toss if '-' not in vision_asset else \
+        int(vision_asset.split('-')[1])
+
+    start_time = file_utils.load_toss_time_from_yaml(
+        object, start_toss, 'start_time', as_ros_time=True)
+    end_time = rospy.rostime.Time(secs=start_time.secs+1,
+                                  nsecs=start_time.nsecs)
+
+    rosbag_number = file_utils.load_rosbag_number_from_yaml(
+        object, start_toss, second_toss_number=end_toss)
+    robot_bag_file = file_utils.get_robot_bag_filename(rosbag_number)
+
+    ee_times, ee_locations, image_times, image_msgs = \
+        rosbag_processor.extract_camera_images_and_ee_locations(
+            start_time, end_time, robot_bag_file)
+
+    ee_t, ee_loc = ee_times[frame_num], ee_locations[frame_num]
+    image_t = image_times[frame_num]
+    image = image_msgs[frame_num]
+
+    return ee_t, ee_loc, image_t, image
+
 def inspect_tagslam_times(vision_asset: str, frame_num: int):
     """Make a plot of the message times to ensure they are synchronized."""
     pose_times, _poses, image_times, _image_msgs = \
         load_poses_and_camera_images(vision_asset, frame_num)
-    
+
     t0 = pose_times[0]
     pose_times = np.array(pose_times) - t0
     cam0_times = np.array(image_times[0]) - t0
     cam1_times = np.array(image_times[1]) - t0
     cam2_times = np.array(image_times[2]) - t0
-    
+
     plt.figure()
     plt.plot(pose_times, marker='o', markersize=10, label='TagSLAM Pose Times')
     plt.plot(cam0_times, marker='o', markersize=10, label='cam0 Times')
@@ -217,7 +247,7 @@ def get_all_camera_intrinsics_extrinsics(vision_asset: str):
     start_toss = int(vision_asset.split('_')[-1].split('-')[0])
     end_toss = start_toss if '-' not in vision_asset else \
         int(vision_asset.split('-')[1])
-    
+
     rosbag_number = file_utils.load_rosbag_number_from_yaml(
         object, start_toss, second_toss_number=end_toss)
     raw_bag_file = file_utils.get_depth_bag_filename(rosbag_number)
@@ -226,7 +256,7 @@ def get_all_camera_intrinsics_extrinsics(vision_asset: str):
     cam0_trans, cam0_axis_angle, cam1_trans, cam1_axis_angle, cam2_trans, \
         cam2_axis_angle = \
             rosbag_processor.get_tagslam_camera_extrinsics(odom_bag_file)
-    
+
     cam_trans, cam_axis_angle = file_utils.load_camera_extrinsics(object)
 
     translations = {'cam0': cam0_trans, 'cam1': cam1_trans, 'cam2': cam2_trans,
@@ -234,16 +264,38 @@ def get_all_camera_intrinsics_extrinsics(vision_asset: str):
     axis_angles = {'cam0': cam0_axis_angle, 'cam1': cam1_axis_angle,
                    'cam2': cam2_axis_angle,
                    'realsense': cam_axis_angle.squeeze()}
-    
+
     intrinsics = rosbag_processor.get_all_camera_intrinsics(raw_bag_file)
-    
+
+    return intrinsics, translations, axis_angles
+
+def get_robot_camera_intrinsics_extrinsics(vision_asset: str):
+    """Get the realsense intrinsics and extrinsics."""
+    assert vision_asset.startswith('robot')
+    object = '_'.join(vision_asset.split('_')[:-1])
+    start_toss = int(vision_asset.split('_')[-1].split('-')[0])
+    end_toss = start_toss if '-' not in vision_asset else \
+        int(vision_asset.split('-')[1])
+
+    rosbag_number = file_utils.load_rosbag_number_from_yaml(
+        object, start_toss, second_toss_number=end_toss)
+    raw_bag_file = file_utils.get_robot_bag_filename(rosbag_number)
+
+    cam_trans, cam_axis_angle = file_utils.load_camera_extrinsics(object)
+
+    translations = {'realsense': cam_trans.squeeze()}
+    axis_angles = {'realsense': cam_axis_angle.squeeze()}
+
+    intrinsics = rosbag_processor.get_all_camera_intrinsics(raw_bag_file)
+    intrinsics = {'realsense': intrinsics['realsense']}
+
     return intrinsics, translations, axis_angles
 
 def inspect_camera_poses_and_images(vision_asset: str, frame_num: int = 1):
     """Plot the camera locations in 3D."""
     intrinsics, translations, axis_angles = \
         get_all_camera_intrinsics_extrinsics(vision_asset)
-    
+
     world = np.array([0, 0, 0]).reshape(1, 3)
     cam0 = translations['cam0'].reshape(1, 3)
     cam1 = translations['cam1'].reshape(1, 3)
@@ -300,7 +352,7 @@ def inspect_camera_poses_and_images(vision_asset: str, frame_num: int = 1):
     ax.set_box_aspect([np.ptp(arr) for arr in \
                       [ax.get_xlim(), ax.get_ylim(), ax.get_zlim()]])
     figs['camera_poses'] = fig
-    
+
     for cam in image.keys():
         # First compute the cube corners in camera frame.
         pose_cam = np.hstack((translations[cam],
@@ -314,10 +366,10 @@ def inspect_camera_poses_and_images(vision_asset: str, frame_num: int = 1):
         corners_in_cam = \
             math_utils.transform_point_coordinates_given_pose(
                 cube_corners_world, pose_cam_inv)
-        
+
         # Get the camera intrinsics.
         P_matrix = intrinsics[cam].reshape(3, 4)
-        
+
         XYZ1 = np.hstack((corners_in_cam, np.ones((8, 1))))
         uvw = P_matrix @ XYZ1.T
         x_pixel = uvw[0] / uvw[2]
@@ -334,6 +386,120 @@ def inspect_camera_poses_and_images(vision_asset: str, frame_num: int = 1):
 
     pdb.set_trace()
     return figs
+
+def inspect_robot_pose_and_image(vision_asset: str, frame_num: int = 1):
+    """Plot the camera locations in 3D."""
+    intrinsics, translations, axis_angles = \
+        get_robot_camera_intrinsics_extrinsics(vision_asset)
+
+    world = np.array([0, 0, 0]).reshape(1, 3)
+    realsense = translations['realsense'].reshape(1, 3)
+
+    world_to_realsense = np.concatenate((world, realsense), axis=0)
+
+    ee_t, ee_loc, image_t, image = load_robot_poses_and_camera_images(
+        vision_asset, frame_num)
+
+    def plot_camera_triad(cam_trans, cam_axis_angle, label):
+        pose = np.hstack((cam_trans,
+                          math_utils.axis_angle_to_quat(cam_axis_angle)))
+        cam_axes = math_utils.transform_point_coordinates_given_pose(
+            CAMERA_AXES_IN_CAMERA_FRAME.reshape(6,3), pose).reshape(3,2,3)
+        plt.plot(cam_axes[0, :, 0], cam_axes[0, :, 1], cam_axes[0, :, 2],
+                 color='#ff0000', linewidth=5)
+        plt.plot(cam_axes[1, :, 0], cam_axes[1, :, 1], cam_axes[1, :, 2],
+                 color='#00ff00', linewidth=5)
+        plt.plot(cam_axes[2, :, 0], cam_axes[2, :, 1], cam_axes[2, :, 2],
+                 color='#0000ff', linewidth=5)
+        plt.plot(cam_trans[0], cam_trans[1], cam_trans[2], marker='o',
+                 color=CAMERA_MARKER_COLORS[label], markersize=10, label=label)
+
+    # Be prepared to return all the figures.
+    figs = {}
+
+    plt.ion()
+    fig = plt.figure()
+    ax = fig.add_subplot(111, projection='3d')
+    ax.plot(world_to_realsense[:, 0], world_to_realsense[:, 1],
+            world_to_realsense[:, 2])
+    plot_camera_triad(
+        translations['realsense'], axis_angles['realsense'], 'realsense')
+    ax.plot(ee_loc[0], ee_loc[1], ee_loc[2], c='r', label='EE Location')
+
+    ax.set_xlabel('X (m)')
+    ax.set_ylabel('Y (m)')
+    ax.set_zlabel('Z (m)')
+    plt.legend()
+
+    ax.set_box_aspect([np.ptp(arr) for arr in \
+                      [ax.get_xlim(), ax.get_ylim(), ax.get_zlim()]])
+    figs['camera_poses'] = fig
+
+    # First compute the EE location in camera frame.
+    pose_cam = np.hstack((
+        translations['realsense'],
+        math_utils.axis_angle_to_quat(axis_angles['realsense'])))
+    cam_extrinsics = math_utils.pos_quat_to_trans_mat(pose_cam)
+    cam_inv = np.linalg.inv(cam_extrinsics)
+    pose_cam_inv = np.hstack((
+        cam_inv[:3, 3],
+        math_utils.rotation_matrix_to_quat(cam_inv[:3, :3])
+    ))
+    ee_loc_in_cam = \
+        math_utils.transform_point_coordinates_given_pose(
+            ee_loc.reshape(-1, 3), pose_cam_inv)
+
+    # Get the camera intrinsics.
+    P_matrix = intrinsics['realsense'].reshape(3, 4)
+
+    XYZ1 = np.hstack((ee_loc_in_cam, np.ones((1, 1))))
+    uvw = P_matrix @ XYZ1.T
+    x_pixel = uvw[0] / uvw[2]
+    y_pixel = uvw[1] / uvw[2]
+
+    ee_edges_in_world = get_ee_edges_in_3d(ee_loc)
+    ee_edges_in_cam = math_utils.transform_point_coordinates_given_pose(
+        ee_edges_in_world.reshape(-1, 3), pose_cam_inv)
+
+    XYZ1 = np.hstack((ee_edges_in_cam, np.ones((ee_edges_in_cam.shape[0], 1))))
+    uvw = P_matrix @ XYZ1.T
+    xs_pixel = uvw[0] / uvw[2]
+    ys_pixel = uvw[1] / uvw[2]
+
+    fig = plt.figure()
+    plt.imshow(image)
+    plt.scatter(x_pixel, y_pixel)
+    plt.scatter(xs_pixel, ys_pixel)
+    plt.title('realsense')
+    figs['realsense'] = fig
+
+    pdb.set_trace()
+    return figs
+
+def get_ee_edges_in_3d(ee_loc):
+    """Generate evenly spaced points on the surface of a 3D sphere.  Written
+    with assistance from ChatGPT."""
+    x, y, z = ee_loc[0], ee_loc[1], ee_loc[2]
+    points = []
+    phi = np.pi * (3. - np.sqrt(5.))  # Golden angle in radians
+
+    for i in range(100):
+        y = 1 - (i / float(100 - 1)) * 2  # y goes from 1 to -1
+        radius_at_y = np.sqrt(1 - y * y)  # radius at y
+
+        theta = phi * i  # golden angle increment
+
+        x = np.cos(theta) * radius_at_y
+        z = np.sin(theta) * radius_at_y
+
+        # Apply radius and center offset
+        x = ee_loc[0] + EE_RADIUS * x
+        y = ee_loc[1] + EE_RADIUS * y
+        z = ee_loc[2] + EE_RADIUS * z
+
+        points.append((x, y, z))
+
+    return np.array(points)
 
 def add_contact_visuals_to_figs(
         vision_asset: str, figs: dict, ps: Tensor, sdfs: Tensor, vs: Tensor,
@@ -380,7 +546,7 @@ def compute_camera_axes_in_world(cam_trans, cam_axis_angle):
 
 def compute_camera_z_normal(vision_asset: str) -> np.ndarray:
     """Compute the normal vector of the camera's z-axis in world frame."""
-    object = '_'.join(vision_asset.split('_')[:-1])
+    object = vision_asset.split('_')[0]
     _cam_trans, cam_rot_axis_angle = file_utils.load_camera_extrinsics(object)
     cam_rot_axis_angle = cam_rot_axis_angle.squeeze()
 
@@ -539,4 +705,6 @@ if __name__ == '__main__':
     # interactive_offset_adjustment('cube_2', 1, smoothing=False)
     # inspect_camera_poses_and_images('cube_2')
     # inspect_tagslam_times("cube_2", 1)
-    load_contact_information('cube_2', 1, 'pll_id_p10')
+    # load_contact_information('cube_2', 1, 'pll_id_p10')
+
+    inspect_robot_pose_and_image('robot_bakingbox_sticky_A_1')
