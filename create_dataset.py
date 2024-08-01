@@ -207,7 +207,7 @@ class DatasetCreator:
         for i, bsdf_time in enumerate(bsdf_times):
             # Find the two Franka times that sandwich the current BSDF time.
             try:
-                after_idx = np.where(franka_times > bsdf_time)[0][0]
+                after_idx = np.where(franka_times >= bsdf_time)[0][0]
             except IndexError:
                 after_idx = len(franka_times) - 1
                 print(f'bsdf frame {i} is after the last TagSLAM pose.')
@@ -257,10 +257,13 @@ class DatasetCreator:
         depth_bag_file = file_utils.get_depth_bag_filename(self.rosbag_number)
 
         # Get the depth offset -- no need to subtract anything out if doing
-        # BundleSDF only.  Even though robot interaction experiments include the
-        # robot in some global coordinate system, the depth images appear to be
-        # consistent with the robot proprioception without any depth offset.
-        self.depth_offset_mm = 0 if self.bsdf_only else -12
+        # BundleSDF only.  Otherwise for robot interaction experiments, the 6mm
+        # offset was determined by adjusting the point cloud to match the
+        # measured surface height.  Otherwise for all other experiments that
+        # include TagSLAM, the -12mm offset was determined by adjusting the
+        # point cloud to match the TagSLAM-reported cube location.
+        self.depth_offset_mm = 6 if self.has_robot_interactions else \
+            0 if self.bsdf_only else -12
         print(f'NOTE: Using {self.depth_offset_mm=} mm.\n')
 
         # Extract the synchronized RGB and depth images, writing them to
@@ -382,11 +385,11 @@ class DatasetCreator:
         # future calls to create_dataset.
         if (('cube' in self.vision_asset) and (not self.bsdf_only)) or \
             ('robot' in self.vision_asset):
-            # print(f'Skip visualizing the results of {self.depth_offset_mm=}' + \
-            #       f' for {self.vision_asset}.')
-            import inspect_camera_alignments
-            inspect_camera_alignments.interactive_offset_adjustment(
-                self.vision_asset, 1)
+            print(f'Skip visualizing the results of {self.depth_offset_mm=}' + \
+                  f' for {self.vision_asset}.')
+            # import inspect_camera_alignments
+            # inspect_camera_alignments.interactive_offset_adjustment(
+            #     self.vision_asset, 1)
         else:
             print(f'No ground truth geometry for {self.vision_asset} so ' + \
                   f'cannot visualize the results of the depth offset.')

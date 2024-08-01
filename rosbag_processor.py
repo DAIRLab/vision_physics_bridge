@@ -100,11 +100,11 @@ def extract_synchronized_rgb_and_depth_images(
     # synchronized results to the depth and RGB output directories.
     image_i = 1
     bundlesdf_times = []
-    for depth_time in tqdm(depth_images, desc='Writing synchronized depth and RGB images'):
+    for depth_time in tqdm(depth_images,
+                           desc='Writing synchronized depth and RGB images'):
         # Strictly filter for depth readings within the time range.  Note that
         # the closest RGB reading might be slightly outside this range.
         if depth_time < start_time or depth_time > end_time:
-            print('Skipping frame outside time range.')
             continue
 
         closest_rgb_time = min(

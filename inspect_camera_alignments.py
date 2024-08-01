@@ -22,7 +22,7 @@ import rospy
 import file_utils, math_utils, rosbag_processor
 
 from compute_table_offsets import CUBE_CORNERS_IN_CUBE_FRAME, X_LIMS, Y_LIMS, \
-    Z_LIMS
+    Z_LIMS, TIGHT_X_LIMS, TIGHT_Y_LIMS, TIGHT_Z_LIMS
 
 
 CUBE_EXTRA_BUFFER = 0.2
@@ -80,6 +80,14 @@ CAMERA_MARKER_COLORS = {'cam0': '#ff0000', 'cam1': '#00ff00', 'cam2': '#0000ff',
                         'realsense': '#ffff00'}
 
 EE_RADIUS = 0.0195
+MEASURED_SURFACE_OFFSET = -0.0087
+TWO_D_SURFACE_POINTS = np.meshgrid(
+    np.linspace(TIGHT_X_LIMS[0], TIGHT_X_LIMS[1], 100),
+    np.linspace(TIGHT_Y_LIMS[0], TIGHT_Y_LIMS[1], 100))
+THREE_D_SURFACE_POINTS = np.vstack(
+    (TWO_D_SURFACE_POINTS[0].flatten(),
+     TWO_D_SURFACE_POINTS[1].flatten(),
+     MEASURED_SURFACE_OFFSET * np.ones(10000))).T
 
 
 def load_and_adjust_depth_readings_in_image(
@@ -580,7 +588,8 @@ def interactive_offset_adjustment(
     # Load the depth image, TagSLAM pose, camera z direction.
     points_world = load_depth_image_as_points(
         vision_asset, frame_num, smoothing=smoothing)
-    points_world, mask = crop_point_cloud(points_world, cube_xyz=target_xyz[:3])
+    points_world, mask = crop_point_cloud(points_world, cube_xyz=None)
+        #target_xyz[:3])
     camera_z_normal = compute_camera_z_normal(vision_asset)
 
     # Plot the depth image and cube corners.
@@ -599,6 +608,9 @@ def interactive_offset_adjustment(
         ax.scatter(ee_edges_in_world[:, 0], ee_edges_in_world[:, 1],
                    ee_edges_in_world[:, 2], c='r', s=8,
                    label='Robot EE Surface')
+        ax.scatter(THREE_D_SURFACE_POINTS[:, 0], THREE_D_SURFACE_POINTS[:, 1],
+                   THREE_D_SURFACE_POINTS[:, 2], c='y', s=8,
+                   label='Measured Toss Surface')
     else:
         ax.scatter(cube_corners_world[:, 0], cube_corners_world[:, 1],
                    cube_corners_world[:, 2], c='r', s=10,
@@ -610,12 +622,19 @@ def interactive_offset_adjustment(
     ax.set_xlabel('X (m)')
     ax.set_ylabel('Y (m)')
     ax.set_zlabel('Z (m)')
-    ax.set_xlim([target_xyz[0] - CUBE_EXTRA_BUFFER,
-                 target_xyz[0] + CUBE_EXTRA_BUFFER])
-    ax.set_ylim([target_xyz[1] - CUBE_EXTRA_BUFFER,
-                 target_xyz[1] + CUBE_EXTRA_BUFFER])
-    ax.set_zlim([target_xyz[2] - CUBE_EXTRA_BUFFER,
-                 target_xyz[2] + CUBE_EXTRA_BUFFER])
+    if vision_asset.startswith('robot'):
+        ax.set_xlim([X_LIMS[0], X_LIMS[1]])
+        ax.set_ylim([Y_LIMS[0], Y_LIMS[1]])
+        # ax.set_zlim([Z_LIMS[0], Z_LIMS[1]])
+        ax.set_zlim([-0.05 + MEASURED_SURFACE_OFFSET,
+                     0.05 + MEASURED_SURFACE_OFFSET])
+    else:
+        ax.set_xlim([target_xyz[0] - CUBE_EXTRA_BUFFER,
+                    target_xyz[0] + CUBE_EXTRA_BUFFER])
+        ax.set_ylim([target_xyz[1] - CUBE_EXTRA_BUFFER,
+                    target_xyz[1] + CUBE_EXTRA_BUFFER])
+        ax.set_zlim([target_xyz[2] - CUBE_EXTRA_BUFFER,
+                    target_xyz[2] + CUBE_EXTRA_BUFFER])
     ELEV, AZIM = -1, -75
     ax.view_init(elev=ELEV, azim=AZIM)
     plt.legend()
@@ -736,6 +755,6 @@ if __name__ == '__main__':
     # inspect_tagslam_times("cube_2", 1)
     # load_contact_information('cube_2', 1, 'pll_id_p10')
 
-    # inspect_robot_pose_and_image('robot_bakingbox_sticky_A_1')
+    # inspect_robot_pose_and_image('robot_bakingbox_sticky_A_2')
     interactive_offset_adjustment(
-        'robot_bakingbox_sticky_A_1', 1, smoothing=False)
+        'robot_bakingbox_sticky_A_1', 700, smoothing=False)
