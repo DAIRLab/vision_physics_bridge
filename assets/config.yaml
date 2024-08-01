@@ -371,6 +371,20 @@ dataset: #toss_id:rosbag_id
     0: 
     1: 201
     2: 201
+  robot_bakingbox_sticky_B:
+    0:
+    1: 202
+    2: 202
+    3: 202
+    4: 202
+    5: 202
+    6: 202
+    7: 202
+    8: 202
+    9: 202
+    10: 202
+    11: 202
+    12: 202
 
 # WARNING:  When we parse this yaml, it relies on the tosses going
 # chronologically, starting from 0, with no skipped tosses.  If you want to have
@@ -3912,6 +3926,93 @@ tosses:
       end_time:
         secs: 1720534029
         nsecs: 105905417
+  robot_bakingbox_sticky_B:
+    - toss: 0
+    - toss: 1
+      start_time:
+        secs: 1720534050
+        nsecs: 791140809
+      end_time:
+        secs: 1720534070
+        nsecs: 160218427
+    - toss: 2
+      start_time:
+        secs: 1720534070
+        nsecs: 160218427
+      end_time:
+        secs: 1720534084
+        nsecs: 170770046
+    - toss: 3
+      start_time:
+        secs: 1720534084
+        nsecs: 170770046
+      end_time:
+        secs: 1720534099
+        nsecs: 095206737
+    - toss: 4
+      start_time:
+        secs: 1720534099
+        nsecs: 095206737
+      end_time:
+        secs: 1720534119
+        nsecs: 920455824
+    - toss: 5
+      start_time:
+        secs: 1720534119
+        nsecs: 920455824
+      end_time:
+        secs: 1720534126
+        nsecs: 376667300
+    - toss: 6
+      start_time:
+        secs: 1720534126
+        nsecs: 376667300
+      end_time:
+        secs: 1720534135
+        nsecs: 043166978
+    - toss: 7
+    # unsuccesful toss
+      start_time:
+        secs: 1720534135
+        nsecs: 043166978
+      end_time:
+        secs: 1720534145
+        nsecs: 373904257
+    - toss: 8
+      start_time:
+        secs: 1720534145
+        nsecs: 373904257
+      end_time:
+        secs: 1720534152
+        nsecs: 068026965
+    - toss: 9
+      start_time:
+        secs: 1720534152
+        nsecs: 068026965
+      end_time:
+        secs: 1720534169
+        nsecs: 611472115
+    - toss: 10
+      start_time:
+        secs: 1720534169
+        nsecs: 611472115
+      end_time:
+        secs: 1720534178
+        nsecs: 728572192
+    - toss: 11
+      start_time:
+        secs: 1720534178
+        nsecs: 728572192
+      end_time:
+        secs: 1720534197
+        nsecs: 488044868
+    - toss: 12
+      start_time:
+        secs: 1720534197
+        nsecs: 488044868
+      end_time:
+        secs: 1720534217
+        nsecs: 416341319
 
 # These body_frames are the TagSLAM body frame's pose relative to the first
 # specified tag ID.
