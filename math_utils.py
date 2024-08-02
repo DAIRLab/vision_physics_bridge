@@ -57,7 +57,9 @@ def convert_relative_frames_to_absolute(
         relative_frames: np.ndarray, full_times: np.ndarray,
         ros_times: rospy.rostime.Time) -> np.ndarray:
     """Converts frames relative to the start of a subsection of a longer
-    trajectory to frames as absolute indices of the full trajectory.
+    trajectory to frames as absolute indices of the full trajectory.  Handles
+    the case where a relative frame is set to -1, which is interpreted as
+    include the last index of a given toss.
     
     Args:
         relative_frames: 1D numpy array of relative frame indices.
@@ -71,9 +73,23 @@ def convert_relative_frames_to_absolute(
     start_times = ros_time_to_float(ros_times)
     absolute_frames = np.zeros_like(relative_frames)
 
-    for i in range(len(relative_frames)):
-        subsection_start_frame = np.argmin(np.abs(full_times - start_times[i]))
-        absolute_frames[i] = subsection_start_frame + relative_frames[i]
+    for i, relative_frame in enumerate(relative_frames):
+        # Handle the case where the relative frame is set to -1, meaning use the
+        # last frame in the given toss.
+        if relative_frame == -1:
+            # If considering the last toss, include the last frame of the full
+            # trajectory.  If considering a previous toss, can use the first
+            # absolute frame of the next toss.
+            absolute_frames[i] = \
+                len(full_times) if i == len(relative_frames)-1 else \
+                np.argmin(np.abs(full_times - start_times[i + 1]))
+
+        # Otherwise, can get the absolute frame by adding the relative frame to
+        # the frame number of the given toss's subsection.
+        else:
+            subsection_start_frame = np.argmin(
+                np.abs(full_times - start_times[i]))
+            absolute_frames[i] = subsection_start_frame + relative_frame
     
     return absolute_frames
 

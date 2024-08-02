@@ -725,6 +725,19 @@ def load_toss_time_from_yaml(object, toss_number, key, as_ros_time=True):
     return time
 
 def load_field_from_yaml(object, toss_number, key):
+    # Handle some special cases for robot experiments.  These do not have
+    # associated frames listed since the entire trajectory is eligible for PLL.
+    # Thus, return 0 for start_frame queries, -1 for end_frame, and 0 for
+    # start_adjust.
+    if object.startswith('robot'):
+        if key == 'start_frame':
+            return 0
+        if key == 'end_frame':
+            return -1
+        if key == 'start_adjust':
+            return 0
+
+    # Otherwise, get the exact value reported in the configuration file.
     with open(PROCESSING_YAML_FILE, 'r') as f:
         data = yaml.safe_load(f)
     toss_data = data['tosses'][object][toss_number]

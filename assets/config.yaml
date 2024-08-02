@@ -3894,8 +3894,9 @@ tosses:
 
   # Robot interaction experiments
   # TODO annotate these to use the right number of interactions
-  # TODO I removed start_frame, end_frame, and start_adjust from these robot
-  # experiments; check that this doesn't break any code.
+  # NOTE:  these don't have start_frame, end_frame, and start_adjust keys, which
+  # are hardcoded in file_utils.py to be 0, -1, and 0, respectively, for these
+  # robot experiments.
   robot_bakingbox_sticky_A:
     - toss: 0
     - toss: 1
