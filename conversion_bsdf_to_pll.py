@@ -810,11 +810,12 @@ class TrajectoryConverterBundleSDFToPLL:
             self.robot_toss_processed_states = []
 
             for i in range(len(self.start_frames)):
-                # No need to convert from 1- to 0-indexing, since robot
-                # experiments all should have relative start_frame of 0 and
-                # relative end_frame of -1.
-                b_start = self.start_frames[i]
-                b_end = self.end_frames[i]
+                # Need to do one less than provided start and end frames because
+                # the annotated start_frame and end_frame in config.yaml were
+                # annotated based on the 1-indexed images, but the below needs
+                # to use 0-indexing.
+                b_start = self.start_frames[i] - 1
+                b_end = self.end_frames[i] - 1
                 self.robot_toss_processed_states.append(
                     self.robot_full_processed_states[b_start:b_end])
 
@@ -1603,7 +1604,7 @@ def main_command(vision_asset: str, bundlesdf_id: str, nerf_bundlesdf_id: str,
     # Automatically detect if BundleSDF-only is necessary based on if the object
     # is a tagless one.
     object = '_'.join(vision_asset.split('_')[:-1])
-    if object in file_utils.TAGLESS_OBJECTS:
+    if object in file_utils.TAGLESS_OBJECTS or object.startswith('robot'):
         bsdf_only = True
         print(f'Automatically setting {bsdf_only=} for tagless {object=}.')
 

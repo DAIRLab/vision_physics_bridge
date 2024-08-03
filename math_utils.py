@@ -84,6 +84,9 @@ def convert_relative_frames_to_absolute(
                 len(full_times) if i == len(relative_frames)-1 else \
                 np.argmin(np.abs(full_times - start_times[i + 1]))
 
+            # Convert 0-indexing to 1-indexing.
+            absolute_frames[i] += 1
+
         # Otherwise, can get the absolute frame by adding the relative frame to
         # the frame number of the given toss's subsection.
         else:
