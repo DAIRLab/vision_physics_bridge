@@ -50,8 +50,8 @@ def build_pll_robot_object_tensordict(
     'object_state' (N, 13) and 'robot_state' (N, 14)."""
     assert object_state.ndim == robot_state.ndim == 2, \
         f'{object_state.shape=} != {robot_state.ndim=}'
-    assert object_state.shape[0] == robot_state.ndim[0], \
-        f'{object_state.shape[0]=} != {robot_state.ndim[0]=}'
+    assert object_state.shape[0] == robot_state.shape[0], \
+        f'{object_state.shape[0]=} != {robot_state.shape[0]=}'
     assert object_state.shape[1] == 13, f'{object_state.shape=}, expected ' + \
         '(N, 13)'
     assert robot_state.shape[1] == 14, f'{robot_state.shape=}, expected (N, 14)'
@@ -123,7 +123,7 @@ class TrajectoryConverterBundleSDFToPLL:
         self.cycle_iteration = cycle_iteration
 
         if (object in file_utils.TAGLESS_OBJECTS or \
-            object in file_utils.ROBOT_OBJECTS) and not bsdf_only:
+            object.startswith('robot')) and not bsdf_only:
             bsdf_only = True
             print(f'Overriding to set {bsdf_only=} for tagless {object=}.')
         self.bsdf_only = bsdf_only

@@ -25,6 +25,8 @@ import math_utils
 DATA_GEN_DIR = op.dirname(op.realpath(__file__))
 REPO_DIR = op.dirname(DATA_GEN_DIR)
 PLL_DIR = op.join(REPO_DIR, 'dair_pll')
+# PLL_DIR = op.join(REPO_DIR, 'dair_pll_robot') 
+# # when debugging, use a different repo name before replacing the original one
 
 if PLL_DIR not in sys.path:
     sys.path.append(PLL_DIR)    # For importing dair_pll.
@@ -731,7 +733,7 @@ def load_field_from_yaml(object, toss_number, key):
     # start_adjust.
     if object.startswith('robot'):
         if key == 'start_frame':
-            return 0
+            return 1
         if key == 'end_frame':
             return -1
         if key == 'start_adjust':

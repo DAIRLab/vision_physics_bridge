@@ -1277,7 +1277,7 @@ class DynamicsPredictor:
         # experiments share an image index with a NeRF keyframe.
         if (self.start_toss == 1) and (self.end_toss < 5) and \
             (self.object in file_utils.TAGLESS_OBJECTS or \
-             self.object in file_utils.ROBOT_OBJECTS):
+             self.object.startswith('robot')):
             longer_vision_asset = f'{self.object}_1-5'
             extended_bundlesdf_trajs = \
                 eval_utils.get_bundlesdf_trajectories_pll_format(

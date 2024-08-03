@@ -388,7 +388,7 @@ def create_empty_results_dict(
     # Second modification:  Get rid of any against_tagslam entries if the object
     # is tagless.
     object = '_'.join(vision_asset.split('_')[:-1])
-    if object in file_utils.TAGLESS_OBJECTS or object in file_utils.ROBOT_OBJECTS:
+    if object in file_utils.TAGLESS_OBJECTS or object.startswith('robot'):
         for category_key in METRICS_BY_TOSS:
             del empty_results[category_key]['against_tagslam']
 
@@ -418,7 +418,7 @@ def get_pll_tagslam_trajectories_pll_format(object: str) -> dict:
     already in PLL format.  Returns a dictionary with toss numbers as keys and
     torch tensors (N, 13) as values.  Returns None if the object is tagless and
     thus there are no TagSLAM trajectories."""
-    if object in file_utils.TAGLESS_OBJECTS or object in file_utils.ROBOT_OBJECTS:
+    if object in file_utils.TAGLESS_OBJECTS or object.startswith('robot'):
         print(f'Object {object} is tagless; no TagSLAM trajectories.')
         return None
 
