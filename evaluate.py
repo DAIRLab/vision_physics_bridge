@@ -1907,7 +1907,7 @@ class TrajectoryMetrics:
 
         assert traj.shape[1] == geometry_system.space.n_x
 
-        phi, _J, _p_BiBc_B = geometry_system.multibody_terms.contact_terms(traj)
+        phi, _J, _p_BiBc_B, _, _, _ = geometry_system.multibody_terms.contact_terms(traj)
         phi = phi.detach().clone()
         smallest_phis = phi.min(dim=1).values
         return -torch.clamp_max(smallest_phis, 0)

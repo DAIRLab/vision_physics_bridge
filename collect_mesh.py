@@ -62,7 +62,8 @@ def main_command(vision_asset: str, bundlesdf_id: str, nerf_bundlesdf_id: str,
     nerf_results_dir = file_utils.bundlesdf_nerf_results_dir(
         dataset=vision_asset, cycle_iteration=cycle_iteration,
         tracking_bundlesdf_id=bundlesdf_id, nerf_bundlesdf_id=nerf_bundlesdf_id)
-    mesh_file = op.join(nerf_results_dir, 'mesh_cleaned.obj')
+    # mesh_file = op.join(nerf_results_dir, 'mesh_cleaned.obj') # normalized
+    mesh_file = op.join(nerf_results_dir, 'textured_mesh.obj')  # true scale
 
     # copy the mesh file to a remote device (which is local for the user on remote)
     # Setup SSH connection

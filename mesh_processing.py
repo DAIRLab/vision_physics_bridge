@@ -43,7 +43,8 @@ class MeshProcessor:
     only.
     """
     def __init__(self, vision_asset: str, tracking_bundlesdf_id: str,
-                 nerf_bundlesdf_id: str, cycle_iteration: int):
+                 nerf_bundlesdf_id: str, cycle_iteration: int, 
+                 meshlab: bool):
         # First decode the system and start/end tosses from the provided asset
         # directory.
         assert cycle_iteration > 0, f'Invalid {cycle_iteration=}.'
@@ -54,14 +55,16 @@ class MeshProcessor:
         self.tracking_bundlesdf_id = tracking_bundlesdf_id
         self.nerf_bundlesdf_id = nerf_bundlesdf_id
         self.cycle_iteration = cycle_iteration
+        self.meshlab = meshlab
 
         # Get the meshes.
         self._load_meshes()
         self.did_alignment_to_bundlesdf = False
 
     def _load_meshes(self):
-        true_obj_file = file_utils.object_scan_filepath(self.object)
-        self.true_mesh = icp.load_mesh_from_obj(true_obj_file)
+        if not self.meshlab:
+            true_obj_file = file_utils.object_scan_filepath(self.object)
+            self.true_mesh = icp.load_mesh_from_obj(true_obj_file)
 
         nerf_results_dir = file_utils.bundlesdf_nerf_results_dir(
             dataset=self.vision_asset, cycle_iteration=self.cycle_iteration,
@@ -71,6 +74,9 @@ class MeshProcessor:
         learned_obj_file = op.join(nerf_results_dir, 'textured_mesh.obj')
         self.learned_mesh = icp.load_mesh_from_obj(learned_obj_file)
 
+        if self.meshlab:
+            true_obj_file = op.join(nerf_results_dir, 'true_geom_aligned_meshlab.obj')
+            self.true_mesh = icp.load_mesh_from_obj(true_obj_file)
     def align_true_to_learned_mesh_with_icp(
             self, show: bool = True, save_dir: str = None,
             obj_name: str = 'true_geom_aligned.obj'):
@@ -906,9 +912,14 @@ def cli():
               default=1,
               help="BundleSDF iteration number (can't choose 0 since that " + \
                 "means use TagSLAM poses).")
+@click.option('--meshlab',
+              is_flag=True,
+              help="Whether to start with meshlab-aligned meshes, in which " + \
+                "case only icp is needed here for refinement")
 
 def process_manual_icp_command(vision_asset: str, bundlesdf_id: str,
-                               nerf_bundlesdf_id: str, cycle_iteration: int):
+                               nerf_bundlesdf_id: str, cycle_iteration: int, 
+                               meshlab: bool):
     # Decode the BundleSDF run ID.
     tracking_bundlesdf_id = bundlesdf_id
     if tracking_bundlesdf_id[:13] != 'bundlesdf_id_':
@@ -925,7 +936,8 @@ def process_manual_icp_command(vision_asset: str, bundlesdf_id: str,
     )
 
     mesh_processor = MeshProcessor(
-        vision_asset, tracking_bundlesdf_id, nerf_bundlesdf_id, cycle_iteration)
+        vision_asset, tracking_bundlesdf_id, nerf_bundlesdf_id, cycle_iteration, 
+        meshlab)
 
     mesh_processor.interactive_align_true_to_learned_mesh_with_icp2(
         save_dir=eval_dir)
