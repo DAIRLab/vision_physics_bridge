@@ -972,11 +972,15 @@ class GeometryEvaluator:
             self.learned_hull.sample_points_poisson_disk(2000).points))
         self.hull_chamfer_distance = eval_utils.chamfer_distance(
             true_hull_cloud, learned_hull_cloud).item()
+        
+        self.hull_to_full_chamfer_distance = eval_utils.chamfer_distance(
+            true_cloud, learned_hull_cloud).item()
 
     # TODO BIBIT implement F-score
     def _compute_f_score(self):
         self.f_score = None
         self.hull_f_score = None
+        self.hull_to_full_f_score = None
 
     def _compute_volume_error(self):
         # Get the vertices of each mesh.
@@ -998,6 +1002,9 @@ class GeometryEvaluator:
         hull_geometry_results['f_score'] = self.hull_f_score
         hull_geometry_results['volume_error'] = self.convex_volume_error
 
+        hull_to_full_geometry_results = results['geometry_metrics']['hull_to_full']
+        hull_to_full_geometry_results['chamfer_distance'] = self.hull_to_full_chamfer_distance
+        hull_to_full_geometry_results['f_score'] = self.hull_to_full_f_score
 
 class GeometryEvaluatorFromFiles(GeometryEvaluator):
     """Workflow:
