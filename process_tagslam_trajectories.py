@@ -10,15 +10,23 @@ from scipy.spatial.transform import Rotation
 import torch
 
 import file_utils, math_utils
-from conversion_bsdf_to_pll import FILTER_ORIENTATIONS, FILTER_POSITIONS, \
-    FILTER_LINEAR_VELOCITIES, FILTER_ANGULAR_VELOCITIES, FILTER_TYPE, \
-    SAVGOL_FILTER_WINDOW_LENGTH, SAVGOL_FILTER_POLYORDER, \
-    MEDIAN_FILTER_KERNEL_SIZE
+
+
+# Filter settings.
+FILTER_ORIENTATIONS = True
+FILTER_POSITIONS = True
+FILTER_LINEAR_VELOCITIES = True
+FILTER_ANGULAR_VELOCITIES = True
+
+FILTER_TYPE = 'median'              # Can be median or savgol.
+SAVGOL_FILTER_WINDOW_LENGTH = 15
+SAVGOL_FILTER_POLYORDER = 3
+MEDIAN_FILTER_KERNEL_SIZE = 3
 
 
 class TagSLAMTrajectoryConverter:
-    """TODO Something."""
-
+    """Class for processing poses into PLL-formatted states.  This particular
+    class starts from TagSLAM trajectories."""
     def __init__(self, vision_asset: str, z_table: float) -> None:
         self.z_table = z_table
         self.tagslam_dir = file_utils.synchronized_tagslam_pose_dir(

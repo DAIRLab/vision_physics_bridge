@@ -26,17 +26,11 @@ import math_utils
 
 from overlay_videos import OverlayVideoGenerator
 from vis_utils import SDFSliceViewer
+from process_tagslam_trajectories import TagSLAMTrajectoryConverter, \
+    FILTER_ORIENTATIONS, FILTER_POSITIONS, FILTER_LINEAR_VELOCITIES, \
+    FILTER_ANGULAR_VELOCITIES, FILTER_TYPE, SAVGOL_FILTER_WINDOW_LENGTH, \
+    SAVGOL_FILTER_POLYORDER, MEDIAN_FILTER_KERNEL_SIZE
 
-
-FILTER_ORIENTATIONS = True
-FILTER_POSITIONS = True
-FILTER_LINEAR_VELOCITIES = True
-FILTER_ANGULAR_VELOCITIES = True
-
-FILTER_TYPE = 'median'              # Can be median or savgol.
-SAVGOL_FILTER_WINDOW_LENGTH = 15
-SAVGOL_FILTER_POLYORDER = 3
-MEDIAN_FILTER_KERNEL_SIZE = 3
 
 USED_ROBOT_JOINT_NAMES = [
     'panda_joint1', 'panda_joint2', 'panda_joint3', 'panda_joint4',
@@ -70,11 +64,11 @@ def build_pll_robot_object_tensordict(
          'robot_effort': torch.tensor(robot_effort)}, [n_horizon])
 
 
-class TrajectoryConverterBundleSDFToPLL:
-    """Class for processing pose data from BundleSDF.  Can detect if there are
-    corresponding TagSLAM poses, in which case these will be loaded.  Can
-    convert between BundleSDF and TagSLAM origins (if both) and between camera
-    and world frames.
+class TrajectoryConverterBundleSDFToPLL(TagSLAMTrajectoryConverter):
+    """An extension of TagSLAMTrajectoryConverter that can process pose data
+    from BundleSDF.  Can detect if there are corresponding TagSLAM poses, in
+    which case these will be loaded.  Can convert between BundleSDF and TagSLAM
+    origins (if both) and between camera and world frames.
 
     Since the ContactNets toss's start and end are defined based on indexing
     into the BundleSDF trajectories, the corresponding TagSLAM trajectories
@@ -424,190 +418,6 @@ class TrajectoryConverterBundleSDFToPLL:
 
         if not self.bsdf_only:
             self.keyframe_t_full_poses = np.array(keyframe_t_poses)
-
-    def _estimate_linear_velocities(
-            self, ts, ps, filter=FILTER_LINEAR_VELOCITIES) -> np.ndarray:
-        """From times and positions, estimate the linear velocities at each time
-        step.
-
-        Args:
-            ts (N,)
-            ps (N, 3)
-            filter:  whether or not to filter the result.
-
-        Outputs:
-            vs (N, 3)
-        """
-        # Do some input checking.
-        assert ts.ndim == 1, f'{ts.shape=} not of expected size (N,).'
-        assert ps.shape == (ts.shape[0], 3), f'{ps.shape=} not of expected ' + \
-            f'size ({ts.shape[0]}, 3).'
-
-        # Compute time differences.
-        t_start = ts[0]
-        t = ts - t_start
-        tdiff = np.tile((t[1:] - t[:-1]).reshape([-1, 1]), [1, 3])
-
-        # Compute velocities based on differences in position over time step.
-        pdiff = ps[1:, :] - ps[:-1, :]
-        vs = pdiff / tdiff
-
-        # Repeat first row so that \delta p = v' \delta t.
-        vs = np.vstack((vs[[0], :], vs))
-
-        if filter:
-            if FILTER_TYPE == 'savgol':
-                vs = signal.savgol_filter(
-                    vs, window_length=SAVGOL_FILTER_WINDOW_LENGTH,
-                    polyorder=SAVGOL_FILTER_POLYORDER, axis=0)
-            elif FILTER_TYPE == 'median':
-                for i in range(3):
-                    vs[:, i] = signal.medfilt(
-                        vs[:, i], kernel_size=MEDIAN_FILTER_KERNEL_SIZE)
-            else:
-                raise NotImplementedError
-
-        return vs
-
-    def _estimate_angular_velocities(
-            self, ts, qs, filter=FILTER_ANGULAR_VELOCITIES) -> np.ndarray:
-        """From times and orientations, estimate the angular velocities at each
-        time step.  These angular velocities are reported in body frame.
-
-        Args:
-            ts (N,)
-            qs (N, 4)
-            filter:  whether or not to filter the result.
-
-        Outputs:
-            ws (N, 3)
-        """
-        # Do some input checking.
-        assert ts.ndim == 1, f'{ts.shape=} not of expected size (N,).'
-        assert qs.shape == (ts.shape[0], 4), f'{qs.shape=} not of expected ' + \
-            f'size ({ts.shape[0]}, 4).'
-
-        # Compute time differences.
-        t_start = ts[0]
-        t = ts - t_start
-        tdiff = np.tile((t[1:] - t[:-1]).reshape([-1, 1]), [1, 3])
-
-        # Compute velocities based on differences in orientation over time step.
-        rot_t = Rotation.from_quat(qs)
-        rot_rel = rot_t[:-1].inv() * rot_t[1:]
-        rel_vecs = rot_rel.as_rotvec()
-        ws = rel_vecs / tdiff     # (N, 3)
-
-        # Repeat first row so that \delta q = w' \delta t.
-        ws = np.vstack((ws[[0], :], ws))
-
-        if filter:
-            if FILTER_TYPE == 'savgol':
-                ws = signal.savgol_filter(
-                    ws, window_length=SAVGOL_FILTER_WINDOW_LENGTH,
-                    polyorder=SAVGOL_FILTER_POLYORDER, axis=0)
-            elif FILTER_TYPE == 'median':
-                for i in range(3):
-                    ws[:, i] = signal.medfilt(
-                        ws[:, i], kernel_size=MEDIAN_FILTER_KERNEL_SIZE)
-            else:
-                raise NotImplementedError
-
-        return ws
-
-    def _filter_quaternions(self, quat):
-        """Filter and process reported quaternions."""
-        # Do some input checking.
-        assert quat.shape[1] == 4, f'{quat.shape=} not of expected size (N, 4).'
-        assert quat.ndim == 2, f'{quat.shape=} not of expected size (N, 4).'
-
-        quat = self._make_quaternions_consistent(quat)
-        rot_t = Rotation.from_quat(quat)
-
-        # Fix and filter quaternions.
-        rvecs = math_utils.rotvecfix(rot_t.as_rotvec())
-        for i in range(3):
-            # Always use medfilt no matter FILTER_TYPE.
-            rvecs[:, i] = signal.medfilt(
-                rvecs[:, i], kernel_size=MEDIAN_FILTER_KERNEL_SIZE)
-        rot_t = rot_t.from_rotvec(rvecs)
-
-        return rot_t.as_quat()
-
-    def _make_quaternions_consistent(self, quat):
-        # Do some input checking.
-        assert quat.shape[1] == 4, f'{quat.shape=} not of expected size (N, 4).'
-        assert quat.ndim == 2, f'{quat.shape=} not of expected size (N, 4).'
-
-        return math_utils.fix_quaternions(quat)
-
-    def _process_poses(
-            self, poses, times, filter_rot=FILTER_ORIENTATIONS,
-            filter_pos=FILTER_POSITIONS,
-            filter_lin_vel=FILTER_LINEAR_VELOCITIES,
-            filter_ang_vel=FILTER_ANGULAR_VELOCITIES,
-    ) -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
-        """Generate contactnets-format trajectory components.  This requires
-        estimating velocities from differences in pose and converting everything
-        to PLL format.  The PLL format is in:
-	        [ quaternion  position  angular_velocity  linear_velocity ]
-        where:
-            - quaternion: 		[qw, qx, qy, qz]
-            - position:  		[x, y, z] in meters
-            - angular_velocity:	[wx, wy, wz] in rad/second in body frame
-            - linear_velocity: 	[vx, vy, vz] in meters/second
-
-        Args:
-            poses (N, 7):  Poses in order of [x, y, z, qx, qy, qz, qw].
-            times (N,)
-
-        Outputs:
-            qs_wxyz (N, 4)
-            ps (N, 3)
-            ws (N, 3)
-            vs (N, 3)
-        """
-        # Do some input checking.
-        assert times.ndim == 1, f'{times.shape=} not of expected size (N,).'
-        assert poses.shape == (times.shape[0], 7), f'{poses.shape=} not of ' + \
-            f'expected size ({times.shape[0]}, 7).'
-
-        # Split the poses into positions and quaternions.
-        ps = poses[:, :3]
-        qs_xyzw = poses[:, 3:7]
-        t = times
-
-        # Do orientation filtering if desired.
-        if filter_rot:
-            qs_xyzw = self._filter_quaternions(qs_xyzw)
-        else:
-            qs_xyzw = self._make_quaternions_consistent(qs_xyzw)
-
-        # Do position filtering if desired.
-        if filter_pos:
-            if FILTER_TYPE == 'savgol':
-                ps = signal.savgol_filter(
-                    ps, window_length=SAVGOL_FILTER_WINDOW_LENGTH,
-                    polyorder=SAVGOL_FILTER_POLYORDER, axis=0)
-            elif FILTER_TYPE == 'median':
-                for i in range(3):
-                    ps[:, i] = signal.medfilt(
-                        ps[:, i], kernel_size=MEDIAN_FILTER_KERNEL_SIZE)
-            else:
-                raise NotImplementedError
-
-        # Subtract out table height so z=0 corresponds to being on the table.
-        ps[:, 2] -= self.z_table
-
-        # Calculate derivatives.
-        vs = self._estimate_linear_velocities(
-            ts=t, ps=ps, filter=filter_lin_vel)
-        ws = self._estimate_angular_velocities(
-            ts=t, qs=qs_xyzw, filter=filter_ang_vel)
-
-        # Package into PLL format.
-        qs_wxyz = math_utils.xyzw2wxyz(qs_xyzw)
-        return qs_wxyz, ps, ws, vs
 
     def do_process(self) -> None:
         """Generate contactnets-format trajectories for BundleSDF outputs, also
