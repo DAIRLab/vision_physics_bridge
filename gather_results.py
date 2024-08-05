@@ -16,6 +16,9 @@ only have results for tosses 1-3.
                         full_geometry:
                             chamfer_distance:
                             f_score:
+                        hull_to_full:
+                            chamfer_distance:
+                            f_score:
                     tracking_metrics:
                         toss:               <-- averaged over all tosses
                             against_bundlesdf:
@@ -1538,6 +1541,8 @@ class ResultsPlotter:
             ax.set_ylim(0, 0.1)
         if 'all_objs_chamfer_distance_v_data_full_geometry' in filename:
             ax.set_ylim(0, 0.1)
+        if 'all_objs_chamfer_distance_v_data_hull_to_full' in filename:
+            ax.set_ylim(0, 0.1)
 
         filename += '.png' if not filename.endswith('.png') else ''
         file_utils.assure_created(op.join(self.plot_dir, subdir))
@@ -1830,6 +1835,16 @@ def process_plot_command(do_objects: bool):
                 print(f'Plotting full geometry geometry scatters {metric}')
                 results_plotter.plot_object_geometry_scatter(
                     'full_geometry', metric)
+        if metric in \
+            empty_results['geometry_metrics']['hull_to_full'].keys():
+            if PLOT_GEOMETRY:
+                print(f'Plotting predicted hull vs full gt geometry {metric}')
+                results_plotter.plot_geometry_error_vs_data(
+                    'hull_to_full', metric)
+            if PLOT_GEOMETRY_SCATTERS:
+                print(f'Plotting predicted hull vs full gt geometry scatters {metric}')
+                results_plotter.plot_object_geometry_scatter(
+                    'hull_to_full', metric)
 
 
 if __name__ == '__main__':

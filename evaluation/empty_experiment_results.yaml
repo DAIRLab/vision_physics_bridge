@@ -439,3 +439,6 @@ geometry_metrics:
   full_geometry:
     chamfer_distance: null
     f_score: null
+  hull_to_full:
+    chamfer_distance: null
+    f_score: null

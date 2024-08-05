@@ -348,8 +348,8 @@ def create_multibody_learnable_system(
         dt = 1.0/30,
         loss_weights_dict = {
             'w_pred': 0, 'w_comp': 0, 'w_pen': 0, 'w_diss': 0, 'w_bsdf': 0},
-        force_mesh_to_be_polygon = True,
-        output_urdfs_dir = output_urdf_dir
+        output_urdfs_dir = output_urdf_dir,
+        represent_geometry_as = 'polygon',
     ).eval()
 
 def create_empty_results_dict(
