@@ -600,10 +600,10 @@ class TrajectoryConverterBundleSDFToPLL:
         ps[:, 2] -= self.z_table
 
         # Calculate derivatives.
-        vs = self._estimate_linear_velocities(ts=t, ps=ps,
-                                              filter=filter_lin_vel)
-        ws = self._estimate_angular_velocities(ts=t, qs=qs_xyzw,
-                                              filter=filter_ang_vel)
+        vs = self._estimate_linear_velocities(
+            ts=t, ps=ps, filter=filter_lin_vel)
+        ws = self._estimate_angular_velocities(
+            ts=t, qs=qs_xyzw, filter=filter_ang_vel)
 
         # Package into PLL format.
         qs_wxyz = math_utils.xyzw2wxyz(qs_xyzw)

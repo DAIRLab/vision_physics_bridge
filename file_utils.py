@@ -172,10 +172,26 @@ def synchronized_tagslam_pose_dir(dataset: str, check_exists: bool = False
     """TagSLAM's synchronized pose directory for a particular dataset.  Contains
     synced_tagslam.txt file and XXXX.txt files for every timestamp corresponding
     to bundlesdf_timestamps.txt in this directory's parent directory."""
-    path = op.join(
-        DATA_GEN_DIR, 'dataset', dataset, 'synchronized_tagslam_poses')
+    dataset_dir = cnets_data_gen_dataset_dir(
+        dataset=dataset, check_exists=check_exists)
+    path = op.join(dataset_dir, 'synchronized_tagslam_poses')
     if check_exists:
         assert op.exists(path), f'Requires {path} to exist but not found.'
+    return path
+
+def synchronized_tagslam_t_state_dir(dataset: str, check_exists: bool = False,
+                                     create: bool = False) -> str:
+    """TagSLAM's processed trajectory directory for a particular dataset.
+    Contains tagslam_t_full.pt file and toss_X.pt files for every toss, all in
+    PLL format.  These are based on the BundleSDF-time-synchronized TagSLAM
+    poses."""
+    dataset_dir = cnets_data_gen_dataset_dir(
+        dataset=dataset, check_exists=check_exists)
+    path = op.join(dataset_dir, 'tagslam_t_trajectories')
+    if check_exists:
+        assert op.exists(path), f'Requires {path} to exist but not found.'
+    if create:
+        return assure_created(path)
     return path
 
 def contactnets_input_dir(object: str) -> str:
@@ -717,7 +733,8 @@ def load_toss_numbers_from_object_in_yaml(object: str) -> dict:
         data = yaml.safe_load(f)
     return data['dataset'][object].keys()
 
-def load_toss_time_from_yaml(object, toss_number, key, as_ros_time=True):
+def load_toss_time_from_yaml(object: str, toss_number: int, key: str,
+                             as_ros_time: bool = True):
     start_time_data = load_field_from_yaml(object, toss_number, key)
     if as_ros_time:
         time = rospy.rostime.Time(secs=start_time_data['secs'],
@@ -726,7 +743,7 @@ def load_toss_time_from_yaml(object, toss_number, key, as_ros_time=True):
         time = start_time_data['secs'] + start_time_data['nsecs'] * 1e-9
     return time
 
-def load_field_from_yaml(object, toss_number, key):
+def load_field_from_yaml(object: str, toss_number: int, key: str):
     # Handle some special cases for robot experiments.  These do not have
     # associated frames listed since the entire trajectory is eligible for PLL.
     # Thus, return 1 for start_frame queries, -1 for end_frame, and 0 for
