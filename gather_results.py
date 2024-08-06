@@ -159,6 +159,8 @@ CM_LENGTH_SCALES_BY_OBJ = {
     'cube': 100 * 0.1048
 }
 
+OBJECTS_WITH_GT = ['cube']
+
 
 ERROR_LABELS = {
     'position_error': 'Position Error [cm]',
@@ -223,18 +225,13 @@ for i in range(31, 100):
     T_SCORE_PER_DOF[i] = 1.960
 
 
-# pll_vision_results
-# pll_size_results
-# pll_blind_b_results
-# pll_blind_t_results
-
 BSDF_PLL_COLOR = '#7030a0'  #'#398537'  #'#8c59b3'
-NERF_ON_COLOR = '#92668d'
+NERF_ON_COLOR = '#ff0000'  #'#92668d'
 BSDF_ONLY_COLOR = '#f9a602'  #'#a1b8e1'  #'#8eaadb'  #'#4472c4'  #'cd5b45'
-PLL_VISION_COLOR = '#833785'
-PLL_SIZE_COLOR = '#4a0042'
-PLL_BLIND_B_COLOR = '#92668d'
-PLL_BLIND_T_COLOR = '#95001a'
+PLL_VISION_COLOR = '#00ff00'  #'#833785'
+PLL_SIZE_COLOR = '#0000ff'  #'#4a0042'
+PLL_BLIND_B_COLOR = '#ffff00'  #'#92668d'
+PLL_BLIND_T_COLOR = '#ff00ff'  #'#95001a'
 
 BSDF_PLL_LABEL = 'Vysics'
 NERF_ON_LABEL = 'BundleSDF-PLL NeRF Online'
@@ -243,6 +240,7 @@ PLL_VISION_LABEL = 'PLL with Vision Supervision'
 PLL_SIZE_LABEL = 'PLL with Vision-Supervised Size Only'
 PLL_BLIND_B_LABEL = 'Blind PLL on Vision-Based Tracking'
 PLL_BLIND_T_LABEL = 'Blind PLL on Fiducial-Based Tracking'
+GT_LABEL = 'Using Ground Truth URDF'
 
 LINEWIDTH = 5
 MARKERSIZE = 100
@@ -252,8 +250,20 @@ PLOTS_TO_PRINT = [
     'all_tagged_objs_penetration_true_geom_predicted_traj_tagslam_v_data_unseen_tosses_dynamics_rollout_metrics',
     'all_tagged_objs_adds_error_tagslam_v_data_unseen_tosses_dynamics_rollout_metrics',
     'all_tagged_objs_add_error_tagslam_v_data_unseen_tosses_dynamics_rollout_metrics',
-    'all_tagged_objs_add_error_v_data_full.txt',
-    'all_tagged_objs_adds_error_v_data_full.txt'
+    'all_tagged_objs_add_error_v_data_full',
+    'all_tagged_objs_adds_error_v_data_full',
+    'all_gt_objs_add_error_for_gt_comp_unseen_tosses_dynamics_rollout_metrics',
+    'all_gt_objs_add_error_for_gt_comp_training_tosses_dynamics_rollout_metrics',
+    'all_gt_objs_add_error_for_gt_comp_all_tosses_dynamics_rollout_metrics',
+    'all_gt_objs_penetration_true_geom_predicted_traj_for_gt_comp_unseen_tosses_dynamics_rollout_metrics',
+    'all_gt_objs_penetration_true_geom_predicted_traj_for_gt_comp_training_tosses_dynamics_rollout_metrics',
+    'all_gt_objs_penetration_true_geom_predicted_traj_for_gt_comp_all_tosses_dynamics_rollout_metrics',
+    'cube_add_error_for_gt_comp_unseen_tosses_dynamics_rollout_metrics',
+    'cube_add_error_for_gt_comp_training_tosses_dynamics_rollout_metrics',
+    'cube_add_error_for_gt_comp_all_tosses_dynamics_rollout_metrics',
+    'cube_penetration_true_geom_predicted_traj_for_gt_comp_unseen_tosses_dynamics_rollout_metrics',
+    'cube_penetration_true_geom_predicted_traj_for_gt_comp_training_tosses_dynamics_rollout_metrics',
+    'cube_penetration_true_geom_predicted_traj_for_gt_comp_all_tosses_dynamics_rollout_metrics',
 ]
 
 
@@ -490,8 +500,8 @@ class ResultsPlotter:
                  bsdf_only_results: dict, #pll_only_results: dict,
                  #pll_tagslam_results: dict, pll_blind_results: dict,
                  pll_vision_results: dict, pll_size_results: dict,
-                 pll_blind_b_results: dict, pll_blind_t_results,
-                 do_objects: bool):
+                 pll_blind_b_results: dict, pll_blind_t_results: dict,
+                 gt_results: dict, do_objects: bool):
         # Store the results dictionaries.
         self.bsdf_pll_results = bsdf_pll_results
         self.nerf_on_results = nerf_on_results
@@ -503,6 +513,7 @@ class ResultsPlotter:
         self.pll_size_results = pll_size_results
         self.pll_blind_b_results = pll_blind_b_results
         self.pll_blind_t_results = pll_blind_t_results
+        self.gt_results = gt_results
 
         # Get a plotting directory.
         self.plot_dir = file_utils.plot_dir()
@@ -1251,6 +1262,158 @@ class ResultsPlotter:
             filename=f'scatter_{geometry_metric}_v_data_{hull_or_full}_true_units',
             subdir='object_geometry', save_to_txt=True, normalize=False)
 
+    def plot_gt_dynamics_comparison(
+            self, toss_subset: str, dynamics_metric: str):
+        """Dynamics metrics against TagSLAM.  Only doable for tagged objects and
+        not for BundleSDF-only."""
+        DYNAMICS_CATEGORY = 'dynamics_rollout_metrics'
+
+        # Keep track of all objects.
+        objects_w_gt_bsdf_pll_mean = [[], []]
+        objects_w_gt_nerf_on_mean = [[], []]
+        objects_w_gt_pll_vision_mean = [[], []]
+        objects_w_gt_pll_size_mean = [[], []]
+        objects_w_gt_pll_blind_b_mean = [[], []]
+        objects_w_gt_pll_blind_t_mean = [[], []]
+        objects_w_gt_gt_mean = []
+
+        objects_w_gt_bsdf_pll_auc = [[], []]
+        objects_w_gt_nerf_on_auc = [[], []]
+        objects_w_gt_pll_vision_auc = [[], []]
+        objects_w_gt_pll_size_auc = [[], []]
+        objects_w_gt_pll_blind_b_auc = [[], []]
+        objects_w_gt_pll_blind_t_auc = [[], []]
+        objects_w_gt_gt_auc = []
+
+        # Prepare to zip in consistent order:  BSDF-PLL, NeRF Online, PLL
+        # Vision, PLL Size, PLL Blind B, PLL Blind T.
+        means = [objects_w_gt_bsdf_pll_mean, objects_w_gt_nerf_on_mean,
+                 objects_w_gt_pll_vision_mean, objects_w_gt_pll_size_mean,
+                 objects_w_gt_pll_blind_b_mean, objects_w_gt_pll_blind_t_mean]
+        aucs = [objects_w_gt_bsdf_pll_auc, objects_w_gt_nerf_on_auc,
+                objects_w_gt_pll_vision_auc, objects_w_gt_pll_size_auc,
+                objects_w_gt_pll_blind_b_auc, objects_w_gt_pll_blind_t_auc]
+        result_dicts = [self.bsdf_pll_results, self.nerf_on_results,
+                        self.pll_vision_results, self.pll_size_results,
+                        self.pll_blind_b_results, self.pll_blind_t_results]
+
+        for obj in OBJECTS_WITH_GT:
+            scale = METRIC_SCALING[dynamics_metric]
+            auc_scale = METRIC_SCALING['auc']
+
+            # Handle the ground truth first.
+            gt_mean, gt_auc = [], []
+            # Iterate over the individual tosses.
+            for gt_results in self.gt_results[obj][
+                DYNAMICS_CATEGORY]['against_tagslam'][dynamics_metric].values():
+                gt_mean.append(gt_results['mean'] * scale)
+                gt_auc.append(gt_results['auc'] * auc_scale)
+            # gt_mean = np.mean(gt_mean)
+            # gt_auc = np.mean(gt_auc)
+            objects_w_gt_gt_mean.append(gt_mean)
+            objects_w_gt_gt_auc.append(gt_auc)
+
+            # Handle every approach next.
+            bsdf_pll_mean = [[], []]
+            nerf_on_mean = [[], []]
+            pll_vision_mean = [[], []]
+            pll_size_mean = [[], []]
+            pll_blind_b_mean = [[], []]
+            pll_blind_t_mean = [[], []]
+
+            bsdf_pll_auc = [[], []]
+            nerf_on_auc = [[], []]
+            pll_vision_auc = [[], []]
+            pll_size_auc = [[], []]
+            pll_blind_b_auc = [[], []]
+            pll_blind_t_auc = [[], []]
+
+            obj_means = [bsdf_pll_mean, nerf_on_mean, pll_vision_mean,
+                         pll_size_mean, pll_blind_b_mean, pll_blind_t_mean]
+            obj_aucs = [bsdf_pll_auc, nerf_on_auc, pll_vision_auc,
+                        pll_size_auc, pll_blind_b_auc, pll_blind_t_auc]
+
+            for all_mean, all_auc, obj_mean, obj_auc, result_dict in zip(
+                    means, aucs, obj_means, obj_aucs, result_dicts):
+                if 'tagged_objects' not in result_dict.keys():
+                    obj_mean = None
+                    obj_auc = None
+                    continue
+                for tosses, results in result_dict['tagged_objects'][obj].items():
+                    tosses = tosses.split('trained_on_toss_')[-1]
+                    start_toss = int(tosses.split('-')[0])
+                    end_toss = int(tosses.split('-')[-1])
+                    n_tosses = end_toss - start_toss + 1
+
+                    # NOTE:  Currently commented out so we can get more data.
+                    # if start_toss != 1:
+                    #     continue
+
+                    error = results[DYNAMICS_CATEGORY][toss_subset][
+                        'against_tagslam'][dynamics_metric]['mean'] * scale
+                    auc = results[DYNAMICS_CATEGORY][toss_subset][
+                        'against_tagslam'][dynamics_metric]['mean_auc'] * \
+                            auc_scale
+
+                    obj_mean[0].append(n_tosses)
+                    obj_mean[1].append(error)
+                    obj_auc[0].append(n_tosses)
+                    obj_auc[1].append(auc)
+                    all_mean[0].append(n_tosses)
+                    all_mean[1].append(error)
+                    all_auc[0].append(n_tosses)
+                    all_auc[1].append(auc)
+
+            # Generate the plots.
+            self._do_plot(
+                bp_data=bsdf_pll_mean, n_data=nerf_on_mean,
+                pv_data=pll_vision_mean, ps_data=pll_size_mean,
+                pbb_data=pll_blind_b_mean, pbt_data=pll_blind_t_mean,
+                gt=gt_mean,
+                ylabel=ERROR_LABELS[dynamics_metric], xlabel=NUM_TOSSES_LABEL,
+                title=f'{obj} {toss_subset.replace("_", " ")} Dynamics '.title() + \
+                    f'Rollout Prediction'.title(),
+                filename=f'{obj}_{dynamics_metric}_for_gt_comp_' + \
+                    f'{toss_subset}_{DYNAMICS_CATEGORY}', subdir='dynamics')
+            self._do_plot(
+                bp_data=bsdf_pll_auc, n_data=nerf_on_auc,
+                pv_data=pll_vision_auc, ps_data=pll_size_auc,
+                pbb_data=pll_blind_b_auc, pbt_data=pll_blind_t_auc, gt=gt_auc,
+                ylabel=AUC_LABELS[dynamics_metric], xlabel=NUM_TOSSES_LABEL,
+                title=f'{obj} {toss_subset.replace("_", " ")} Dynamics '.title() + \
+                    f'Rollout Prediction'.title(),
+                filename=f'{obj}_{dynamics_metric}_for_gt_comp_{toss_subset}' + \
+                    f'_{DYNAMICS_CATEGORY}_auc', subdir='dynamics')
+
+        # Do a confidence interval plot that aggregates all the objects.
+        if len(OBJECTS_WITH_GT) > 1:
+            self._do_confidence_interval_plot(
+                bp_data=objects_w_gt_bsdf_pll_mean,
+                n_data=objects_w_gt_nerf_on_mean,
+                pv_data=objects_w_gt_pll_vision_mean,
+                ps_data=objects_w_gt_pll_size_mean,
+                pbb_data=objects_w_gt_pll_blind_b_mean,
+                pbt_data=objects_w_gt_pll_blind_t_mean,
+                gt=objects_w_gt_gt_auc,
+                ylabel=ERROR_LABELS[dynamics_metric], xlabel=NUM_TOSSES_LABEL,
+                title=f'All GT Objects {toss_subset.replace("_", " ")} '.title() + \
+                    f'Dynamics Rollout Prediction'.title(),
+                filename=f'all_gt_objs_{dynamics_metric}_for_gt_comp_' + \
+                    f'{toss_subset}_{DYNAMICS_CATEGORY}', subdir='dynamics')
+            self._do_confidence_interval_plot(
+                bp_data=objects_w_gt_bsdf_pll_auc,
+                n_data=objects_w_gt_nerf_on_auc,
+                pv_data=objects_w_gt_pll_vision_auc,
+                ps_data=objects_w_gt_pll_size_auc,
+                pbb_data=objects_w_gt_pll_blind_b_auc,
+                pbt_data=objects_w_gt_pll_blind_t_auc,
+                gt=objects_w_gt_gt_auc,
+                ylabel=AUC_LABELS[dynamics_metric], xlabel=NUM_TOSSES_LABEL,
+                title=f'All GT Objects {toss_subset.replace("_", " ")} '.title() + \
+                    f'Dynamics Rollout Prediction'.title(),
+                filename=f'all_gt_objs_{dynamics_metric}_for_gt_comp_' + \
+                    f'{toss_subset}_{DYNAMICS_CATEGORY}_auc', subdir='dynamics')
+
     def _do_scatter_plot(self, bp_data: list = None, bo_data: list = None,
                          ylabel: str = '', xlabel_txt: str = '',
                          title: str = '', filename: str = '', subdir: str = '',
@@ -1375,12 +1538,14 @@ class ResultsPlotter:
                  bo_data: list = None, #po_data: list = None,
                  #pt_data: list = None, pb_data: list = None,
                  pv_data: list = None, ps_data: list = None,
-                 pbb_data: list = None, pbt_data: list = None,
+                 pbb_data: list = None, pbt_data: list = None, gt: list = None,
                  ylabel: str = '', xlabel: str = '', title: str = None,
                  filename: str = None, subdir: str = ''):
-        # Skip individual object plots.
-        if not self.do_objects:
+        # Skip individual object plots, but not if comparing against GT.
+        if not self.do_objects and gt is None:
             return
+
+        string = None
 
         fig = plt.figure()
         ax = plt.gca()
@@ -1406,6 +1571,26 @@ class ResultsPlotter:
         if pbt_data is not None and len(pbt_data[0]) > 0:
             ax.plot(pbt_data[0], pbt_data[1], linewidth=LINEWIDTH,
                     color=PLL_BLIND_T_COLOR, label=PLL_BLIND_T_LABEL)
+        if gt is not None:
+            ax.hlines(np.mean(gt), xmin=0.5, xmax=np.max(bp_data[0])+0.5,
+                      color='black', linestyle='--', linewidth=LINEWIDTH,
+                      label=GT_LABEL)
+            if filename in PLOTS_TO_PRINT:
+                string = ''
+                string = self._add_to_string(
+                    string, BSDF_PLL_LABEL, compare_with=bp_data[1],
+                    x=np.ones_like(bp_data[1]), y=bp_data[1],
+                    l=np.zeros_like(bp_data[1]), u=np.zeros_like(bp_data[1]),
+                    ys=bp_data[1])
+                string = self._add_to_string(
+                    string, PLL_VISION_LABEL, compare_with=bp_data[1],
+                    x=np.ones_like(pv_data[1]), y=pv_data[1],
+                    l=np.zeros_like(pv_data[1]), u=np.zeros_like(pv_data[1]),
+                    ys=pv_data[1])
+                string = self._add_to_string(
+                    string, GT_LABEL, compare_with=bp_data[1],
+                    x=np.ones_like(gt), y=gt, l=np.zeros_like(gt),
+                    u=np.zeros_like(gt), ys=gt)
 
         ax.set_xlim(0.5, np.max(bp_data[0])+0.5)
         x_markers = bp_data[0]
@@ -1422,6 +1607,13 @@ class ResultsPlotter:
         fig_path = op.join(self.plot_dir, subdir, filename)
         fig.savefig(fig_path, dpi=100)
         plt.close()
+
+        # Save the string to a text file as well.
+        if string is not None:
+            str_filepath = fig_path.replace('.png', '.txt')
+            with open(str_filepath, 'w') as txt_file:
+                txt_file.write(string)
+            print(f'Wrote to {str_filepath}')
 
     def _add_to_string(self, string, data_name, x, y, l, u, ys, compare_with):
         pm = [(ui-li)/2 for ui, li in zip(u, l)]
@@ -1447,7 +1639,7 @@ class ResultsPlotter:
             self, bp_data: list = None, n_data: list = None,
             bo_data: list = None,
             pv_data: list = None, ps_data: list = None,
-            pbb_data: list = None, pbt_data: list = None,
+            pbb_data: list = None, pbt_data: list = None, gt: list = None,
             ylabel: str = '', xlabel: str = '',
             title: str = None, filename: str = None, subdir: str = '',
             save_to_txt: bool = False):
@@ -1526,6 +1718,10 @@ class ResultsPlotter:
                 data_str = self._add_to_string(
                     data_str, 'pbt_data', x, y, l, u, pbt_data[1],
                     compare_with=bp_data[1])
+        if gt is not None:
+            ax.hlines(np.mean(gt), xmin=0.5, xmax=np.max(bp_data[0])+0.5,
+                      color='black', linestyle='--', linewidth=LINEWIDTH,
+                      label=GT_LABEL)
 
         ax.set_xlim(0.5, np.max(bp_data[0])+0.5)
         x_markers = bp_data[0]
@@ -1733,10 +1929,11 @@ def process_gather_command():
 
 # Use 'plot' command to load the previously generated yaml files with results
 # and to generate plots with them.
-PLOT_TRACKING = True
-PLOT_DYNAMICS = True
-PLOT_GEOMETRY = False
-PLOT_GEOMETRY_SCATTERS = True
+PLOT_TRACKING = False           # figure unused, text in table in manuscript
+PLOT_DYNAMICS = False           # figure unused, text in table in manuscript
+PLOT_GEOMETRY = False           # unused for manuscript
+PLOT_GEOMETRY_SCATTERS = False  # Fig 5 of manuscript
+PLOT_GT_COMPARISON = True       # exploration during rebuttal phase
 @cli.command('plot')
 @click.option('--do-objects/--skip-objects',
               type=bool, default=False,
@@ -1755,6 +1952,10 @@ def process_plot_command(do_objects: bool):
     pll_blind_t_results = file_utils.load_gathered_results_yaml(
         'pll_blind_t.yaml')
 
+    # Ground truth results.
+    cube_gt_results = file_utils.load_gathered_results_yaml('cube_GT.yaml')
+    gt_results = {'cube': cube_gt_results}
+
 
     # Load an empty results dictionary for checking which metrics are valid for
     # which category/against which tracking.
@@ -1768,10 +1969,12 @@ def process_plot_command(do_objects: bool):
         pll_size_results=pll_size_results,
         pll_blind_b_results=pll_blind_b_results,
         pll_blind_t_results=pll_blind_t_results,
+        gt_results=gt_results,
         do_objects=do_objects
     )
 
     for metric in ERROR_LABELS.keys():
+        # Tracking.
         for trajectory in ['full', 'toss']:
             if metric in \
                 empty_results['tracking_metrics']['against_tagslam'].keys():
@@ -1786,6 +1989,7 @@ def process_plot_command(do_objects: bool):
                     results_plotter.plot_bundlesdf_tracking_error_vs_data(
                         trajectory, metric)
 
+        # Dynamics.
         for toss_subset in ['all_tosses', 'training_tosses', 'unseen_tosses']:
             for dynamics_category in [
                 'dynamics_rollout_metrics', 'dynamics_single_step_metrics']:
@@ -1815,6 +2019,17 @@ def process_plot_command(do_objects: bool):
                     results_plotter.plot_bundlesdf_dynamics_error_vs_data(
                         toss_subset, dynamics_category, metric)
 
+        # Ground truth dynamics comparison.
+        for toss_subset in ['all_tosses', 'training_tosses', 'unseen_tosses']:
+            if metric in empty_results['dynamics_rollout_metrics'][
+                'against_tagslam'].keys():
+                if PLOT_GT_COMPARISON:
+                    print(f'Plotting ground truth dynamics comparison, ' + \
+                          f'{toss_subset}, {metric}')
+                    results_plotter.plot_gt_dynamics_comparison(
+                        toss_subset, metric)
+
+        # Geometry.
         if metric in \
             empty_results['geometry_metrics']['convex_hull'].keys():
             if PLOT_GEOMETRY:
