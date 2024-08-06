@@ -364,9 +364,9 @@ dataset: #toss_id:rosbag_id
 
   # Tagless robot interaction experiments
   # TODO annotate these to use the right number of interactions
-  # TODO figure out how to handle multiple experiments per object.  For now I'm
-  # adding a _A suffix, but we could just have multiple bags listed under a
-  # single robot_bakingbox_sticky entry.
+  # To handle multiple experiments per object, can add a _A suffix instead of
+  # having multiple bags listed under a single robot_bakingbox_sticky entry.
+  # This preserves continuity of all the interactions in a robot vision asset.
   robot_bakingbox_sticky_A:
     0: 
     1: 201
@@ -385,6 +385,69 @@ dataset: #toss_id:rosbag_id
     10: 202
     11: 202
     12: 202
+
+  # For the below robot interaction experiments, we picked just one acceptable
+  # bag per object and used the sticky surface.  Thus we omit the _sticky_A
+  # suffixes.
+  robot_greencan:
+    0:
+    1: 211
+    2: 211
+    3: 211
+    4: 211
+    5: 211
+    6: 211
+    7: 211
+    8: 211
+    9: 211
+    10: 211
+    11: 211
+  robot_milk:
+    0:
+    1: 213
+    2: 213
+    3: 213
+    4: 213
+    5: 213
+    6: 213
+    7: 213
+    8: 213
+    9: 213
+    10: 213
+    11: 213
+  robot_oatly:
+    0:
+    1: 217
+    2: 217
+    3: 217
+    4: 217
+    5: 217
+    6: 217
+    7: 217
+    8: 217
+    9: 217
+    10: 217
+  robot_stapler:
+    0:
+    1: 219
+    2: 219
+    3: 219
+    4: 219
+    5: 219
+    6: 219
+    7: 219
+    8: 219
+    9: 219
+    10: 219
+    11: 219
+    12: 219
+    13: 219
+    14: 219
+    15: 219
+    16: 219
+    17: 219
+    18: 219
+    19: 219
 
 # WARNING:  When we parse this yaml, it relies on the tosses going
 # chronologically, starting from 0, with no skipped tosses.  If you want to have
@@ -3907,9 +3970,8 @@ tosses:
       start_adjust: 2
 
   # Robot interaction experiments
-  # TODO annotate these to use the right number of interactions
   # NOTE:  these don't have start_frame, end_frame, and start_adjust keys, which
-  # are hardcoded in file_utils.py to be 0, -1, and 0, respectively, for these
+  # are hardcoded in file_utils.py to be 1, -1, and 0, respectively, for these
   # robot experiments.
   robot_bakingbox_sticky_A:
     - toss: 0
@@ -4014,6 +4076,378 @@ tosses:
       end_time:
         secs: 1720534217
         nsecs: 416341319
+  robot_greencan:
+    - toss: 0
+    - toss: 1
+      start_time:
+        secs: 1720534517
+        nsecs: 265994008
+      end_time:
+        secs: 1720534543
+        nsecs: 261421266
+    - toss: 2
+      start_time:
+        secs: 1720534543
+        nsecs: 261421266
+      end_time:
+        secs: 01720534558
+        nsecs: 525682336
+    - toss: 2
+      start_time:
+        secs: 01720534558
+        nsecs: 525682336
+      end_time:
+        secs: 01720534579
+        nsecs: 207152085
+    - toss: 3
+      start_time:
+        secs: 01720534579
+        nsecs: 207152085
+      end_time:
+        secs: 01720534590
+        nsecs: 727996915
+    - toss: 4
+      start_time:
+        secs: 01720534590
+        nsecs: 727996915
+      end_time:
+        secs: 1720534597
+        nsecs: 246024105
+    - toss: 5
+      start_time:
+        secs: 1720534597
+        nsecs: 246024105
+      end_time:
+        secs: 01720534608
+        nsecs: 058279803
+    - toss: 6
+      start_time:
+        secs: 01720534608
+        nsecs: 058279803
+      end_time:
+        secs: 1720534618
+        nsecs: 784081658
+    - toss: 7
+      start_time:
+        secs: 1720534618
+        nsecs: 784081658
+      end_time:
+        secs: 01720534628
+        nsecs: 003857150
+    - toss: 8
+      start_time:
+        secs: 01720534628
+        nsecs: 003857150
+      end_time:
+        secs: 1720534639
+        nsecs: 542506547
+    - toss: 9
+      start_time:
+        secs: 1720534639
+        nsecs: 542506547
+      end_time:
+        secs: 01720534655
+        nsecs: 646072718
+    - toss: 10
+      start_time:
+        secs: 01720534655
+        nsecs: 646072718
+      end_time:
+        secs: 01720534671
+        nsecs: 228510005
+    - toss: 11
+      start_time:
+        secs: 01720534671
+        nsecs: 228510005
+      end_time:
+        secs: 1720534682
+        nsecs: 133740582
+  robot_milk:
+    - toss: 0
+    - toss: 1
+      start_time:
+        secs: 1720535034
+        nsecs: 659373710
+      end_time:
+        secs: 01720535066
+        nsecs: 746324054
+    - toss: 2
+      start_time:
+        secs: 01720535066
+        nsecs: 746324054
+      end_time:
+        secs: 01720535082
+        nsecs: 708977039
+    - toss: 3
+      start_time:
+        secs: 01720535082
+        nsecs: 708977039
+      end_time:
+        secs: 01720535099
+        nsecs: 531456494
+    - toss: 4
+      start_time:
+        secs: 01720535099
+        nsecs: 531456494
+      end_time:
+        secs: 01720535111
+        nsecs: 052830114
+    - toss: 5
+      start_time:
+        secs: 01720535111
+        nsecs: 052830114
+      end_time:
+        secs: 01720535119
+        nsecs: 594937726
+    - toss: 6
+      start_time:
+        secs: 01720535119
+        nsecs: 594937726
+      end_time:
+        secs: 01720535136
+        nsecs: 033409264
+    - toss: 7
+      start_time:
+        secs: 01720535136
+        nsecs: 033409264
+      end_time:
+        secs: 01720535148
+        nsecs: 025570346
+    - toss: 8
+      start_time:
+        secs: 01720535148
+        nsecs: 025570346
+      end_time:
+        secs: 01720535161
+        nsecs: 743102197
+    - toss: 9
+      start_time:
+        secs: 01720535161
+        nsecs: 743102197
+      end_time:
+        secs: 01720535171
+        nsecs: 856749446
+    - toss: 10
+      start_time:
+        secs: 01720535171
+        nsecs: 856749446
+      end_time:
+        secs: 01720535192
+        nsecs: 190954817
+    - toss: 11
+      start_time:
+        secs: 01720535192
+        nsecs: 190954817
+      end_time:
+        secs: 01720535206
+        nsecs: 948070339
+  robot_oatly:
+    - toss: 0
+    - toss: 1
+      start_time:
+        secs: 1720535893
+        nsecs: 846024794
+      end_time:
+        secs: 1720535916
+        nsecs: 942161581
+    - toss: 2
+      start_time:
+        secs: 1720535916
+        nsecs: 942161581
+      end_time:
+        secs: 1720535931
+        nsecs: 796761953
+    - toss: 3
+      start_time:
+        secs: 1720535931
+        nsecs: 796761953
+      end_time:
+        secs: 1720535941
+        nsecs: 259782363
+    - toss: 4
+      start_time:
+        secs: 1720535941
+        nsecs: 259782363
+      end_time:
+        secs: 1720535953
+        nsecs: 727239967
+    - toss: 5
+      start_time:
+        secs: 1720535953
+        nsecs: 727239967
+      end_time:
+        secs: 1720535973
+        nsecs: 456183386
+    - toss: 6
+      start_time:
+        secs: 1720535973
+        nsecs: 456183386
+      end_time:
+        secs: 1720535987
+        nsecs: 903034474
+    - toss: 7
+      start_time:
+        secs: 1720535987
+        nsecs: 903034474
+      end_time:
+        secs: 1720535994
+        nsecs: 703403608
+    - toss: 8
+      start_time:
+        secs: 1720535994
+        nsecs: 703403608
+      end_time:
+        secs: 1720535999
+        nsecs: 911714885
+    - toss: 9
+      start_time:
+        secs: 1720535999
+        nsecs: 911714885
+      end_time:
+        secs: 1720536008
+        nsecs: 036813863
+    - toss: 10
+      start_time:
+        secs: 1720536008
+        nsecs: 036813863
+      end_time:
+        secs: 1720536023
+        nsecs: 110092442
+  robot_stapler:
+    - toss: 0
+    - toss: 1
+      start_time:
+        secs: 1720536184
+        nsecs: 817558719
+      end_time:
+        secs: 1720536200
+        nsecs: 975903906
+    - toss: 2
+      start_time:
+        secs: 1720536200
+        nsecs: 975903906
+      end_time:
+        secs: 1720536210
+        nsecs: 622730966
+    - toss: 3
+      start_time:
+        secs: 1720536210
+        nsecs: 622730966
+      end_time:
+        secs: 1720536222
+        nsecs: 146508148
+    - toss: 4
+      start_time:
+        secs: 1720536222
+        nsecs: 146508148
+      end_time:
+        secs: 1720536237
+        nsecs: 507612291
+    - toss: 5
+      start_time:
+        secs: 1720536237
+        nsecs: 507612291
+      end_time:
+        secs: 1720536244
+        nsecs: 590314923
+    - toss: 6
+      start_time:
+        secs: 1720536244
+        nsecs: 590314923
+      end_time:
+        secs: 1720536253
+        nsecs: 446688272
+    - toss: 7
+      start_time:
+        secs: 1720536253
+        nsecs: 446688272
+      end_time:
+        secs: 1720536267
+        nsecs: 954486819
+    - toss: 8
+      start_time:
+        secs: 1720536267
+        nsecs: 954486819
+      end_time:
+        secs: 1720536275
+        nsecs: 751257654
+    - toss: 9
+      start_time:
+        secs: 1720536275
+        nsecs: 751257654
+      end_time:
+        secs: 1720536280
+        nsecs: 677619984
+    - toss: 10
+      start_time:
+        secs: 1720536280
+        nsecs: 677619984
+      end_time:
+        secs: 1720536294
+        nsecs: 268312604
+    - toss: 11
+      start_time:
+        secs: 1720536294
+        nsecs: 268312604
+      end_time:
+        secs: 1720536302
+        nsecs: 539662617
+    - toss: 12
+      start_time:
+        secs: 1720536302
+        nsecs: 539662617
+      end_time:
+        secs: 1720536306
+        nsecs: 831031402
+    - toss: 13
+      start_time:
+        secs: 1720536306
+        nsecs: 831031402
+      end_time:
+        secs: 1720536313
+        nsecs: 507927666
+    - toss: 14
+      start_time:
+        secs: 1720536313
+        nsecs: 507927666
+      end_time:
+        secs: 1720536325
+        nsecs: 549758643
+    - toss: 15
+      start_time:
+        secs: 1720536325
+        nsecs: 549758643
+      end_time:
+        secs: 1720536333
+        nsecs: 843192705
+    - toss: 16
+      start_time:
+        secs: 1720536333
+        nsecs: 843192705
+      end_time:
+        secs: 1720536343
+        nsecs: 889276466
+    - toss: 17
+      start_time:
+        secs: 1720536343
+        nsecs: 889276466
+      end_time:
+        secs: 1720536355
+        nsecs: 654592755
+    - toss: 18
+      start_time:
+        secs: 1720536355
+        nsecs: 654592755
+      end_time:
+        secs: 01720536361
+        nsecs: 133787335
+    - toss: 19
+      start_time:
+        secs: 01720536361
+        nsecs: 133787335
+      end_time:
+        secs: 1720536377
+        nsecs: 768436366
 
 # These body_frames are the TagSLAM body frame's pose relative to the first
 # specified tag ID.
