@@ -220,15 +220,17 @@ class MeshProcessor:
 
         # Double check the aggregate transformation from the little steps is
         # correct.
-        interactive_vis.check_total_transformation(self.true_mesh)
+        if not self.meshlab:
+            interactive_vis.check_total_transformation(self.true_mesh)
 
         # Now do ICP, starting with this as an initialization.
         # Need to do ICP on 3D points instead of the mesh directly.
         true_cloud = self.true_mesh.sample_points_poisson_disk(2000)
 
-        # Visualize the initial alignment.
-        o3d.visualization.draw_geometries(
-            [true_cloud, learned_cloud], window_name="Initial Comparison")
+        if not self.meshlab:
+            # Visualize the initial alignment.
+            o3d.visualization.draw_geometries(
+                [true_cloud, learned_cloud], window_name="Initial Comparison")
 
         centered_transform = np.eye(4)
         # centered_transform[:3, 3] = learned_cloud.get_center() - \
