@@ -5,6 +5,7 @@ import numpy as np
 from PIL import Image
 import matplotlib.pyplot as plt
 import imageio
+from torch import Tensor
 from tqdm import tqdm
 from PIL import Image
 import glob
@@ -188,6 +189,25 @@ def synchronized_tagslam_t_state_dir(dataset: str, check_exists: bool = False,
     dataset_dir = cnets_data_gen_dataset_dir(
         dataset=dataset, check_exists=check_exists)
     path = op.join(dataset_dir, 'tagslam_t_trajectories')
+    if check_exists:
+        assert op.exists(path), f'Requires {path} to exist but not found.'
+    if create:
+        return assure_created(path)
+    return path
+
+def synchronized_tagslam_b_state_dir(dataset: str, check_exists: bool = False,
+                                     create: bool = False) -> str:
+    """TagSLAM's processed trajectory directory for a particular dataset.
+    Contains tagslam_b_full.pt file and toss_X.pt files for every toss, all in
+    PLL format.  These are based on the BundleSDF-time-synchronized TagSLAM
+    poses, transformed to match BundleSDF's output.
+
+    WARNING:  It has been carefully designed to write a source.txt file into
+    this directory, which describes where the BundleSDF information came from.
+    """
+    dataset_dir = cnets_data_gen_dataset_dir(
+        dataset=dataset, check_exists=check_exists)
+    path = op.join(dataset_dir, 'tagslam_b_trajectories')
     if check_exists:
         assert op.exists(path), f'Requires {path} to exist but not found.'
     if create:

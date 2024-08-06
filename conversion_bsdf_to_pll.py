@@ -6,8 +6,6 @@ import os
 import os.path as op
 import numpy as np
 import torch
-from scipy import signal
-from scipy.spatial.transform import Rotation
 from tensordict.tensordict import TensorDictBase, TensorDict
 import matplotlib
 matplotlib.use('TkAgg') # if not used, might see the following error:
@@ -19,17 +17,13 @@ matplotlib.use('TkAgg') # if not used, might see the following error:
 import matplotlib.pyplot as plt
 import pdb
 import trimesh
-from typing import Tuple
 
 import file_utils
 import math_utils
 
 from overlay_videos import OverlayVideoGenerator
 from vis_utils import SDFSliceViewer
-from process_tagslam_trajectories import TagSLAMTrajectoryConverter, \
-    FILTER_ORIENTATIONS, FILTER_POSITIONS, FILTER_LINEAR_VELOCITIES, \
-    FILTER_ANGULAR_VELOCITIES, FILTER_TYPE, SAVGOL_FILTER_WINDOW_LENGTH, \
-    SAVGOL_FILTER_POLYORDER, MEDIAN_FILTER_KERNEL_SIZE
+from process_tagslam_trajectories import TagSLAMTrajectoryConverter
 
 
 USED_ROBOT_JOINT_NAMES = [
@@ -164,26 +158,6 @@ class TrajectoryConverterBundleSDFToPLL(TagSLAMTrajectoryConverter):
         self.end_frames = math_utils.convert_relative_frames_to_absolute(
             relative_end_frames, full_times, start_ros_times)
 
-    def _set_up_directories(self) -> None:
-        """Given the stored object and start/end toss numbers, loads the
-        following attributes:
-            - self.cnets_data_gen_dir
-            - self.tagslam_dir
-            - self.bundlesdf_dir
-            - self.annotated_dir
-        """
-        self.cnets_data_gen_dir = file_utils.cnets_data_gen_dataset_dir(
-            self.dataset, check_exists=True)
-        self.bundlesdf_dir = file_utils.bundlesdf_pose_dir(
-            self.dataset, cycle_iteration=self.cycle_iteration,
-            bundlesdf_id=self.tracking_bundlesdf_id)
-
-        if not self.bsdf_only:
-            self.tagslam_dir = file_utils.synchronized_tagslam_pose_dir(
-                self.dataset, check_exists=True)
-            self.annotated_dir = file_utils.bundlesdf_annotated_poses_dir(
-                self.dataset)
-
     def _load_poses(self) -> None:
         """Load the timestamped poses reported from TagSLAM, BundleSDF, and the
         Franka, saving the results in attributes:
@@ -212,10 +186,7 @@ class TrajectoryConverterBundleSDFToPLL(TagSLAMTrajectoryConverter):
         running BundleSDF and are timestamped according to the BundleSDF times,
         which come from the bundlesdf_timestamps.txt file.
         """
-        self._load_bundlesdf_poses()
-        self._load_bundlesdf_keyframe_poses()
-
-        print(f'\nTarget frame rate: {self.frame_rate}\n')
+        super()._load_poses()
 
         # Handle robot states.
         if self.has_robot_interactions:
@@ -225,109 +196,6 @@ class TrajectoryConverterBundleSDFToPLL(TagSLAMTrajectoryConverter):
                   f'\n\t{self.robot_joint_angles.shape=}' + \
                   f'\n\t{self.robot_joint_velocities.shape=}' + \
                   f'\n\t{self.robot_joint_efforts.shape=}\n')
-
-        # Handle TagSLAM states.
-        if not self.bsdf_only:
-            self._load_tagslam_poses()
-
-            tagslam_full_dts = np.mean(
-                self.tagslam_full_times[1:] - self.tagslam_full_times[:-1]
-            )
-            print(f'TagSLAM full trajectory information:' + \
-                f'\n\t{self.tagslam_t_full_poses.shape=}' + \
-                f'\n\t{self.tagslam_full_times[0]=}' + \
-                f'\n\tAverage frame rate (full): {1/tagslam_full_dts}\n')
-
-        bsdf_full_dts = np.mean(
-            self.bundlesdf_full_times[1:] - self.bundlesdf_full_times[:-1]
-        )
-        print(f'BundleSDF full trajectory information:' + \
-              f'\n\t{self.bundlesdf_b_full_poses.shape=}' + \
-              f'\n\t{self.bundlesdf_full_times[0]=}' + \
-              f'\n\tAverage frame rate (full): {1/bsdf_full_dts}\n')
-
-        print(f'BundleSDF keyframe full trajectory information:' + \
-              f'\n\t{self.keyframe_b_full_poses.shape=}' + \
-              f'\n\t{self.keyframe_full_times[0]=}\n')
-
-    def _load_tagslam_poses(self) -> None:
-        """Load all the poses reported by TagSLAM.  These are in world
-        coordinates of the TagSLAM body origin with the following ordering:
-            [x, y, z, qx, qy, qz, qw]
-        """
-        tagslam_data = np.loadtxt(
-            op.join(self.tagslam_dir, 'synced_tagslam.txt'))
-
-        self.tagslam_full_times = tagslam_data[:, 0]
-        self.tagslam_t_full_poses = tagslam_data[:, 1:]
-
-        # Also convert the TagSLAM poses to the BundleSDF body origin.
-
-        # Get synchronized BundleSDF and TagSLAM poses -- pick the last keyframe
-        # from BundleSDF.
-        b_mat = math_utils.pos_quat_to_trans_mat(
-            self.keyframe_b_full_poses[-1, :7])
-        t_mat = math_utils.pos_quat_to_trans_mat(
-            self.tagslam_t_full_poses[self.keyframe_idx[-1], :7])
-
-        # Do the conversion.
-        tagslam_t_full_states_pll = np.hstack(
-            (math_utils.xyz_xyzw_to_pll_format(self.tagslam_t_full_poses),
-             np.zeros((self.tagslam_t_full_poses.shape[0], 6)))
-        )
-        tagslam_b_full_states_pll = \
-            math_utils.transform_t_origin_to_b_origin_pll_format(
-                full_tagslam_trajectory=tagslam_t_full_states_pll,
-                synced_bsdf_pose=b_mat,
-                synced_tagslam_pose=t_mat
-            )
-        self.tagslam_b_full_poses = math_utils.pll_to_xyz_xyzw_format(
-            tagslam_b_full_states_pll[:, :7])
-
-    def _load_bundlesdf_poses(self) -> None:
-        """Load all the poses reported by BundleSDF.  Store these in one or two
-        formats:  of the BundleSDF body origin in world frame, and if not
-        self.bsdf_only, also of the TagSLAM body origin in world frame
-        (converted from BundleSDF origin in camera coordinates via
-        math_utils.transform_bundletrack_output).  All have the following
-        ordering:
-            [x, y, z, qx, qy, qz, qw]
-        """
-        if not self.bsdf_only:
-            bundlesdf_t_poses = []
-        bundlesdf_b_poses = []
-        bundlesdf_times = np.loadtxt(
-            op.join(self.cnets_data_gen_dir, 'bundlesdf_timestamps.txt'))
-
-        # Add 1 for range bounds because BundleSDF poses are 1-indexed.
-        for i in range(1, bundlesdf_times.shape[0] + 1):
-            trans_mat = np.loadtxt(op.join(self.bundlesdf_dir, "%04i.txt" % i))
-            trans_mat_b = math_utils.camera_to_world(
-                trans_mat, translation=self.cam_trans,
-                axis_vec=self.cam_rot_axis_angle)
-            pos_quat_b = math_utils.trans_mat_to_pos_quat(
-                trans_mat_b).reshape(7)
-            bundlesdf_b_poses.append(pos_quat_b)
-
-            if not self.bsdf_only:
-                trans_mat_t = \
-                    math_utils.transform_bundletrack_origin_to_tagslam_origin(
-                        pred_pose=trans_mat,
-                        bsdf_output_pose_dir=self.bundlesdf_dir,
-                        annotated_poses_dir=self.annotated_dir,
-                        translation=self.cam_trans,
-                        axis_vec=self.cam_rot_axis_angle,
-                        to_world=True
-                    )
-                pos_quat_t = math_utils.trans_mat_to_pos_quat(
-                    trans_mat_t).reshape(7)
-                bundlesdf_t_poses.append(pos_quat_t)
-
-        self.bundlesdf_b_full_poses = np.array(bundlesdf_b_poses)
-        self.bundlesdf_full_times = np.array(bundlesdf_times)
-
-        if not self.bsdf_only:
-            self.bundlesdf_t_full_poses = np.array(bundlesdf_t_poses)
 
     def _load_robot_joint_states(self) -> None:
         """Load the robot joint angles, velocities, and efforts from the
@@ -357,67 +225,6 @@ class TrajectoryConverterBundleSDFToPLL(TagSLAMTrajectoryConverter):
         self.robot_joint_angles = robot_joint_angles[:, indices]
         self.robot_joint_velocities = robot_joint_velocities[:, indices]
         self.robot_joint_efforts = robot_joint_efforts[:, indices]
-
-    def _load_bundlesdf_keyframe_poses(self) -> None:
-        """Load all the optimized keyframe poses reported by BundleSDF after
-        NeRF training.  Store these in two formats:  of the BundleSDF body
-        origin in world frame, and of the TagSLAM body origin in world frame
-        (converted from BundleSDF origin in camera coordinates via
-        math_utils.transform_bundletrack_output).  All have the following
-        ordering:
-            [x, y, z, qx, qy, qz, qw]
-        """
-        # Get the keyframe indices from the BundleSDF tracking results' last
-        # frame directory, in keyframes.yml.
-        keyframe_idx_1_indexed = \
-            file_utils.load_keyframe_indices_from_nerf_results_yml(
-                self.dataset, self.cycle_iteration, self.tracking_bundlesdf_id)
-
-        # Convert BundleSDF keyframes 1-indexing to 0-indexing.
-        self.keyframe_idx = [i-1 for i in keyframe_idx_1_indexed]
-
-        # Get the adjusted keyframe poses from the BundleSDF NeRF results'
-        # poses_after_nerf.txt.
-        keyframe_tfs = \
-            file_utils.load_optimized_keyframe_poses_from_nerf_results(
-                dataset=self.dataset, cycle_iteration=self.cycle_iteration,
-                tracking_bundlesdf_id=self.tracking_bundlesdf_id,
-                nerf_bundlesdf_id=self.nerf_bundlesdf_id
-            )
-
-        if not self.bsdf_only:
-            keyframe_t_poses = []
-        keyframe_b_poses = []
-        keyframe_times = self.bundlesdf_full_times[self.keyframe_idx]
-
-        for bsdf_pose in keyframe_tfs:
-            trans_mat = bsdf_pose
-            trans_mat_b = math_utils.camera_to_world(
-                trans_mat, translation=self.cam_trans,
-                axis_vec=self.cam_rot_axis_angle)
-            pos_quat_b = math_utils.trans_mat_to_pos_quat(
-                trans_mat_b).reshape(7)
-            keyframe_b_poses.append(pos_quat_b)
-
-            if not self.bsdf_only:
-                trans_mat_t = \
-                    math_utils.transform_bundletrack_origin_to_tagslam_origin(
-                        pred_pose=trans_mat,
-                        bsdf_output_pose_dir=self.bundlesdf_dir,
-                        annotated_poses_dir=self.annotated_dir,
-                        translation=self.cam_trans,
-                        axis_vec=self.cam_rot_axis_angle,
-                        to_world=True
-                    )
-                pos_quat_t = math_utils.trans_mat_to_pos_quat(
-                    trans_mat_t).reshape(7)
-                keyframe_t_poses.append(pos_quat_t)
-
-        self.keyframe_b_full_poses = np.array(keyframe_b_poses)
-        self.keyframe_full_times = np.array(keyframe_times)
-
-        if not self.bsdf_only:
-            self.keyframe_t_full_poses = np.array(keyframe_t_poses)
 
     def do_process(self) -> None:
         """Generate contactnets-format trajectories for BundleSDF outputs, also
