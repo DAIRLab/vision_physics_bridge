@@ -976,7 +976,7 @@ class GeometryEvaluator:
         self.hull_to_full_chamfer_distance = eval_utils.chamfer_distance(
             true_cloud, learned_hull_cloud).item()
 
-    # TODO BIBIT implement F-score
+    # TODO implement F-score
     def _compute_f_score(self):
         self.f_score = None
         self.hull_f_score = None
@@ -1002,8 +1002,10 @@ class GeometryEvaluator:
         hull_geometry_results['f_score'] = self.hull_f_score
         hull_geometry_results['volume_error'] = self.convex_volume_error
 
-        hull_to_full_geometry_results = results['geometry_metrics']['hull_to_full']
-        hull_to_full_geometry_results['chamfer_distance'] = self.hull_to_full_chamfer_distance
+        hull_to_full_geometry_results = results[
+            'geometry_metrics']['hull_to_full']
+        hull_to_full_geometry_results['chamfer_distance'] = \
+            self.hull_to_full_chamfer_distance
         hull_to_full_geometry_results['f_score'] = self.hull_to_full_f_score
 
 class GeometryEvaluatorFromFiles(GeometryEvaluator):
@@ -1333,6 +1335,10 @@ class DynamicsPredictor:
         if tagslam_trajs is not None:
             # Convert the TagSLAM trajectories to be represented with respect to
             # the BundleSDF body origin.
+            # TODO:  Realized 8/5/2024 I think PLL's TagSLAM trajectories are
+            # already represented wrt the BundleSDF body origin.  However this
+            # additional conversion is inconsequential since it should just
+            # result in b_mat = t_mat.
             tagslam_trajs_of_b_origin = {}
             for toss_key, tagslam_traj in tagslam_trajs.items():
                 # Get synchronized BundleSDF and TagSLAM poses.
@@ -1766,7 +1772,7 @@ class DynamicsPredictorFromFiles(DynamicsPredictor):
             self.pll_system = eval_utils.create_multibody_learnable_system(
                 existing_urdf_path)
 
-    def load_saved_predictions(self):
+    def _load_saved_predictions(self):
         self.predicted_trajs = {}
         self.bundlesdf_trajs = None
         if f'bundlesdf_toss_{self.start_toss}.pt' in os.listdir(
@@ -1811,10 +1817,159 @@ class DynamicsPredictorFromFiles(DynamicsPredictor):
     def store_dynamics_metrics(
             self, results: dict, geom_evaluator: GeometryEvaluator) -> None:
         # First load the trajectories from files.
-        self.load_saved_predictions()
+        self._load_saved_predictions()
 
         # Can compute and store the metrics.
         return super().store_dynamics_metrics(results, geom_evaluator)
+
+
+class GTParameterDynamicsPredictor(DynamicsPredictor):
+    """Does dynamics predictions from a URDF that has 'ground-truth' parameters.
+
+    NOTE:  While written as inheriting from DynamicsPredictor, this current
+    implementation does not use any of its parent's functionality.
+
+    NOTE:  This is currently only well-defined for the cube, whose ground-truth
+    parameters are more or less known.
+
+    Workflow:
+        - init
+        - generate_rollout_trajectories
+        - save_predictions
+        - store_dynamics_metrics(results)
+    """
+    def __init__(self, vision_asset: str):
+        self.vision_asset = vision_asset
+        self.object = '_'.join(vision_asset.split('_')[:-1])
+
+        # Load the TagSLAM T trajectories.
+        self.tagslam_t_trajs = eval_utils.get_tagslam_t_trajectories_pll_format(
+            self.object)
+
+        # Make evaluation subdirectory.
+        self.eval_dir = file_utils.evaluation_subdir_for_gt(
+            dataset=self.vision_asset)
+
+    def _create_pll_sim_system(self):
+        if hasattr(self, 'pll_system'):
+            print(f'No need to remake PLL system in DynamicsPredictor.')
+            return
+
+        # Create the system with the ground truth URDF, copying it over to this
+        # evaluation directory.
+        old_gt_urdf_path, old_gt_obj_path = \
+            file_utils.ground_truth_object_urdf_obj_filepaths(
+                self.object)
+        new_gt_urdf_path = op.join(self.eval_dir, 'gt_params.urdf')
+        new_gt_obj_path = op.join(self.eval_dir, op.basename(old_gt_obj_path))
+        os.system(f'cp {old_gt_urdf_path} {new_gt_urdf_path}')
+        os.system(f'cp {old_gt_obj_path} {new_gt_obj_path}')
+
+        self.pll_system = eval_utils.create_multibody_learnable_system(
+            new_gt_urdf_path)
+
+        # Export the URDF.
+        self.pll_system.generate_updated_urdfs()
+
+    def generate_rollout_trajectories(self):
+        # Create the simulation system.
+        self._create_pll_sim_system()
+
+        # Get the predictions.
+        pred_trajs_of_t_origin = {}
+        trajs = self.tagslam_t_trajs
+
+        for toss_key, target_traj in trajs.items():
+            start_adjust = file_utils.load_field_from_yaml(
+                object=self.object, toss_number=toss_key, key='start_adjust')
+            pred_trajs_of_t_origin[toss_key] = \
+                eval_utils.get_pll_rollout_trajectory(
+                    system=self.pll_system, target_traj=Tensor(target_traj),
+                    start_adjust=start_adjust
+                )
+
+        # Store the targets and predictions.
+        self.predicted_trajs = pred_trajs_of_t_origin
+
+    # NOTE:  Not implemented.
+    def generate_single_step_predictions(self):
+        """NOTE:  This was not implemented since this was created after the
+        single-step predictions were determined to be a poor evaluation metric.
+        """
+        raise NotImplementedError
+
+    def save_predictions(self):
+        """Save the target and prediction trajectories to the evaluation
+        directory."""
+        print(f'Saving trajectories to {self.eval_dir}:')
+
+        for toss_num, pred_traj in self.predicted_trajs.items():
+            filename = f'predicted_toss_{toss_num}.pt'
+            torch.save(pred_traj, op.join(self.eval_dir, filename))
+            print(f'\t{filename}')
+
+        for toss_num, target_traj in self.tagslam_t_trajs.items():
+            filename = f'tagslam_t_toss_{toss_num}.pt'
+            torch.save(target_traj, op.join(self.eval_dir, filename))
+            print(f'\t{filename}')
+
+    def get_aligned_true_cloud(self):
+        if not hasattr(self, 'aligned_true_cloud'):
+            _, gt_obj_path = file_utils.ground_truth_object_urdf_obj_filepaths(
+                self.object)
+            true_mesh = icp.load_mesh_from_obj(gt_obj_path)
+            self.true_cloud = Tensor(np.asarray(
+                true_mesh.sample_points_poisson_disk(2000).points))
+        return self.true_cloud
+
+    def store_dynamics_metrics(self, results: dict):
+        ### Rollout metrics.
+        sub_results = results['dynamics_rollout_metrics']['against_tagslam']
+
+        position_results = sub_results['position_error']
+        for toss_key, subsub_results in position_results.items():
+            toss_num = int(toss_key.split('_')[1])
+            over_traj = TrajectoryMetrics.position_error(
+                self.tagslam_t_trajs[toss_num], self.predicted_trajs[toss_num])
+            subsub_results['mean'] = over_traj.mean().item()
+            subsub_results['traj'] = over_traj.tolist()
+
+        rotation_error = sub_results['rotation_error']
+        for toss_key, subsub_results in rotation_error.items():
+            toss_num = int(toss_key.split('_')[1])
+            over_traj = TrajectoryMetrics.rotation_error(
+                self.tagslam_t_trajs[toss_num], self.predicted_trajs[toss_num])
+            subsub_results['mean'] = over_traj.mean().item()
+            subsub_results['traj'] = over_traj.tolist()
+
+        add_error = sub_results['add_error']
+        for toss_key, subsub_results in add_error.items():
+            toss_num = int(toss_key.split('_')[1])
+            over_traj = TrajectoryMetrics.add_error(
+                self.tagslam_t_trajs[toss_num], self.predicted_trajs[toss_num],
+                self.get_aligned_true_cloud()
+            )
+            subsub_results['mean'] = over_traj.mean().item()
+            subsub_results['traj'] = over_traj.tolist()
+
+        adds_error = sub_results['adds_error']
+        for toss_key, subsub_results in adds_error.items():
+            toss_num = int(toss_key.split('_')[1])
+            over_traj = TrajectoryMetrics.adds_error(
+                self.tagslam_t_trajs[toss_num], self.predicted_trajs[toss_num],
+                self.get_aligned_true_cloud()
+            )
+            subsub_results['mean'] = over_traj.mean().item()
+            subsub_results['traj'] = over_traj.tolist()
+
+        penetration_true_geom = sub_results[
+            'penetration_true_geom_predicted_traj']
+        for toss_key, subsub_results in penetration_true_geom.items():
+            toss_num = int(toss_key.split('_')[1])
+            over_traj = TrajectoryMetrics.penetration(
+                self.predicted_trajs[toss_num], self.pll_system)
+            subsub_results['mean'] = over_traj.mean().item()
+            subsub_results['traj'] = over_traj.tolist()
 
 
 class TrajectoryMetrics:
@@ -1979,6 +2134,11 @@ def recompute_results_from_existing_files(
               default=1,
               help="BundleSDF iteration number (can't choose 0 since that " + \
                 "means use TagSLAM poses).")
+@click.option('--gt/--learned-params',
+              type=bool,
+              default=False,
+              help="whether to use ground-truth parameters for dynamics " + \
+                "evaluation.")
 @click.option('--do-videos/--skip-videos',
               type=bool,
               default=False,
@@ -1991,7 +2151,7 @@ def recompute_results_from_existing_files(
                 "dynamics")
 
 def main_command(vision_asset: str, bundlesdf_id: str, nerf_bundlesdf_id: str,
-                 pll_id: str, cycle_iteration: int, do_videos: bool,
+                 pll_id: str, cycle_iteration: int, gt: bool, do_videos: bool,
                  overwrite: str):
     do_tracking = True
     do_dynamics = True
@@ -2004,10 +2164,18 @@ def main_command(vision_asset: str, bundlesdf_id: str, nerf_bundlesdf_id: str,
         assert nerf_bundlesdf_id is None, f'Cannot have {nerf_bundlesdf_id=}' +\
             f' if cycle_iteration is 0.'
         do_tracking = False
+
     assert cycle_iteration >= 0, f'Invalid {cycle_iteration=}.'
     assert '_' in vision_asset, f'Invalid {vision_asset=}.'
 
-    if pll_id is None:
+    if gt:
+        assert bundlesdf_id == nerf_bundlesdf_id == pll_id == None, \
+            f'Cannot use {bundlesdf_id=}, {nerf_bundlesdf_id=}, or ' + \
+            f'{pll_id=} with {gt=}.'
+        history = {}
+        last_run_was_bsdf = False
+
+    elif pll_id is None:
         assert bundlesdf_id is not None, f'Need {bundlesdf_id=} if not ' + \
             f'{pll_id=}.'
 
@@ -2023,6 +2191,7 @@ def main_command(vision_asset: str, bundlesdf_id: str, nerf_bundlesdf_id: str,
         # Obtain the run history.
         history = traverse_run_history_from_bsdf(
             vision_asset, tracking_bundlesdf_id, cycle_iteration)
+        last_run_was_bsdf = True
 
     else:
         assert bundlesdf_id is None and nerf_bundlesdf_id is None, f'Can ' + \
@@ -2036,24 +2205,48 @@ def main_command(vision_asset: str, bundlesdf_id: str, nerf_bundlesdf_id: str,
         # Obtain the run history.
         history = traverse_run_history_from_pll(
             vision_asset, pll_id, cycle_iteration)
+        last_run_was_bsdf = False
 
     print(f'Found run history:')
     for key, val in history.items():
         print(f'\t{key} : {val}')
 
     # Create an empty results dictionary to be stored as a yaml file.
-    last_run_was_bsdf = True if pll_id is None else False
     results = eval_utils.create_empty_results_dict(
         vision_asset, cycle_iteration, last_run_was_bsdf=last_run_was_bsdf)
     results['_overview']['vision_asset'] = vision_asset
     results['_overview']['history'] = history
     results['_overview']['nerf_bundlesdf_id'] = nerf_bundlesdf_id
 
+    if gt:
+        print(f'Using ground-truth parameters for dynamics evaluation only.')
+        del results['dynamics_single_step_metrics']
+        del results['geometry_metrics']
+        del results['dynamics_rollout_metrics']['against_bundlesdf']
+
+        dynamics_predictor = GTParameterDynamicsPredictor(vision_asset)
+
+        # Delete any tosses for which we don't have TagSLAM trajectories.
+        for sub_results in results['dynamics_rollout_metrics'][
+            'against_tagslam'].values():
+            for key in list(sub_results.keys()):
+                if int(key.split("_")[1]) not in \
+                    dynamics_predictor.tagslam_t_trajs.keys():
+                    del sub_results[key]
+
+        dynamics_predictor.generate_rollout_trajectories()
+        dynamics_predictor.save_predictions()
+        dynamics_predictor.store_dynamics_metrics(results)
+
+        ### Save the results.
+        file_utils.save_results_to_yaml(results, dynamics_predictor.eval_dir)
+        exit()
+
     # Automatically detect if BundleSDF-only is necessary based on if the object
     # is a tagless one.
     bsdf_only = False
     object = '_'.join(vision_asset.split('_')[:-1])
-    if object in file_utils.TAGLESS_OBJECTS:
+    if object in file_utils.TAGLESS_OBJECTS or object.startswith('robot'):
         bsdf_only = True
         print(f'Automatically setting {bsdf_only=} for tagless {object=}.')
     else:

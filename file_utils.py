@@ -337,6 +337,18 @@ def z_axis_obj_filepath():
     """Path to the z-axis obj file for official video overlays."""
     return op.join(DATA_GEN_DIR, 'assets', 'z_axis.obj')
 
+def ground_truth_object_urdf_obj_filepaths(object: str):
+    """Path to the ground truth object URDF file."""
+    OBJECTS_WITH_GT_URDF = ['cube']
+    assert object in OBJECTS_WITH_GT_URDF, f'No ground truth URDF for ' + \
+        f'{object} -- can only handle {OBJECTS_WITH_GT_URDF} for now.'
+
+    urdf_path = op.join(
+        pll_file_utils.ASSETS_DIR, f'contactnets_{object}_mesh.urdf')
+    obj_path = op.join(
+        pll_file_utils.ASSETS_DIR, f'contactnets_{object}.obj')
+    return urdf_path, obj_path
+
 
 """Manual inspection directories."""
 def inspection_dir() -> str:
@@ -566,6 +578,15 @@ def evaluation_subdir(
             pll_id = pll_id[7:]
 
         subdir = f'{dataset}_pll_{pll_id}_{cycle_iteration}'
+
+    if create:
+        return assure_created(op.join(eval_dir, subdir))
+    return op.join(eval_dir, subdir)
+
+def evaluation_subdir_for_gt(dataset: str, create: bool = True) -> str:
+    """Subdirectory for a particular experiment's evaluation."""
+    eval_dir = evaluation_dir()
+    subdir = f'{dataset}_GT'
 
     if create:
         return assure_created(op.join(eval_dir, subdir))

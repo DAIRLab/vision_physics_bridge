@@ -1842,7 +1842,8 @@ def process_plot_command(do_objects: bool):
                 results_plotter.plot_geometry_error_vs_data(
                     'hull_to_full', metric)
             if PLOT_GEOMETRY_SCATTERS:
-                print(f'Plotting predicted hull vs full gt geometry scatters {metric}')
+                print(f'Plotting predicted hull vs full gt geometry ' + \
+                      f'scatters {metric}')
                 results_plotter.plot_object_geometry_scatter(
                     'hull_to_full', metric)
 

@@ -449,6 +449,43 @@ def get_pll_tagslam_trajectories_pll_format(object: str) -> dict:
 
     return trajectories
 
+def get_tagslam_t_trajectories_pll_format(object: str) -> dict:
+    """Load TagSLAM trajectories from the cnets-data-gen dataset directory,
+    where TagSLAM trajectories wrt the TagSLAM origin are stored in PLL format.
+    Returns a dictionary with toss numbers as keys and torch tensors (N, 13) as
+    values.  Returns None if the object is tagless and thus there are no TagSLAM
+    trajectories."""
+    if object in file_utils.TAGLESS_OBJECTS or object.startswith('robot'):
+        print(f'Object {object} is tagless; no TagSLAM trajectories.')
+        return None
+
+    # Get all of the trajectories, tosses 1 through 10 (or up until created).
+    trajectories = {}
+
+    print(f'First checking for TagSLAM trajectories for {object}_1-10.')
+    vision_asset = f'{object}_1-10'
+    tagslam_t_dir = file_utils.synchronized_tagslam_t_state_dir(
+        vision_asset, create=False)
+    if op.exists(tagslam_t_dir):
+        for toss_i in range(1, 11):
+            trajectory = torch.load(op.join(tagslam_t_dir, f'{toss_i}.pt'))
+            trajectories[toss_i] = trajectory
+        return trajectories
+
+    print(f'{object}_1-10 not found; trying individual tosses instead.')
+    for toss_i in range(1, 11):
+        vision_asset = f'{object}_{toss_i}'
+        tagslam_t_dir = file_utils.synchronized_tagslam_t_state_dir(
+            vision_asset, create=False)
+
+        if op.exists(tagslam_t_dir):
+            trajectory = torch.load(op.join(tagslam_t_dir, f'{toss_i}.pt'))
+            trajectories[toss_i] = trajectory
+        else:
+            print(f'No trajectory found for {vision_asset}; skipping.')
+
+    return trajectories
+
 def get_bundlesdf_trajectories_pll_format(
         vision_asset: str, cycle_iteration: int, bundlesdf_id: str) -> dict:
     """Load BundleSDF trajectories from the PLL assets directory so they are
