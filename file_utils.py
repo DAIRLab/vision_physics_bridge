@@ -53,7 +53,7 @@ TAGLESS_OBJECTS = ['bakingbox', 'burger', 'cardboard', 'chocolate', 'cream',
                    'icetray', 'mug', 'oatly', 'pinkcan', 'stapler', 'styrofoam',
                    'toothpaste']
 
-OBJECTS_WITH_GT_URDF = ['cube']
+OBJECTS_WITH_GT_URDF = ['cube', 'bottle', 'milk', 'half']
 
 
 """Directory utilities."""
@@ -367,9 +367,8 @@ def ground_truth_object_urdf_obj_filepaths(object: str, body_t: bool = False):
         assert body_t, f'Only the cube has a body_t URDF: {object=} {body_t=}.'
 
     urdf_path = op.join(
-        pll_file_utils.ASSETS_DIR, f'contactnets_{object}_mesh.urdf')
-    obj_path = op.join(
-        pll_file_utils.ASSETS_DIR, f'contactnets_{object}.obj')
+        DATA_GEN_DIR, 'assets', 'true_urdfs', f'{object}_gt.urdf')
+    obj_path = op.join(DATA_GEN_DIR, 'assets', 'true_urdfs', f'{object}_gt.obj')
     return urdf_path, obj_path
 
 

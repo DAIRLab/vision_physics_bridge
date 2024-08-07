@@ -1,0 +1,49 @@
+<!-- Computed inertial properties by assuming the mesh represents an infinitely
+thin, uniformly dense, hollow object.  Done via cnets-data-generation's
+test_mesh_inertia.py script, which generated the following, assuming a mass
+value of 0.37 kg:
+
+    Object:  bottle
+    Center of mass:  [ 0.00583126 -0.00676556  0.04695134]
+    Inertia tensor about center of mass:
+        [[ 0.00199423  0.00037865 -0.00084513]
+        [ 0.00037865  0.00249432  0.00035717]
+        [-0.00084513  0.00035717  0.00193799]]
+
+TODO:  Need to pick a coefficient of friction based on measurements.
+-->
+
+<?xml version="1.0"?>
+<robot name="object" xmlns:drake="https://drake.mit.edu/">
+    <link name="body">
+        <inertial>
+            <origin xyz="0.00583126 -0.00676556  0.04695134" rpy="0 0 0"/>
+            <mass value="0.37" />
+            <inertia
+                ixx="0.00199423"
+                ixy="0.00037865"
+                ixz="-0.00084513"
+                iyy="0.00249432"
+                iyz="0.00035717"
+                izz="0.00193799" />
+        </inertial>
+        <visual>
+            <origin xyz="0 0 0" rpy="0 0 0" />
+            <geometry>
+                <mesh filename="half_gt.obj"/>
+            </geometry>
+            <material name="pennred">
+                <color rgba="0.6 0 0 1.0" />
+            </material>
+        </visual>
+        <collision>
+            <geometry>
+                <mesh filename="half_gt.obj"/>
+            </geometry>
+            <origin xyz="0 0 0" rpy="0 0 0" />
+            <drake:proximity_properties>
+                <drake:mu_static value="0.15" />
+            </drake:proximity_properties>
+        </collision>
+    </link>
+</robot>
