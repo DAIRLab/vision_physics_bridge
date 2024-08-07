@@ -1,3 +1,5 @@
+<?xml version="1.0"?>
+
 <!-- Verified inertial properties by assuming the mesh represents an infinitely
 thin, uniformly dense, hollow object.  Done via cnets-data-generation's
 test_mesh_inertia.py script, which generated the following, assuming a mass
@@ -14,7 +16,6 @@ The friction coefficient was selected based on measurements taken during the
 2020 ContactNets project which introduced the cube as a physical system.
 -->
 
-<?xml version="1.0"?>
 <robot name="object" xmlns:drake="https://drake.mit.edu/">
     <link name="body">
         <inertial>

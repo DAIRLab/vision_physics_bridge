@@ -1918,7 +1918,7 @@ class GTParameterDynamicsPredictor(DynamicsPredictor):
             print(f'\t{filename}')
 
         for toss_num, target_traj in self.tagslam_trajs.items():
-            filename = f'tagslam_t_toss_{toss_num}.pt'
+            filename = f'tagslam_toss_{toss_num}.pt'
             torch.save(target_traj, op.join(self.eval_dir, filename))
             print(f'\t{filename}')
 

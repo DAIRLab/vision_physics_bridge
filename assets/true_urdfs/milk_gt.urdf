@@ -1,3 +1,5 @@
+<?xml version="1.0"?>
+
 <!-- Computed inertial properties by assuming the mesh represents an infinitely
 thin, uniformly dense, hollow object.  Done via cnets-data-generation's
 test_mesh_inertia.py script, which generated the following, assuming a mass
@@ -13,7 +15,6 @@ value of 0.37 kg:
 TODO:  Need to pick a coefficient of friction based on measurements.
 -->
 
-<?xml version="1.0"?>
 <robot name="object" xmlns:drake="https://drake.mit.edu/">
     <link name="body">
         <inertial>
@@ -30,7 +31,7 @@ TODO:  Need to pick a coefficient of friction based on measurements.
         <visual>
             <origin xyz="0 0 0" rpy="0 0 0" />
             <geometry>
-                <mesh filename="half_gt.obj"/>
+                <mesh filename="milk_gt.obj"/>
             </geometry>
             <material name="pennred">
                 <color rgba="0.6 0 0 1.0" />
@@ -38,7 +39,7 @@ TODO:  Need to pick a coefficient of friction based on measurements.
         </visual>
         <collision>
             <geometry>
-                <mesh filename="half_gt.obj"/>
+                <mesh filename="milk_gt.obj"/>
             </geometry>
             <origin xyz="0 0 0" rpy="0 0 0" />
             <drake:proximity_properties>
