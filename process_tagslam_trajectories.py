@@ -5,6 +5,7 @@ from typing import Tuple
 import click
 import numpy as np
 import os.path as op
+import pdb
 from scipy import signal
 from scipy.spatial.transform import Rotation
 import torch
@@ -53,9 +54,13 @@ class TagSLAMTrajectoryConverter:
         self.frame_rate = 30
 
         # Load camera extrinsics.
-        object = '_'.join(vision_asset.split('_')[:-1])
+        self.object = '_'.join(vision_asset.split('_')[:-1])
         self.cam_trans, self.cam_rot_axis_angle = \
-            file_utils.load_camera_extrinsics(object)
+            file_utils.load_camera_extrinsics(self.object)
+
+        # Use BundleSDF vision asset with just the first toss, since it's just
+        # one pose offset we need.
+        self.bsdf_vision_asset = f'{self.object}_{self.start_toss}'
 
         self.bsdf_only = False
 
@@ -76,8 +81,12 @@ class TagSLAMTrajectoryConverter:
         """
         self.cnets_data_gen_dir = file_utils.cnets_data_gen_dataset_dir(
             self.dataset, check_exists=True)
+
+        # Use the BundleSDF vision asset.
+        self.bsdf_cnets_data_gen_dir = file_utils.cnets_data_gen_dataset_dir(
+            self.bsdf_vision_asset, check_exists=True)
         self.bundlesdf_dir = file_utils.bundlesdf_pose_dir(
-            self.dataset, cycle_iteration=self.cycle_iteration,
+            self.bsdf_vision_asset, cycle_iteration=self.cycle_iteration,
             bundlesdf_id=self.tracking_bundlesdf_id)
 
         if not self.bsdf_only:
@@ -204,7 +213,7 @@ class TagSLAMTrajectoryConverter:
             bundlesdf_t_poses = []
         bundlesdf_b_poses = []
         bundlesdf_times = np.loadtxt(
-            op.join(self.cnets_data_gen_dir, 'bundlesdf_timestamps.txt'))
+            op.join(self.bsdf_cnets_data_gen_dir, 'bundlesdf_timestamps.txt'))
 
         # Add 1 for range bounds because BundleSDF poses are 1-indexed.
         for i in range(1, bundlesdf_times.shape[0] + 1):
@@ -249,7 +258,8 @@ class TagSLAMTrajectoryConverter:
         # frame directory, in keyframes.yml.
         keyframe_idx_1_indexed = \
             file_utils.load_keyframe_indices_from_nerf_results_yml(
-                self.dataset, self.cycle_iteration, self.tracking_bundlesdf_id)
+                self.bsdf_vision_asset, self.cycle_iteration,
+                self.tracking_bundlesdf_id)
 
         # Convert BundleSDF keyframes 1-indexing to 0-indexing.
         self.keyframe_idx = [i-1 for i in keyframe_idx_1_indexed]
@@ -258,7 +268,8 @@ class TagSLAMTrajectoryConverter:
         # poses_after_nerf.txt.
         keyframe_tfs = \
             file_utils.load_optimized_keyframe_poses_from_nerf_results(
-                dataset=self.dataset, cycle_iteration=self.cycle_iteration,
+                dataset=self.bsdf_vision_asset,
+                cycle_iteration=self.cycle_iteration,
                 tracking_bundlesdf_id=self.tracking_bundlesdf_id,
                 nerf_bundlesdf_id=self.nerf_bundlesdf_id
             )

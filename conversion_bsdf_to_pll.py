@@ -136,6 +136,8 @@ class TrajectoryConverterBundleSDFToPLL(TagSLAMTrajectoryConverter):
         self.dataset += f'-{self.end_toss}' if \
             self.start_toss != self.end_toss else ''
 
+        self.bsdf_vision_asset = self.dataset
+
         # Robot interaction experiments will be converted slightly differently.
         self.has_robot_interactions = object.startswith('robot')
 
