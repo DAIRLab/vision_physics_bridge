@@ -133,6 +133,8 @@ from matplotlib.ticker import FormatStrFormatter, NullFormatter, ScalarFormatter
 
 import eval_utils, file_utils
 
+from file_utils import OBJECTS_WITH_GT_URDF
+
 # Some settings on the plot generation.
 rc('legend', fontsize=30)
 plt.rc('axes', titlesize=40)    # fontsize of the axes title
@@ -158,8 +160,6 @@ CM_LENGTH_SCALES_BY_OBJ = {
     'bottle': 100 * 0.27827598600000003,
     'cube': 100 * 0.1048
 }
-
-OBJECTS_WITH_GT = ['cube']
 
 
 ERROR_LABELS = {
@@ -1297,7 +1297,7 @@ class ResultsPlotter:
                         self.pll_vision_results, self.pll_size_results,
                         self.pll_blind_b_results, self.pll_blind_t_results]
 
-        for obj in OBJECTS_WITH_GT:
+        for obj in OBJECTS_WITH_GT_URDF:
             scale = METRIC_SCALING[dynamics_metric]
             auc_scale = METRIC_SCALING['auc']
 
@@ -1386,7 +1386,7 @@ class ResultsPlotter:
                     f'_{DYNAMICS_CATEGORY}_auc', subdir='dynamics')
 
         # Do a confidence interval plot that aggregates all the objects.
-        if len(OBJECTS_WITH_GT) > 1:
+        if len(OBJECTS_WITH_GT_URDF) > 1:
             self._do_confidence_interval_plot(
                 bp_data=objects_w_gt_bsdf_pll_mean,
                 n_data=objects_w_gt_nerf_on_mean,

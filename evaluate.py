@@ -1842,13 +1842,22 @@ class GTParameterDynamicsPredictor(DynamicsPredictor):
         self.vision_asset = vision_asset
         self.object = '_'.join(vision_asset.split('_')[:-1])
 
-        # Load the TagSLAM T trajectories.
-        self.tagslam_t_trajs = eval_utils.get_tagslam_t_trajectories_pll_format(
-            self.object)
-
         # Make evaluation subdirectory.
         self.eval_dir = file_utils.evaluation_subdir_for_gt(
             dataset=self.vision_asset)
+
+        # Load the TagSLAM trajectories and ground truth URDF.
+        self._load_trajectories()
+
+    def _load_trajectories(self):
+        if self.object == 'cube':
+            # Load the TagSLAM T trajectories.
+            self.tagslam_trajs = \
+                eval_utils.get_tagslam_t_trajectories_pll_format(self.object)
+        else:
+            # Load TagSLAM B trajectories aligned to Vysics mesh.
+            self.tagslam_trajs = \
+                eval_utils.get_tagslam_b_trajectories_pll_format(self.object)
 
     def _create_pll_sim_system(self):
         if hasattr(self, 'pll_system'):
@@ -1859,7 +1868,7 @@ class GTParameterDynamicsPredictor(DynamicsPredictor):
         # evaluation directory.
         old_gt_urdf_path, old_gt_obj_path = \
             file_utils.ground_truth_object_urdf_obj_filepaths(
-                self.object)
+                self.object, body_t=self.object=='cube')
         new_gt_urdf_path = op.join(self.eval_dir, 'gt_params.urdf')
         new_gt_obj_path = op.join(self.eval_dir, op.basename(old_gt_obj_path))
         os.system(f'cp {old_gt_urdf_path} {new_gt_urdf_path}')
@@ -1877,7 +1886,7 @@ class GTParameterDynamicsPredictor(DynamicsPredictor):
 
         # Get the predictions.
         pred_trajs_of_t_origin = {}
-        trajs = self.tagslam_t_trajs
+        trajs = self.tagslam_trajs
 
         for toss_key, target_traj in trajs.items():
             start_adjust = file_utils.load_field_from_yaml(
@@ -1908,7 +1917,7 @@ class GTParameterDynamicsPredictor(DynamicsPredictor):
             torch.save(pred_traj, op.join(self.eval_dir, filename))
             print(f'\t{filename}')
 
-        for toss_num, target_traj in self.tagslam_t_trajs.items():
+        for toss_num, target_traj in self.tagslam_trajs.items():
             filename = f'tagslam_t_toss_{toss_num}.pt'
             torch.save(target_traj, op.join(self.eval_dir, filename))
             print(f'\t{filename}')
@@ -1916,7 +1925,7 @@ class GTParameterDynamicsPredictor(DynamicsPredictor):
     def get_aligned_true_cloud(self):
         if not hasattr(self, 'aligned_true_cloud'):
             _, gt_obj_path = file_utils.ground_truth_object_urdf_obj_filepaths(
-                self.object)
+                self.object, body_t=self.object=='cube')
             true_mesh = icp.load_mesh_from_obj(gt_obj_path)
             self.true_cloud = Tensor(np.asarray(
                 true_mesh.sample_points_poisson_disk(2000).points))
@@ -1930,7 +1939,7 @@ class GTParameterDynamicsPredictor(DynamicsPredictor):
         for toss_key, subsub_results in position_results.items():
             toss_num = int(toss_key.split('_')[1])
             over_traj = TrajectoryMetrics.position_error(
-                self.tagslam_t_trajs[toss_num], self.predicted_trajs[toss_num])
+                self.tagslam_trajs[toss_num], self.predicted_trajs[toss_num])
             subsub_results['mean'] = over_traj.mean().item()
             subsub_results['traj'] = over_traj.tolist()
 
@@ -1938,7 +1947,7 @@ class GTParameterDynamicsPredictor(DynamicsPredictor):
         for toss_key, subsub_results in rotation_error.items():
             toss_num = int(toss_key.split('_')[1])
             over_traj = TrajectoryMetrics.rotation_error(
-                self.tagslam_t_trajs[toss_num], self.predicted_trajs[toss_num])
+                self.tagslam_trajs[toss_num], self.predicted_trajs[toss_num])
             subsub_results['mean'] = over_traj.mean().item()
             subsub_results['traj'] = over_traj.tolist()
 
@@ -1946,7 +1955,7 @@ class GTParameterDynamicsPredictor(DynamicsPredictor):
         for toss_key, subsub_results in add_error.items():
             toss_num = int(toss_key.split('_')[1])
             over_traj = TrajectoryMetrics.add_error(
-                self.tagslam_t_trajs[toss_num], self.predicted_trajs[toss_num],
+                self.tagslam_trajs[toss_num], self.predicted_trajs[toss_num],
                 self.get_aligned_true_cloud()
             )
             subsub_results['mean'] = over_traj.mean().item()
@@ -1956,7 +1965,7 @@ class GTParameterDynamicsPredictor(DynamicsPredictor):
         for toss_key, subsub_results in adds_error.items():
             toss_num = int(toss_key.split('_')[1])
             over_traj = TrajectoryMetrics.adds_error(
-                self.tagslam_t_trajs[toss_num], self.predicted_trajs[toss_num],
+                self.tagslam_trajs[toss_num], self.predicted_trajs[toss_num],
                 self.get_aligned_true_cloud()
             )
             subsub_results['mean'] = over_traj.mean().item()
@@ -2231,7 +2240,7 @@ def main_command(vision_asset: str, bundlesdf_id: str, nerf_bundlesdf_id: str,
             'against_tagslam'].values():
             for key in list(sub_results.keys()):
                 if int(key.split("_")[1]) not in \
-                    dynamics_predictor.tagslam_t_trajs.keys():
+                    dynamics_predictor.tagslam_trajs.keys():
                     del sub_results[key]
 
         dynamics_predictor.generate_rollout_trajectories()

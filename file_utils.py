@@ -53,6 +53,8 @@ TAGLESS_OBJECTS = ['bakingbox', 'burger', 'cardboard', 'chocolate', 'cream',
                    'icetray', 'mug', 'oatly', 'pinkcan', 'stapler', 'styrofoam',
                    'toothpaste']
 
+OBJECTS_WITH_GT_URDF = ['cube']
+
 
 """Directory utilities."""
 def assure_created(directory: str) -> str:
@@ -357,11 +359,12 @@ def z_axis_obj_filepath():
     """Path to the z-axis obj file for official video overlays."""
     return op.join(DATA_GEN_DIR, 'assets', 'z_axis.obj')
 
-def ground_truth_object_urdf_obj_filepaths(object: str):
+def ground_truth_object_urdf_obj_filepaths(object: str, body_t: bool = False):
     """Path to the ground truth object URDF file."""
-    OBJECTS_WITH_GT_URDF = ['cube']
     assert object in OBJECTS_WITH_GT_URDF, f'No ground truth URDF for ' + \
         f'{object} -- can only handle {OBJECTS_WITH_GT_URDF} for now.'
+    if object == 'cube':
+        assert body_t, f'Only the cube has a body_t URDF: {object=} {body_t=}.'
 
     urdf_path = op.join(
         pll_file_utils.ASSETS_DIR, f'contactnets_{object}_mesh.urdf')
