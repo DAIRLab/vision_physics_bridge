@@ -17,6 +17,22 @@ EARLY_TESTS = False
 
 OBJECT_MASS = 0.37
 
+FRICTION_SLIP_ANGLE_BOTTLE = np.deg2rad(26)
+FRICTION_SLIP_ANGLE_HALF = np.deg2rad(15)
+FRICTION_SLIP_ANGLE_MILK = np.deg2rad(9)
+FRICTION_SLIP_ANGLE_CUBE = np.deg2rad(13)
+FRICTION_SLIP_ANGLES = {'cube': FRICTION_SLIP_ANGLE_CUBE,
+                        'bottle': FRICTION_SLIP_ANGLE_BOTTLE,
+                        'half': FRICTION_SLIP_ANGLE_HALF,
+                        'milk': FRICTION_SLIP_ANGLE_MILK}
+
+# Since the surface was slightly different from the toss surface, can use the
+# cube's "known" friction coefficient on the toss surface to scale the measured
+# coefficients for all objects.
+expected_cube_friction = 0.15
+measured_cube_friction = np.tan(FRICTION_SLIP_ANGLE_CUBE)
+friction_scaling = expected_cube_friction / measured_cube_friction
+
 
 ### Functions to compute inertia information from meshes assuming they are
 ### hollow shells with uniform thickness.
@@ -54,7 +70,8 @@ def compute_hollow_shell_com(mesh):
 ################################################################################
 
 
-# Compute the inertial properties of some objects from their meshes.
+# Compute the inertial properties of some objects from their meshes.  Also
+# compute the coefficient of friction based on the slip angle.
 for object in ['bottle', 'half', 'milk', 'cube']:
     _urdf_path, obj_path = file_utils.ground_truth_object_urdf_obj_filepaths(
         object, body_t = object=='cube')
@@ -78,8 +95,12 @@ for object in ['bottle', 'half', 'milk', 'cube']:
     inertia = compute_hollow_shell_inertia_tensor_about_origin(
         finer_mesh, OBJECT_MASS)
     
+    # Compute the coefficient of friction based on the slip angle.
+    mu = np.tan(FRICTION_SLIP_ANGLES[object]) * friction_scaling
+    
     # Print summary.
     print(f'Object:  {object}')
+    print(f'Coefficient of friction:  {mu}')
     print(f'Center of mass:  {com}')
     print(f'Inertia tensor about center of mass:\n{inertia}\n')
     

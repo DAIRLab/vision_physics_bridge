@@ -6,13 +6,12 @@ test_mesh_inertia.py script, which generated the following, assuming a mass
 value of 0.37 kg:
 
     Object:  half
+    Coefficient of friction:  0.1740923193823996
     Center of mass:  [-0.01585425 -0.00986409 -0.04145316]
     Inertia tensor about center of mass:
         [[ 0.00210965  0.00020542  0.00013421]
         [ 0.00020542  0.00110365 -0.00072384]
         [ 0.00013421 -0.00072384  0.00164132]]
-
-TODO:  Need to pick a coefficient of friction based on measurements.
 -->
 
 <robot name="object" xmlns:drake="https://drake.mit.edu/">
@@ -43,7 +42,7 @@ TODO:  Need to pick a coefficient of friction based on measurements.
             </geometry>
             <origin xyz="0 0 0" rpy="0 0 0" />
             <drake:proximity_properties>
-                <drake:mu_static value="0.15" />
+                <drake:mu_static value="0.1740923193823996" />
             </drake:proximity_properties>
         </collision>
     </link>
