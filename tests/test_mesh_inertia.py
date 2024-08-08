@@ -1,6 +1,7 @@
 """Some tests to get inertia tensors out of meshes."""
 
 import numpy as np
+import os
 import os.path as op
 import pdb
 import sys
@@ -14,6 +15,7 @@ import file_utils
 
 
 EARLY_TESTS = False
+COMPUTE_AVERAGE_VYSICS_PARAMETERS = True
 
 OBJECT_MASS = 0.37
 
@@ -67,7 +69,70 @@ def compute_hollow_shell_com(mesh):
 
     return com
 
+
+### Function to read a URDF file and extract out the inertia and friction.
+def get_parameters_from_urdf_string(urdf_file, parameter_list_dict):
+    with open(urdf_file, 'r') as f:
+        urdf_string = f.read()
+
+    ixx = float(urdf_string.split('ixx="')[-1].split('"')[0])
+    ixy = float(urdf_string.split('ixy="')[-1].split('"')[0])
+    ixz = float(urdf_string.split('ixz="')[-1].split('"')[0])
+    iyy = float(urdf_string.split('iyy="')[-1].split('"')[0])
+    iyz = float(urdf_string.split('iyz="')[-1].split('"')[0])
+    izz = float(urdf_string.split('izz="')[-1].split('"')[0])
+
+    com = urdf_string.split('inertial>')[1].split('origin xyz="')[-1].split(
+        '"')[0]
+    com_x = float(com.split(' ')[0])
+    com_y = float(com.split(' ')[1])
+    com_z = float(com.split(' ')[2])
+
+    mu = float(urdf_string.split('drake:mu_static value="')[-1].split('"')[0])
+
+    parameter_list_dict['ixx'].append(ixx)
+    parameter_list_dict['ixy'].append(ixy)
+    parameter_list_dict['ixz'].append(ixz)
+    parameter_list_dict['iyy'].append(iyy)
+    parameter_list_dict['iyz'].append(iyz)
+    parameter_list_dict['izz'].append(izz)
+    parameter_list_dict['com_x'].append(com_x)
+    parameter_list_dict['com_y'].append(com_y)
+    parameter_list_dict['com_z'].append(com_z)
+    parameter_list_dict['mu'].append(mu)
+
+
 ################################################################################
+
+# Compute the average Vysics-estimated inertial properties and friction
+# coefficients.
+if COMPUTE_AVERAGE_VYSICS_PARAMETERS:
+    parameter_list_dict = {
+        'ixx': [], 'ixy': [], 'ixz': [], 'iyy': [], 'iyz': [], 'izz': [],
+        'com_x': [], 'com_y': [], 'com_z': [], 'mu': []
+    }
+
+    eval_dir = file_utils.evaluation_dir()
+    for subdir in os.listdir(eval_dir):
+        if not subdir.endswith('02_02_2'):
+            continue
+
+        print(f'Processing {subdir}...', end=' ')
+        urdf_file = op.join(eval_dir, subdir, 'bsdf_mesh_pll_params.urdf')
+        if not op.exists(urdf_file):
+            print('no URDF file found.')
+            continue
+
+        get_parameters_from_urdf_string(urdf_file, parameter_list_dict)
+        print('done.')
+
+    # Compute the average values.
+    print(f'\n')
+    for key in parameter_list_dict:
+        print(f'Average {key}:  {np.mean(parameter_list_dict[key])}')
+
+    pdb.set_trace()
+    exit()
 
 
 # Compute the inertial properties of some objects from their meshes.  Also
