@@ -1290,7 +1290,7 @@ class ResultsPlotter:
         self._do_confidence_interval_plot(
             bp_data=all_objects_bsdf_pll_mean,
             n_data=all_objects_nerf_on_mean,
-            n_data=all_objects_bsdf_only_mean,
+            bo_data=all_objects_bsdf_only_mean,
             pv_data=all_objects_pll_vision_mean,
             ps_data=all_objects_pll_size_mean,
             pbb_data=all_objects_pll_blind_b_mean,
@@ -1302,7 +1302,7 @@ class ResultsPlotter:
         self._do_confidence_interval_plot(
             bp_data=all_objects_bsdf_pll_auc,
             n_data=all_objects_nerf_on_auc,
-            n_data=all_objects_bsdf_only_auc,
+            bo_data=all_objects_bsdf_only_auc,
             pv_data=all_objects_pll_vision_auc,
             ps_data=all_objects_pll_size_auc,
             pbb_data=all_objects_pll_blind_b_auc,
