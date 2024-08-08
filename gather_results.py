@@ -256,30 +256,12 @@ PLOTS_TO_PRINT = [
     'all_tagged_objs_add_error_tagslam_v_data_unseen_tosses_dynamics_rollout_metrics',
     'all_tagged_objs_add_error_v_data_full',
     'all_tagged_objs_adds_error_v_data_full',
-    'all_gt_objs_add_error_for_gt_comp_unseen_tosses_dynamics_rollout_metrics',
-    'all_gt_objs_add_error_for_gt_comp_training_tosses_dynamics_rollout_metrics',
-    'all_gt_objs_add_error_for_gt_comp_all_tosses_dynamics_rollout_metrics',
-    'all_gt_objs_penetration_true_geom_predicted_traj_for_gt_comp_unseen_tosses_dynamics_rollout_metrics',
-    'all_gt_objs_penetration_true_geom_predicted_traj_for_gt_comp_training_tosses_dynamics_rollout_metrics',
-    'all_gt_objs_penetration_true_geom_predicted_traj_for_gt_comp_all_tosses_dynamics_rollout_metrics',
 ]
 PLOTS_TO_PRINT += [
     f'{obj}_add_error_for_gt_comp_unseen_tosses_dynamics_rollout_metrics' for \
         obj in OBJECTS_WITH_GT_URDF]
 PLOTS_TO_PRINT += [
-    f'{obj}_add_error_for_gt_comp_training_tosses_dynamics_rollout_metrics' \
-        for obj in OBJECTS_WITH_GT_URDF]
-PLOTS_TO_PRINT += [
-    f'{obj}_add_error_for_gt_comp_all_tosses_dynamics_rollout_metrics' for \
-        obj in OBJECTS_WITH_GT_URDF]
-PLOTS_TO_PRINT += [
     f'{obj}_penetration_true_geom_predicted_traj_for_gt_comp_unseen_tosses_dynamics_rollout_metrics' \
-        for obj in OBJECTS_WITH_GT_URDF]
-PLOTS_TO_PRINT += [
-    f'{obj}_penetration_true_geom_predicted_traj_for_gt_comp_training_tosses_dynamics_rollout_metrics' \
-        for obj in OBJECTS_WITH_GT_URDF]
-PLOTS_TO_PRINT += [
-    f'{obj}_penetration_true_geom_predicted_traj_for_gt_comp_all_tosses_dynamics_rollout_metrics' \
         for obj in OBJECTS_WITH_GT_URDF]
 
 
@@ -966,8 +948,8 @@ class ResultsPlotter:
                          pll_vision_mean, pll_size_mean, pll_blind_b_mean,
                          pll_blind_t_mean]
             obj_aucs = [bsdf_pll_auc, nerf_on_auc, bsdf_only_auc,
-                         pll_vision_auc, pll_size_auc, pll_blind_b_auc,
-                         pll_blind_t_auc]
+                        pll_vision_auc, pll_size_auc, pll_blind_b_auc,
+                        pll_blind_t_auc]
 
             for all_mean, all_auc, obj_mean, obj_auc, result_dict in zip(
                     means, aucs, obj_means, obj_aucs, result_dicts):
@@ -975,6 +957,7 @@ class ResultsPlotter:
                     obj_mean = None
                     obj_auc = None
                     continue
+
                 for tosses, results in result_dict['tagged_objects'][obj].items():
                     tosses = tosses.split('trained_on_toss_')[-1]
                     start_toss = int(tosses.split('-')[0])
@@ -1312,7 +1295,7 @@ class ResultsPlotter:
             filename=f'all_objs_{dynamics_metric}_bsdf_v_data_{toss_subset}' + \
                 f'_{dynamics_category}_auc', subdir='dynamics')
 
-
+    # TODO: Part of rebuttal exploration, eventually incorporate repeated code.
     def plot_object_geometry_scatter_withconvex2(
             self, hull_or_full: str, geometry_metric: str):
         """Drawing four scatter plots, including two convex variants of BundleSDF. """
@@ -1381,7 +1364,8 @@ class ResultsPlotter:
             title=title,
             filename=f'scatter_{geometry_metric}_v_data_{hull_or_full}_true_units_withconvex',
             subdir='object_geometry', save_to_txt=True, normalize=False)
-        
+
+    # TODO: Part of rebuttal exploration, eventually incorporate repeated code.
     def plot_object_geometry_scatter_withconvex(
             self, hull_or_full: str, geometry_metric: str):
         """Drawing three scatter plots, including BundleSDF with convexity loss. """
@@ -1630,7 +1614,7 @@ class ResultsPlotter:
                 title=f'{obj} {toss_subset.replace("_", " ")} Dynamics '.title() + \
                     f'Rollout Prediction'.title(),
                 filename=f'{obj}_{dynamics_metric}_for_gt_comp_' + \
-                    f'{toss_subset}_{DYNAMICS_CATEGORY}', subdir='dynamics')
+                    f'{toss_subset}_{DYNAMICS_CATEGORY}', subdir='gt_dynamics')
             self._do_plot(
                 bp_data=bsdf_pll_auc, n_data=nerf_on_auc,
                 bo_data=bsdf_only_auc, pv_data=pll_vision_auc,
@@ -1640,7 +1624,7 @@ class ResultsPlotter:
                 title=f'{obj} {toss_subset.replace("_", " ")} Dynamics '.title() + \
                     f'Rollout Prediction'.title(),
                 filename=f'{obj}_{dynamics_metric}_for_gt_comp_{toss_subset}' + \
-                    f'_{DYNAMICS_CATEGORY}_auc', subdir='dynamics')
+                    f'_{DYNAMICS_CATEGORY}_auc', subdir='gt_dynamics')
 
         # Do a confidence interval plot that aggregates all the objects.
         if len(OBJECTS_WITH_GT_URDF) > 1:
@@ -1657,7 +1641,7 @@ class ResultsPlotter:
                 title=f'All GT Objects {toss_subset.replace("_", " ")} '.title() + \
                     f'Dynamics Rollout Prediction'.title(),
                 filename=f'all_gt_objs_{dynamics_metric}_for_gt_comp_' + \
-                    f'{toss_subset}_{DYNAMICS_CATEGORY}', subdir='dynamics')
+                    f'{toss_subset}_{DYNAMICS_CATEGORY}', subdir='gt_dynamics')
             self._do_confidence_interval_plot(
                 bp_data=objects_w_gt_bsdf_pll_auc,
                 n_data=objects_w_gt_nerf_on_auc,
@@ -1671,8 +1655,10 @@ class ResultsPlotter:
                 title=f'All GT Objects {toss_subset.replace("_", " ")} '.title() + \
                     f'Dynamics Rollout Prediction'.title(),
                 filename=f'all_gt_objs_{dynamics_metric}_for_gt_comp_' + \
-                    f'{toss_subset}_{DYNAMICS_CATEGORY}_auc', subdir='dynamics')
+                    f'{toss_subset}_{DYNAMICS_CATEGORY}_auc',
+                subdir='gt_dynamics')
 
+    # TODO: Part of rebuttal exploration, eventually incorporate repeated code.
     def _do_scatter_plot_with_convex2(self, bp_data: list = None, 
                          bo_data: list = None, bc_data: list = None,
                          bch_data: list = None,
@@ -1850,7 +1836,7 @@ class ResultsPlotter:
                     txt_file.write(data_str)
                 print(f'Wrote to {str_filepath}')
 
-
+    # TODO: Part of rebuttal exploration, eventually incorporate repeated code.
     def _do_scatter_plot_with_convex(self, bp_data: list = None, 
                          bo_data: list = None, bc_data: list = None,
                          ylabel: str = '', xlabel_txt: str = '',
@@ -2170,6 +2156,11 @@ class ResultsPlotter:
                     l=np.zeros_like(bp_data[1]), u=np.zeros_like(bp_data[1]),
                     ys=bp_data[1])
                 string = self._add_to_string(
+                    string, BSDF_ONLY_LABEL, compare_with=bp_data[1],
+                    x=np.ones_like(bo_data[1]), y=bo_data[1],
+                    l=np.zeros_like(bo_data[1]), u=np.zeros_like(bo_data[1]),
+                    ys=bo_data[1])
+                string = self._add_to_string(
                     string, PLL_VISION_LABEL, compare_with=bp_data[1],
                     x=np.ones_like(pv_data[1]), y=pv_data[1],
                     l=np.zeros_like(pv_data[1]), u=np.zeros_like(pv_data[1]),
@@ -2212,11 +2203,15 @@ class ResultsPlotter:
         # Compare with the other data, using Welch's t-test.
         t, p = welchs_t_test(ys, compare_with)
 
+        # Compute standard deviation.
+        std_dev = np.std(y)
+
         string += f'{data_name}:\n'
         string += f'{x=}\n'
         string += f'y = '
         for yi, pmi in zip(y, pm):
             string += f' & ${yi:.1f} \pm {pmi:.1f}$'
+        string += f'\nStandard deviation: {std_dev=}'
         string += f'\nCombined:  ${toty[0]:.1f} \pm {(totu[0]-totl[0])/2:.1f}$'
         string += f'\nWelchs t-test: {t=}, {p=}'
         string += f'\n\n'
@@ -2555,7 +2550,7 @@ def process_gather_command(single_toss, exclude_pll):
 PLOT_TRACKING = False           # figure unused, text in table in manuscript
 PLOT_DYNAMICS = False           # figure unused, text in table in manuscript
 PLOT_GEOMETRY = False           # unused for manuscript
-PLOT_GEOMETRY_SCATTERS = True  # Fig 5 of manuscript
+PLOT_GEOMETRY_SCATTERS = False  # Fig 5 of manuscript
 PLOT_GT_COMPARISON = True       # exploration during rebuttal phase
 @cli.command('plot')
 @click.option('--do-objects/--skip-objects',
