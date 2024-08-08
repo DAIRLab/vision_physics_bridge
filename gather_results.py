@@ -258,13 +258,25 @@ PLOTS_TO_PRINT = [
     'all_gt_objs_penetration_true_geom_predicted_traj_for_gt_comp_unseen_tosses_dynamics_rollout_metrics',
     'all_gt_objs_penetration_true_geom_predicted_traj_for_gt_comp_training_tosses_dynamics_rollout_metrics',
     'all_gt_objs_penetration_true_geom_predicted_traj_for_gt_comp_all_tosses_dynamics_rollout_metrics',
-    'cube_add_error_for_gt_comp_unseen_tosses_dynamics_rollout_metrics',
-    'cube_add_error_for_gt_comp_training_tosses_dynamics_rollout_metrics',
-    'cube_add_error_for_gt_comp_all_tosses_dynamics_rollout_metrics',
-    'cube_penetration_true_geom_predicted_traj_for_gt_comp_unseen_tosses_dynamics_rollout_metrics',
-    'cube_penetration_true_geom_predicted_traj_for_gt_comp_training_tosses_dynamics_rollout_metrics',
-    'cube_penetration_true_geom_predicted_traj_for_gt_comp_all_tosses_dynamics_rollout_metrics',
 ]
+PLOTS_TO_PRINT += [
+    f'{obj}_add_error_for_gt_comp_unseen_tosses_dynamics_rollout_metrics' for \
+        obj in OBJECTS_WITH_GT_URDF]
+PLOTS_TO_PRINT += [
+    f'{obj}_add_error_for_gt_comp_training_tosses_dynamics_rollout_metrics' \
+        for obj in OBJECTS_WITH_GT_URDF]
+PLOTS_TO_PRINT += [
+    f'{obj}_add_error_for_gt_comp_all_tosses_dynamics_rollout_metrics' for \
+        obj in OBJECTS_WITH_GT_URDF]
+PLOTS_TO_PRINT += [
+    f'{obj}_penetration_true_geom_predicted_traj_for_gt_comp_unseen_tosses_dynamics_rollout_metrics' \
+        for obj in OBJECTS_WITH_GT_URDF]
+PLOTS_TO_PRINT += [
+    f'{obj}_penetration_true_geom_predicted_traj_for_gt_comp_training_tosses_dynamics_rollout_metrics' \
+        for obj in OBJECTS_WITH_GT_URDF]
+PLOTS_TO_PRINT += [
+    f'{obj}_penetration_true_geom_predicted_traj_for_gt_comp_all_tosses_dynamics_rollout_metrics' \
+        for obj in OBJECTS_WITH_GT_URDF]
 
 
 def welchs_t_test(samples_1: list, samples_2: list):
@@ -493,6 +505,62 @@ def add_experiment_to_overall_results(experiment_results, add_to_results):
                         keys=[category, 'all_tosses', against, metric,
                         'mean_auc']
                     )
+
+def add_experiment_to_gt_results(experiment_results, gt_results):
+    # First interpret the experiment's object.
+    vision_asset = experiment_results['_overview']['vision_asset']
+    object = '_'.join(vision_asset.split('_')[:-1])
+
+    gt_results = recursive_dict_create(d=gt_results, keys=[object])
+    subresults = gt_results[object]
+
+    # The only metric category implemented for GT is dynamics_rollout_metrics.
+    for category, exp_subresults in experiment_results.items():
+        if category != 'dynamics_rollout_metrics':
+            continue
+
+        # Dynamics metrics need to be split by training and evaluation tosses.
+        # Tracking and dynamics metrics need to be conglomerated by toss.
+        # Iterate over every comparison against, e.g. against_bundlesdf.
+        subsubresults = exp_subresults['against_tagslam']
+
+        # Iterate over every metric, e.g. position_error.
+        for metric, traj_results in subsubresults.items():
+
+            # Iterate over every trajectory, e.g. toss_1.
+            means = []
+            aucs = []
+            for traj_name, reported_errors in traj_results.items():
+                toss_num = int(traj_name.split('toss_')[-1])
+                means.append(reported_errors['mean'])
+                aucs.append(reported_errors['auc'])
+
+                subresults = recursive_dict_add(
+                    d=subresults,
+                    val=reported_errors['mean'],
+                    keys=[category, 'all_tosses', 'against_tagslam', metric,
+                    f'toss_{toss_num}']
+                )
+                subresults = recursive_dict_add(
+                    d=subresults,
+                    val=reported_errors['auc'],
+                    keys=[category, 'all_tosses', 'against_tagslam', metric,
+                    f'toss_{toss_num}_auc']
+                )
+
+            subresults = recursive_dict_add(
+                d=subresults,
+                val=None if None in means else np.mean(means).item(),
+                keys=[category, 'all_tosses', 'against_tagslam', metric,
+                'mean']
+            )
+            subresults = recursive_dict_add(
+                d=subresults,
+                val=None if None in aucs else np.mean(aucs).item(),
+                keys=[category, 'all_tosses', 'against_tagslam', metric,
+                'mean_auc']
+            )
+
 
 class ResultsPlotter:
     """Generate plots of results stored in result dictionaries."""
@@ -827,14 +895,16 @@ class ResultsPlotter:
     def plot_tagslam_dynamics_error_vs_data(
             self, toss_subset: str, dynamics_category: str,
             dynamics_metric: str):
-        """Dynamics metrics against TagSLAM.  Only doable for tagged objects and
-        not for BundleSDF-only."""
+        """Dynamics metrics against TagSLAM.  Only doable for tagged objects.
+        BundleSDF-only results use the BundleSDF mesh and average dynamics
+        parameters for inertia and friction."""
         title_add = 'Rollout' if dynamics_category=='dynamics_rollout_metrics' \
             else 'Single-Step'
 
         # Keep track of all objects.
         all_objects_bsdf_pll_mean = [[], []]
         all_objects_nerf_on_mean = [[], []]
+        all_objects_bsdf_only_mean = [[], []]
         all_objects_pll_vision_mean = [[], []]
         all_objects_pll_size_mean = [[], []]
         all_objects_pll_blind_b_mean = [[], []]
@@ -842,22 +912,26 @@ class ResultsPlotter:
 
         all_objects_bsdf_pll_auc = [[], []]
         all_objects_nerf_on_auc = [[], []]
+        all_objects_bsdf_only_auc = [[], []]
         all_objects_pll_vision_auc = [[], []]
         all_objects_pll_size_auc = [[], []]
         all_objects_pll_blind_b_auc = [[], []]
         all_objects_pll_blind_t_auc = [[], []]
 
-        # Prepare to zip in consistent order:  BSDF-PLL, NeRF Online, PLL
-        # Vision, PLL Size, PLL Blind B, PLL Blind T.
+        # Prepare to zip in consistent order:  BSDF-PLL, NeRF Online, BSDF-only,
+        # PLL Vision, PLL Size, PLL Blind B, PLL Blind T.
         means = [all_objects_bsdf_pll_mean, all_objects_nerf_on_mean,
-                 all_objects_pll_vision_mean, all_objects_pll_size_mean,
-                 all_objects_pll_blind_b_mean, all_objects_pll_blind_t_mean]
+                 all_objects_bsdf_only_mean, all_objects_pll_vision_mean,
+                 all_objects_pll_size_mean, all_objects_pll_blind_b_mean,
+                 all_objects_pll_blind_t_mean]
         aucs = [all_objects_bsdf_pll_auc, all_objects_nerf_on_auc,
-                all_objects_pll_vision_auc, all_objects_pll_size_auc,
-                all_objects_pll_blind_b_auc, all_objects_pll_blind_t_auc]
+                all_objects_bsdf_only_auc, all_objects_pll_vision_auc,
+                all_objects_pll_size_auc, all_objects_pll_blind_b_auc,
+                all_objects_pll_blind_t_auc]
         result_dicts = [self.bsdf_pll_results, self.nerf_on_results,
-                        self.pll_vision_results, self.pll_size_results,
-                        self.pll_blind_b_results, self.pll_blind_t_results]
+                        self.bsdf_only_results, self.pll_vision_results,
+                        self.pll_size_results, self.pll_blind_b_results,
+                        self.pll_blind_t_results]
 
         for obj in self.tagged_objects:
             scale = METRIC_SCALING[dynamics_metric]
@@ -865,6 +939,7 @@ class ResultsPlotter:
 
             bsdf_pll_mean = [[], []]
             nerf_on_mean = [[], []]
+            bsdf_only_mean = [[], []]
             pll_vision_mean = [[], []]
             pll_size_mean = [[], []]
             pll_blind_b_mean = [[], []]
@@ -872,15 +947,18 @@ class ResultsPlotter:
 
             bsdf_pll_auc = [[], []]
             nerf_on_auc = [[], []]
+            bsdf_only_auc = [[], []]
             pll_vision_auc = [[], []]
             pll_size_auc = [[], []]
             pll_blind_b_auc = [[], []]
             pll_blind_t_auc = [[], []]
 
-            obj_means = [bsdf_pll_mean, nerf_on_mean, pll_vision_mean,
-                         pll_size_mean, pll_blind_b_mean, pll_blind_t_mean]
-            obj_aucs = [bsdf_pll_auc, nerf_on_auc, pll_vision_auc,
-                        pll_size_auc, pll_blind_b_auc, pll_blind_t_auc]
+            obj_means = [bsdf_pll_mean, nerf_on_mean, bsdf_only_mean,
+                         pll_vision_mean, pll_size_mean, pll_blind_b_mean,
+                         pll_blind_t_mean]
+            obj_aucs = [bsdf_pll_auc, nerf_on_auc, bsdf_only_auc,
+                         pll_vision_auc, pll_size_auc, pll_blind_b_auc,
+                         pll_blind_t_auc]
 
             for all_mean, all_auc, obj_mean, obj_auc, result_dict in zip(
                     means, aucs, obj_means, obj_aucs, result_dicts):
@@ -916,15 +994,16 @@ class ResultsPlotter:
             # Generate the plots.
             self._do_plot(
                 bp_data=bsdf_pll_mean, n_data=nerf_on_mean,
-                pv_data=pll_vision_mean, ps_data=pll_size_mean,
-                pbb_data=pll_blind_b_mean, pbt_data=pll_blind_t_mean,
+                bo_data=bsdf_only_mean, pv_data=pll_vision_mean,
+                ps_data=pll_size_mean, pbb_data=pll_blind_b_mean,
+                pbt_data=pll_blind_t_mean,
                 ylabel=ERROR_LABELS[dynamics_metric], xlabel=NUM_TOSSES_LABEL,
                 title=f'{obj} {toss_subset.replace("_", " ")} Dynamics '.title() + \
                     f'{title_add} Prediction'.title(),
                 filename=f'{obj}_{dynamics_metric}_tagslam_v_data_' + \
                     f'{toss_subset}_{dynamics_category}', subdir='dynamics')
             self._do_plot(
-                bp_data=bsdf_pll_auc, n_data=nerf_on_auc,
+                bp_data=bsdf_pll_auc, n_data=nerf_on_auc, bo_data=bsdf_only_auc,
                 pv_data=pll_vision_auc, ps_data=pll_size_auc,
                 pbb_data=pll_blind_b_auc, pbt_data=pll_blind_t_auc,
                 ylabel=AUC_LABELS[dynamics_metric], xlabel=NUM_TOSSES_LABEL,
@@ -937,6 +1016,7 @@ class ResultsPlotter:
         self._do_confidence_interval_plot(
             bp_data=all_objects_bsdf_pll_mean,
             n_data=all_objects_nerf_on_mean,
+            bo_data=all_objects_bsdf_only_mean,
             pv_data=all_objects_pll_vision_mean,
             ps_data=all_objects_pll_size_mean,
             pbb_data=all_objects_pll_blind_b_mean,
@@ -949,6 +1029,7 @@ class ResultsPlotter:
         self._do_confidence_interval_plot(
             bp_data=all_objects_bsdf_pll_auc,
             n_data=all_objects_nerf_on_auc,
+            bo_data=all_objects_bsdf_only_auc,
             pv_data=all_objects_pll_vision_auc,
             ps_data=all_objects_pll_size_auc,
             pbb_data=all_objects_pll_blind_b_auc,
@@ -963,9 +1044,10 @@ class ResultsPlotter:
             self, toss_subset: str, dynamics_category: str,
             dynamics_metric: str):
         """Dynamics metrics against BundleSDF.  Doable for all objects, not for
-        BundleSDF-only, not for PLL trained on TagSLAM, and since against
-        BundleSDF this only works for all training tosses since predicting
-        beyond the dataset requires TagSLAM."""
+        PLL trained on TagSLAM, and since against BundleSDF this only works for
+        all training tosses since predicting beyond the dataset requires
+        TagSLAM.  BundleSDF-only uses the BundleSDF mesh and average parameters
+        for inertia and friction."""
         if toss_subset != 'training_tosses':
             print(f'Cannot compute dynamics predictions w.r.t. BundleSDF ' + \
                   f'beyond the training set (told to do {toss_subset}; skip.')
@@ -977,49 +1059,53 @@ class ResultsPlotter:
         # Keep track of all objects.
         tagged_objects_bsdf_pll_mean = [[], []]
         tagged_objects_nerf_on_mean = [[], []]
+        tagged_objects_bsdf_only_mean = [[], []]
         tagged_objects_pll_vision_mean = [[], []]
         tagged_objects_pll_size_mean = [[], []]
         tagged_objects_pll_blind_b_mean = [[], []]
 
         tagged_objects_bsdf_pll_auc = [[], []]
         tagged_objects_nerf_on_auc = [[], []]
+        tagged_objects_bsdf_only_auc = [[], []]
         tagged_objects_pll_vision_auc = [[], []]
         tagged_objects_pll_size_auc = [[], []]
         tagged_objects_pll_blind_b_auc = [[], []]
 
         tagless_objects_bsdf_pll_mean = [[], []]
         tagless_objects_nerf_on_mean = [[], []]
+        tagless_objects_bsdf_only_mean = [[], []]
         tagless_objects_pll_vision_mean = [[], []]
         tagless_objects_pll_size_mean = [[], []]
         tagless_objects_pll_blind_b_mean = [[], []]
 
         tagless_objects_bsdf_pll_auc = [[], []]
         tagless_objects_nerf_on_auc = [[], []]
+        tagless_objects_bsdf_only_auc = [[], []]
         tagless_objects_pll_vision_auc = [[], []]
         tagless_objects_pll_size_auc = [[], []]
         tagless_objects_pll_blind_b_auc = [[], []]
 
-        # Prepare to zip in consistent order:  BSDF-PLL, NeRF Online, PLL
-        # Vision, PLL Size, PLL Blind B.
+        # Prepare to zip in consistent order:  BSDF-PLL, NeRF Online, BSDF-only,
+        # PLL Vision, PLL Size, PLL Blind B.
         tagged_means = [
             tagged_objects_bsdf_pll_mean, tagged_objects_nerf_on_mean,
-            tagged_objects_pll_vision_mean, tagged_objects_pll_size_mean,
-            tagged_objects_pll_blind_b_mean]
+            tagged_objects_bsdf_only_mean, tagged_objects_pll_vision_mean,
+            tagged_objects_pll_size_mean, tagged_objects_pll_blind_b_mean]
         tagged_aucs = [
             tagged_objects_bsdf_pll_auc, tagged_objects_nerf_on_auc,
-            tagged_objects_pll_vision_auc, tagged_objects_pll_size_auc,
-            tagged_objects_pll_blind_b_auc]
+            tagged_objects_bsdf_only_auc, tagged_objects_pll_vision_auc,
+            tagged_objects_pll_size_auc, tagged_objects_pll_blind_b_auc]
         tagless_means = [
             tagless_objects_bsdf_pll_mean, tagless_objects_nerf_on_mean,
-            tagless_objects_pll_vision_mean, tagless_objects_pll_size_mean,
-            tagless_objects_pll_blind_b_mean]
+            tagless_objects_bsdf_only_mean, tagless_objects_pll_vision_mean,
+            tagless_objects_pll_size_mean, tagless_objects_pll_blind_b_mean]
         tagless_aucs = [
             tagless_objects_bsdf_pll_auc, tagless_objects_nerf_on_auc,
-            tagless_objects_pll_vision_auc, tagless_objects_pll_size_auc,
-            tagless_objects_pll_blind_b_auc]
+            tagless_objects_bsdf_only_auc, tagless_objects_pll_vision_auc,
+            tagless_objects_pll_size_auc, tagless_objects_pll_blind_b_auc]
         result_dicts = [self.bsdf_pll_results, self.nerf_on_results,
-                        self.pll_vision_results, self.pll_size_results,
-                        self.pll_blind_b_results]
+                        self.bsdf_only_results, self.pll_vision_results,
+                        self.pll_size_results, self.pll_blind_b_results]
 
         # Do both tagged and tagless objects.
         all_objects = self.tagless_objects + self.tagged_objects
@@ -1040,20 +1126,22 @@ class ResultsPlotter:
 
             bsdf_pll_mean = [[], []]
             nerf_on_mean = [[], []]
+            bsdf_only_mean = [[], []]
             pll_vision_mean = [[], []]
             pll_size_mean = [[], []]
             pll_blind_b_mean = [[], []]
 
             bsdf_pll_auc = [[], []]
             nerf_on_auc = [[], []]
+            bsdf_only_auc = [[], []]
             pll_vision_auc = [[], []]
             pll_size_auc = [[], []]
             pll_blind_b_auc = [[], []]
 
-            obj_means = [bsdf_pll_mean, nerf_on_mean, pll_vision_mean,
-                         pll_size_mean, pll_blind_b_mean]
-            obj_aucs = [bsdf_pll_auc, nerf_on_auc, pll_vision_auc,
-                        pll_size_auc, pll_blind_b_auc]
+            obj_means = [bsdf_pll_mean, nerf_on_mean, bsdf_only_mean,
+                        pll_vision_mean,  pll_size_mean, pll_blind_b_mean]
+            obj_aucs = [bsdf_pll_auc, nerf_on_auc, bsdf_only_auc,
+                        pll_vision_auc, pll_size_auc, pll_blind_b_auc]
 
             for tagged_mean, tagged_auc, tagless_mean, tagless_auc, obj_mean, \
                 obj_auc, result_dict in zip(
@@ -1098,8 +1186,8 @@ class ResultsPlotter:
             # Generate the plots.
             self._do_plot(
                 bp_data=bsdf_pll_mean, n_data=nerf_on_mean,
-                pv_data=pll_vision_mean, ps_data=pll_size_mean,
-                pbb_data=pll_blind_b_mean,
+                bo_data=bsdf_only_mean, pv_data=pll_vision_mean,
+                ps_data=pll_size_mean, pbb_data=pll_blind_b_mean,
                 ylabel=ERROR_LABELS[dynamics_metric],
                 xlabel=NUM_TOSSES_LABEL,
                 title=f'{obj} {toss_subset.replace("_", " ")} Dynamics '.title() + \
@@ -1108,8 +1196,8 @@ class ResultsPlotter:
                     f'_{dynamics_category}', subdir='dynamics')
             self._do_plot(
                 bp_data=bsdf_pll_auc, n_data=nerf_on_auc,
-                pv_data=pll_vision_auc, ps_data=pll_size_auc,
-                pbb_data=pll_blind_b_auc,
+                bo_data=bsdf_only_auc, pv_data=pll_vision_auc,
+                ps_data=pll_size_auc, pbb_data=pll_blind_b_auc,
                 ylabel=AUC_LABELS[dynamics_metric],
                 xlabel=NUM_TOSSES_LABEL,
                 title=f'{obj} {toss_subset.replace("_", " ")} Dynamics '.title() + \
@@ -1122,6 +1210,8 @@ class ResultsPlotter:
             tagged_objects_bsdf_pll_mean + tagless_objects_bsdf_pll_mean
         all_objects_nerf_on_mean = \
             tagged_objects_nerf_on_mean + tagless_objects_nerf_on_mean
+        all_objects_bsdf_only_mean = \
+            tagged_objects_bsdf_only_mean + tagless_objects_bsdf_only_mean
         all_objects_pll_vision_mean = \
             tagged_objects_pll_vision_mean + tagless_objects_pll_vision_mean
         all_objects_pll_size_mean = \
@@ -1132,6 +1222,8 @@ class ResultsPlotter:
             tagged_objects_bsdf_pll_auc + tagless_objects_bsdf_pll_auc
         all_objects_nerf_on_auc = \
             tagged_objects_nerf_on_auc + tagless_objects_nerf_on_auc
+        all_objects_bsdf_only_auc = \
+            tagged_objects_bsdf_only_auc + tagless_objects_bsdf_only_auc
         all_objects_pll_vision_auc = \
             tagged_objects_pll_vision_auc + tagless_objects_pll_vision_auc
         all_objects_pll_size_auc = \
@@ -1141,6 +1233,7 @@ class ResultsPlotter:
         self._do_confidence_interval_plot(
             bp_data=tagged_objects_bsdf_pll_mean,
             n_data=tagged_objects_nerf_on_mean,
+            bo_data=tagged_objects_bsdf_only_mean,
             pv_data=tagged_objects_pll_vision_mean,
             ps_data=tagged_objects_pll_size_mean,
             pbb_data=tagged_objects_pll_blind_b_mean,
@@ -1152,6 +1245,7 @@ class ResultsPlotter:
         self._do_confidence_interval_plot(
             bp_data=tagged_objects_bsdf_pll_auc,
             n_data=tagged_objects_nerf_on_auc,
+            bo_data=tagged_objects_bsdf_only_auc,
             pv_data=tagged_objects_pll_vision_auc,
             ps_data=tagged_objects_pll_size_auc,
             pbb_data=tagged_objects_pll_blind_b_auc,
@@ -1163,6 +1257,7 @@ class ResultsPlotter:
         self._do_confidence_interval_plot(
             bp_data=tagless_objects_bsdf_pll_mean,
             n_data=tagless_objects_nerf_on_mean,
+            bo_data=tagless_objects_bsdf_only_mean,
             pv_data=tagless_objects_pll_vision_mean,
             ps_data=tagless_objects_pll_size_mean,
             pbb_data=tagless_objects_pll_blind_b_mean,
@@ -1174,6 +1269,7 @@ class ResultsPlotter:
         self._do_confidence_interval_plot(
             bp_data=tagless_objects_bsdf_pll_auc,
             n_data=tagless_objects_nerf_on_auc,
+            bo_data=tagless_objects_bsdf_only_auc,
             pv_data=tagless_objects_pll_vision_auc,
             ps_data=tagless_objects_pll_size_auc,
             pbb_data=tagless_objects_pll_blind_b_auc,
@@ -1185,6 +1281,7 @@ class ResultsPlotter:
         self._do_confidence_interval_plot(
             bp_data=all_objects_bsdf_pll_mean,
             n_data=all_objects_nerf_on_mean,
+            n_data=all_objects_bsdf_only_mean,
             pv_data=all_objects_pll_vision_mean,
             ps_data=all_objects_pll_size_mean,
             pbb_data=all_objects_pll_blind_b_mean,
@@ -1196,6 +1293,7 @@ class ResultsPlotter:
         self._do_confidence_interval_plot(
             bp_data=all_objects_bsdf_pll_auc,
             n_data=all_objects_nerf_on_auc,
+            n_data=all_objects_bsdf_only_auc,
             pv_data=all_objects_pll_vision_auc,
             ps_data=all_objects_pll_size_auc,
             pbb_data=all_objects_pll_blind_b_auc,
@@ -1264,13 +1362,14 @@ class ResultsPlotter:
 
     def plot_gt_dynamics_comparison(
             self, toss_subset: str, dynamics_metric: str):
-        """Dynamics metrics against TagSLAM.  Only doable for tagged objects and
-        not for BundleSDF-only."""
+        """Dynamics metrics against TagSLAM.  Only doable for objects with
+        ground truth URDFs."""
         DYNAMICS_CATEGORY = 'dynamics_rollout_metrics'
 
         # Keep track of all objects.
         objects_w_gt_bsdf_pll_mean = [[], []]
         objects_w_gt_nerf_on_mean = [[], []]
+        objects_w_gt_bsdf_only_mean = [[], []]
         objects_w_gt_pll_vision_mean = [[], []]
         objects_w_gt_pll_size_mean = [[], []]
         objects_w_gt_pll_blind_b_mean = [[], []]
@@ -1279,43 +1378,53 @@ class ResultsPlotter:
 
         objects_w_gt_bsdf_pll_auc = [[], []]
         objects_w_gt_nerf_on_auc = [[], []]
+        objects_w_gt_bsdf_only_auc = [[], []]
         objects_w_gt_pll_vision_auc = [[], []]
         objects_w_gt_pll_size_auc = [[], []]
         objects_w_gt_pll_blind_b_auc = [[], []]
         objects_w_gt_pll_blind_t_auc = [[], []]
         objects_w_gt_gt_auc = []
 
-        # Prepare to zip in consistent order:  BSDF-PLL, NeRF Online, PLL
-        # Vision, PLL Size, PLL Blind B, PLL Blind T.
+        # Prepare to zip in consistent order:  BSDF-PLL, NeRF Online, BSDF-Only,
+        # PLL Vision, PLL Size, PLL Blind B, PLL Blind T.
         means = [objects_w_gt_bsdf_pll_mean, objects_w_gt_nerf_on_mean,
-                 objects_w_gt_pll_vision_mean, objects_w_gt_pll_size_mean,
-                 objects_w_gt_pll_blind_b_mean, objects_w_gt_pll_blind_t_mean]
+                 objects_w_gt_bsdf_only_mean, objects_w_gt_pll_vision_mean,
+                 objects_w_gt_pll_size_mean, objects_w_gt_pll_blind_b_mean,
+                 objects_w_gt_pll_blind_t_mean]
         aucs = [objects_w_gt_bsdf_pll_auc, objects_w_gt_nerf_on_auc,
-                objects_w_gt_pll_vision_auc, objects_w_gt_pll_size_auc,
-                objects_w_gt_pll_blind_b_auc, objects_w_gt_pll_blind_t_auc]
+                objects_w_gt_bsdf_only_auc, objects_w_gt_pll_vision_auc,
+                objects_w_gt_pll_size_auc, objects_w_gt_pll_blind_b_auc,
+                objects_w_gt_pll_blind_t_auc]
         result_dicts = [self.bsdf_pll_results, self.nerf_on_results,
-                        self.pll_vision_results, self.pll_size_results,
-                        self.pll_blind_b_results, self.pll_blind_t_results]
+                        self.bsdf_only_results, self.pll_vision_results,
+                        self.pll_size_results, self.pll_blind_b_results,
+                        self.pll_blind_t_results]
 
         for obj in OBJECTS_WITH_GT_URDF:
             scale = METRIC_SCALING[dynamics_metric]
             auc_scale = METRIC_SCALING['auc']
 
             # Handle the ground truth first.
-            gt_mean, gt_auc = [], []
+            gt_means, gt_aucs = [], []
             # Iterate over the individual tosses.
-            for gt_results in self.gt_results[obj][
-                DYNAMICS_CATEGORY]['against_tagslam'][dynamics_metric].values():
-                gt_mean.append(gt_results['mean'] * scale)
-                gt_auc.append(gt_results['auc'] * auc_scale)
-            # gt_mean = np.mean(gt_mean)
-            # gt_auc = np.mean(gt_auc)
+            for toss_key, gt_val in self.gt_results[obj][DYNAMICS_CATEGORY][
+                'all_tosses']['against_tagslam'][dynamics_metric].items():
+                if 'auc' in toss_key:
+                    gt_aucs.append(gt_val * auc_scale)
+                elif 'toss' in toss_key:
+                    gt_means.append(gt_val * scale)
+
+            gt_mean = self.gt_results[obj][DYNAMICS_CATEGORY]['all_tosses'][
+                'against_tagslam'][dynamics_metric]['mean'] * scale
+            gt_auc = self.gt_results[obj][DYNAMICS_CATEGORY]['all_tosses'][
+                'against_tagslam'][dynamics_metric]['mean_auc'] * auc_scale
             objects_w_gt_gt_mean.append(gt_mean)
             objects_w_gt_gt_auc.append(gt_auc)
 
             # Handle every approach next.
             bsdf_pll_mean = [[], []]
             nerf_on_mean = [[], []]
+            bsdf_only_mean = [[], []]
             pll_vision_mean = [[], []]
             pll_size_mean = [[], []]
             pll_blind_b_mean = [[], []]
@@ -1323,15 +1432,18 @@ class ResultsPlotter:
 
             bsdf_pll_auc = [[], []]
             nerf_on_auc = [[], []]
+            bsdf_only_auc = [[], []]
             pll_vision_auc = [[], []]
             pll_size_auc = [[], []]
             pll_blind_b_auc = [[], []]
             pll_blind_t_auc = [[], []]
 
-            obj_means = [bsdf_pll_mean, nerf_on_mean, pll_vision_mean,
-                         pll_size_mean, pll_blind_b_mean, pll_blind_t_mean]
-            obj_aucs = [bsdf_pll_auc, nerf_on_auc, pll_vision_auc,
-                        pll_size_auc, pll_blind_b_auc, pll_blind_t_auc]
+            obj_means = [bsdf_pll_mean, nerf_on_mean, bsdf_only_mean,
+                         pll_vision_mean, pll_size_mean, pll_blind_b_mean,
+                         pll_blind_t_mean]
+            obj_aucs = [bsdf_pll_auc, nerf_on_auc, bsdf_only_auc,
+                        pll_vision_auc, pll_size_auc, pll_blind_b_auc,
+                        pll_blind_t_auc]
 
             for all_mean, all_auc, obj_mean, obj_auc, result_dict in zip(
                     means, aucs, obj_means, obj_aucs, result_dicts):
@@ -1367,9 +1479,9 @@ class ResultsPlotter:
             # Generate the plots.
             self._do_plot(
                 bp_data=bsdf_pll_mean, n_data=nerf_on_mean,
-                pv_data=pll_vision_mean, ps_data=pll_size_mean,
-                pbb_data=pll_blind_b_mean, pbt_data=pll_blind_t_mean,
-                gt=gt_mean,
+                bo_data=bsdf_only_mean, pv_data=pll_vision_mean,
+                ps_data=pll_size_mean, pbb_data=pll_blind_b_mean,
+                pbt_data=pll_blind_t_mean, gt=gt_means,
                 ylabel=ERROR_LABELS[dynamics_metric], xlabel=NUM_TOSSES_LABEL,
                 title=f'{obj} {toss_subset.replace("_", " ")} Dynamics '.title() + \
                     f'Rollout Prediction'.title(),
@@ -1377,8 +1489,9 @@ class ResultsPlotter:
                     f'{toss_subset}_{DYNAMICS_CATEGORY}', subdir='dynamics')
             self._do_plot(
                 bp_data=bsdf_pll_auc, n_data=nerf_on_auc,
-                pv_data=pll_vision_auc, ps_data=pll_size_auc,
-                pbb_data=pll_blind_b_auc, pbt_data=pll_blind_t_auc, gt=gt_auc,
+                bo_data=bsdf_only_auc, pv_data=pll_vision_auc,
+                ps_data=pll_size_auc, pbb_data=pll_blind_b_auc,
+                pbt_data=pll_blind_t_auc, gt=gt_aucs,
                 ylabel=AUC_LABELS[dynamics_metric], xlabel=NUM_TOSSES_LABEL,
                 title=f'{obj} {toss_subset.replace("_", " ")} Dynamics '.title() + \
                     f'Rollout Prediction'.title(),
@@ -1390,6 +1503,7 @@ class ResultsPlotter:
             self._do_confidence_interval_plot(
                 bp_data=objects_w_gt_bsdf_pll_mean,
                 n_data=objects_w_gt_nerf_on_mean,
+                bo_data=objects_w_gt_bsdf_only_mean,
                 pv_data=objects_w_gt_pll_vision_mean,
                 ps_data=objects_w_gt_pll_size_mean,
                 pbb_data=objects_w_gt_pll_blind_b_mean,
@@ -1403,6 +1517,7 @@ class ResultsPlotter:
             self._do_confidence_interval_plot(
                 bp_data=objects_w_gt_bsdf_pll_auc,
                 n_data=objects_w_gt_nerf_on_auc,
+                bo_data=objects_w_gt_bsdf_only_auc,
                 pv_data=objects_w_gt_pll_vision_auc,
                 ps_data=objects_w_gt_pll_size_auc,
                 pbb_data=objects_w_gt_pll_blind_b_auc,
@@ -1535,10 +1650,9 @@ class ResultsPlotter:
                 print(f'Wrote to {str_filepath}')
 
     def _do_plot(self, bp_data: list = None, n_data: list = None,
-                 bo_data: list = None, #po_data: list = None,
-                 #pt_data: list = None, pb_data: list = None,
-                 pv_data: list = None, ps_data: list = None,
-                 pbb_data: list = None, pbt_data: list = None, gt: list = None,
+                 bo_data: list = None, pv_data: list = None,
+                 ps_data: list = None, pbb_data: list = None,
+                 pbt_data: list = None, gt: list = None,
                  ylabel: str = '', xlabel: str = '', title: str = None,
                  filename: str = None, subdir: str = ''):
         # Skip individual object plots, but not if comparing against GT.
@@ -1637,8 +1751,7 @@ class ResultsPlotter:
 
     def _do_confidence_interval_plot(
             self, bp_data: list = None, n_data: list = None,
-            bo_data: list = None,
-            pv_data: list = None, ps_data: list = None,
+            bo_data: list = None, pv_data: list = None, ps_data: list = None,
             pbb_data: list = None, pbt_data: list = None, gt: list = None,
             ylabel: str = '', xlabel: str = '',
             title: str = None, filename: str = None, subdir: str = '',
@@ -1861,7 +1974,7 @@ def process_auc_command():
 # BundleSDF-PLL, one for BundleSDF-only, and another for PLL-only.
 @cli.command('gather')
 def process_gather_command():
-    # Start dictionaries for each of the four result types.
+    # Start dictionaries for each of the result types.
     bsdf_pll_results = {}       # 02_2
     nerf_on_results = {}        # 03_2
     bsdf_only_results = {}      # bsdf 00_1
@@ -1870,6 +1983,8 @@ def process_gather_command():
     pll_size_results = {}       # pll 04_1 (or pll 05_1)
     pll_blind_b_results = {}    # pll 07_1
     pll_blind_t_results = {}    # pll 09_0
+
+    gt_results = {}
 
     # Iterate over every evaluation subdirectory.
     for subdir in os.listdir(file_utils.evaluation_dir()):
@@ -1892,6 +2007,12 @@ def process_gather_command():
             add_to_results = bsdf_pll_results
         elif '03' in subdir and subdir.endswith('_2'):
             add_to_results = nerf_on_results
+        elif subdir.endswith('_GT'):
+            print(f'Found GT {subdir}...', end='')
+            experiment_results = file_utils.load_results_yaml_in_subdir(subdir)
+            add_experiment_to_gt_results(experiment_results, gt_results)
+            print(f'done.')
+            continue
         else:
             print(f'  Skipping {subdir}')
             continue
@@ -1925,6 +2046,8 @@ def process_gather_command():
     file_utils.save_results_to_yaml(
         pll_blind_t_results, file_utils.evaluation_dir(),
         filename='pll_blind_t.yaml')
+    file_utils.save_results_to_yaml(
+        gt_results, file_utils.evaluation_dir(), filename='gt.yaml')
 
 
 # Use 'plot' command to load the previously generated yaml files with results
@@ -1951,11 +2074,7 @@ def process_plot_command(do_objects: bool):
         'pll_blind_b.yaml')
     pll_blind_t_results = file_utils.load_gathered_results_yaml(
         'pll_blind_t.yaml')
-
-    # Ground truth results.
-    cube_gt_results = file_utils.load_gathered_results_yaml('cube_GT.yaml')
-    gt_results = {'cube': cube_gt_results}
-
+    gt_results = file_utils.load_gathered_results_yaml('gt.yaml')
 
     # Load an empty results dictionary for checking which metrics are valid for
     # which category/against which tracking.
