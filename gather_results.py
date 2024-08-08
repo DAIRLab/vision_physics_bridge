@@ -232,6 +232,8 @@ PLL_VISION_COLOR = '#00ff00'  #'#833785'
 PLL_SIZE_COLOR = '#0000ff'  #'#4a0042'
 PLL_BLIND_B_COLOR = '#ffff00'  #'#92668d'
 PLL_BLIND_T_COLOR = '#ff00ff'  #'#95001a'
+BSDF_CONVEX_COLOR = '#00ffff'  #'#ff0000'
+BSDF_CONVEX_HULL_COLOR = '#8eaadb'
 
 BSDF_PLL_LABEL = 'Vysics'
 NERF_ON_LABEL = 'BundleSDF-PLL NeRF Online'
@@ -240,6 +242,8 @@ PLL_VISION_LABEL = 'PLL with Vision Supervision'
 PLL_SIZE_LABEL = 'PLL with Vision-Supervised Size Only'
 PLL_BLIND_B_LABEL = 'Blind PLL on Vision-Based Tracking'
 PLL_BLIND_T_LABEL = 'Blind PLL on Fiducial-Based Tracking'
+BSDF_CONVEX_LABEL = 'BundleSDF Convex Loss'
+BSDF_CONVEX_HULL_LABEL = 'BundleSDF Convex Hull'
 GT_LABEL = 'Using Ground Truth URDF'
 
 LINEWIDTH = 5
@@ -501,6 +505,7 @@ class ResultsPlotter:
                  #pll_tagslam_results: dict, pll_blind_results: dict,
                  pll_vision_results: dict, pll_size_results: dict,
                  pll_blind_b_results: dict, pll_blind_t_results: dict,
+                 bsdf_convex_results: dict,
                  gt_results: dict, do_objects: bool):
         # Store the results dictionaries.
         self.bsdf_pll_results = bsdf_pll_results
@@ -513,6 +518,7 @@ class ResultsPlotter:
         self.pll_size_results = pll_size_results
         self.pll_blind_b_results = pll_blind_b_results
         self.pll_blind_t_results = pll_blind_t_results
+        self.bsdf_convex_results = bsdf_convex_results
         self.gt_results = gt_results
 
         # Get a plotting directory.
@@ -747,17 +753,18 @@ class ResultsPlotter:
         all_objects_pll_size_mean = [[], []]
         all_objects_pll_blind_b_mean = [[], []]
         all_objects_pll_blind_t_mean = [[], []]
+        all_objects_bsdf_convex_mean = [[], []]
 
         # Prepare to zip in consistent order:  BSDF-PLL, NeRF Online, BundleSDF
         # Only, PLL Vision, PLL Size, PLL Blind B, PLL Blind T.
         means = [all_objects_bsdf_pll_mean, all_objects_nerf_on_mean,
                  all_objects_bsdf_only_mean, all_objects_pll_vision_mean,
                  all_objects_pll_size_mean, all_objects_pll_blind_b_mean,
-                 all_objects_pll_blind_t_mean]
+                 all_objects_pll_blind_t_mean, all_objects_bsdf_convex_mean]
         result_dicts = [self.bsdf_pll_results, self.nerf_on_results,
                         self.bsdf_only_results, self.pll_vision_results,
                         self.pll_size_results, self.pll_blind_b_results,
-                        self.pll_blind_t_results]
+                        self.pll_blind_t_results, self.bsdf_convex_results]
 
         # Do both tagged and tagless objects.
         all_objects = self.tagless_objects + self.tagged_objects
@@ -773,10 +780,11 @@ class ResultsPlotter:
             pll_size_mean = [[], []]
             pll_blind_b_mean = [[], []]
             pll_blind_t_mean = [[], []]
+            bsdf_convex_mean = [[], []]
 
             obj_means = [bsdf_pll_mean, nerf_on_mean, bsdf_only_mean,
                          pll_vision_mean, pll_size_mean, pll_blind_b_mean,
-                         pll_blind_t_mean]
+                         pll_blind_t_mean, bsdf_convex_mean]
 
             for all_mean, obj_mean, result_dict in zip(
                     means, obj_means, result_dicts):
@@ -803,7 +811,7 @@ class ResultsPlotter:
                 bp_data=bsdf_pll_mean, n_data=nerf_on_mean,
                 bo_data=bsdf_only_mean, pv_data=pll_vision_mean,
                 ps_data=pll_size_mean, pbb_data=pll_blind_b_mean,
-                pbt_data=pll_blind_t_mean,
+                pbt_data=pll_blind_t_mean, bc_data=bsdf_convex_mean,
                 ylabel=ERROR_LABELS[geometry_metric], xlabel=NUM_TOSSES_LABEL,
                 title=f'{obj} {hull_or_full.replace("_", " ")} Geometry'.title(),
                 filename=f'{obj}_{geometry_metric}_v_data_{hull_or_full}',
@@ -818,6 +826,7 @@ class ResultsPlotter:
             ps_data=all_objects_pll_size_mean,
             pbb_data=all_objects_pll_blind_b_mean,
             pbt_data=all_objects_pll_blind_t_mean,
+            bc_data=all_objects_bsdf_convex_mean,
             ylabel=ERROR_LABELS[geometry_metric], xlabel=NUM_TOSSES_LABEL,
             title=f'All Objects {hull_or_full.replace("_", " ")} Geometry'.title(),
             filename=f'all_objs_{geometry_metric}_v_data_{hull_or_full}',
@@ -1205,6 +1214,141 @@ class ResultsPlotter:
             filename=f'all_objs_{dynamics_metric}_bsdf_v_data_{toss_subset}' + \
                 f'_{dynamics_category}_auc', subdir='dynamics')
 
+
+    def plot_object_geometry_scatter_withconvex2(
+            self, hull_or_full: str, geometry_metric: str):
+        """Drawing four scatter plots, including two convex variants of BundleSDF. """
+        # Get the scale of the metric.
+        scale = METRIC_SCALING[geometry_metric]
+
+        # For now just do this for BundleSDF-PLL and BundleSDF-Only.
+        by_object_bsdf_pll = {}  #[[], []] keys objects, vals [[toss_str], [ys]]
+        by_object_bsdf_only = {}  #[[], []]
+        by_object_bsdf_convex = {}  #[[], []]
+        by_object_bsdf_convex_hull = {}
+
+        # Prepare to zip in consistent order:  BSDF-PLL, BundleSDF Only.
+        by_objects = [by_object_bsdf_pll, by_object_bsdf_only, \
+                      by_object_bsdf_convex, by_object_bsdf_convex_hull]
+        result_dicts = [self.bsdf_pll_results, self.bsdf_only_results, \
+                        self.bsdf_convex_results, self.bsdf_only_results]
+
+        # Iterate over all the approaches.
+        for i, (by_object, result_dict) in enumerate(zip(by_objects, result_dicts)):
+
+            # Iterate over all the objects.
+            all_objects = self.tagless_objects + self.tagged_objects
+            object_labels = ['tagless_objects'] * len(self.tagless_objects) + \
+                ['tagged_objects'] * len(self.tagged_objects)
+
+            for obj, tag_label in zip(all_objects, object_labels):
+                if tag_label not in result_dict.keys():
+                    continue
+                if obj not in result_dict[tag_label].keys():
+                    continue
+
+                by_object[obj] = {}
+
+                # Iterate over all the toss strings.
+                for trained_on, result in result_dict[tag_label][obj].items():
+                    toss_str = trained_on.split('trained_on_toss_')[-1]
+
+                    if i == 3:
+                        # pdb.set_trace()
+                        by_object[obj][toss_str] = result['geometry_metrics'][
+                            'hull_to_full'][geometry_metric] * scale
+                    else:
+                        by_object[obj][toss_str] = result['geometry_metrics'][
+                            hull_or_full][geometry_metric] * scale
+
+        # Generate the plots.
+        title = 'Chamfer Distance' if \
+            geometry_metric == 'chamfer_distance' and 'full_geometry' in hull_or_full \
+            else f'Scatter {hull_or_full.replace("_", " ")} Geometry'.title()
+        ylabel = '% object length' if geometry_metric == 'chamfer_distance' \
+            and 'full' in hull_or_full else ERROR_LABELS[geometry_metric]
+        self._do_scatter_plot_with_convex2(
+            bp_data=by_object_bsdf_pll, bo_data=by_object_bsdf_only, bc_data=by_object_bsdf_convex, 
+            bch_data=by_object_bsdf_convex_hull,
+            ylabel=ylabel, xlabel_txt=all_objects,
+            title=title,
+            filename=f'scatter_{geometry_metric}_v_data_{hull_or_full}_normalized_withconvex',
+            subdir='object_geometry', save_to_txt=True, normalize=True)
+        ylabel = 'Centimeters' if geometry_metric == 'chamfer_distance' \
+            and 'full' in hull_or_full else ERROR_LABELS[geometry_metric]
+        self._do_scatter_plot_with_convex2(
+            bp_data=by_object_bsdf_pll, bo_data=by_object_bsdf_only, bc_data=by_object_bsdf_convex,
+            bch_data=by_object_bsdf_convex_hull,
+            ylabel=ylabel, xlabel_txt=all_objects,
+            title=title,
+            filename=f'scatter_{geometry_metric}_v_data_{hull_or_full}_true_units_withconvex',
+            subdir='object_geometry', save_to_txt=True, normalize=False)
+        
+    def plot_object_geometry_scatter_withconvex(
+            self, hull_or_full: str, geometry_metric: str):
+        """Drawing three scatter plots, including BundleSDF with convexity loss. """
+        # Get the scale of the metric.
+        scale = METRIC_SCALING[geometry_metric]
+
+        # For now just do this for BundleSDF-PLL and BundleSDF-Only.
+        by_object_bsdf_pll = {}  #[[], []] keys objects, vals [[toss_str], [ys]]
+        by_object_bsdf_only = {}  #[[], []]
+        by_object_bsdf_convex = {}  #[[], []]
+
+        # Prepare to zip in consistent order:  BSDF-PLL, BundleSDF Only.
+        by_objects = [by_object_bsdf_pll, by_object_bsdf_only, by_object_bsdf_convex]
+        result_dicts = [self.bsdf_pll_results, self.bsdf_only_results, self.bsdf_convex_results]
+
+        # Iterate over all the approaches.
+        for i_dict, (by_object, result_dict) in enumerate(zip(by_objects, result_dicts)):
+
+            # Iterate over all the objects.
+            all_objects = self.tagless_objects + self.tagged_objects
+            object_labels = ['tagless_objects'] * len(self.tagless_objects) + \
+                ['tagged_objects'] * len(self.tagged_objects)
+
+            for obj, tag_label in zip(all_objects, object_labels):
+                if tag_label not in result_dict.keys():
+                    continue
+                if obj not in result_dict[tag_label].keys():
+                    continue
+
+                by_object[obj] = {}
+
+                # Iterate over all the toss strings.
+                for trained_on, result in result_dict[tag_label][obj].items():
+                    toss_str = trained_on.split('trained_on_toss_')[-1]
+
+                    try:
+                        by_object[obj][toss_str] = result['geometry_metrics'][
+                            hull_or_full][geometry_metric] * scale
+                    except:
+                        print(f'Error with {obj}, {toss_str}, {hull_or_full}, {geometry_metric}')
+                        pdb.set_trace()
+                    # by_object[obj][toss_str] = result['geometry_metrics'][
+                    #     hull_or_full][geometry_metric] * scale
+
+        # Generate the plots.
+        title = 'Chamfer Distance' if \
+            geometry_metric == 'chamfer_distance' and 'full_geometry' in hull_or_full \
+            else f'Scatter {hull_or_full.replace("_", " ")} Geometry'.title()
+        ylabel = '% object length' if geometry_metric == 'chamfer_distance' \
+            and 'full' in hull_or_full else ERROR_LABELS[geometry_metric]
+        self._do_scatter_plot_with_convex(
+            bp_data=by_object_bsdf_pll, bo_data=by_object_bsdf_only, bc_data=by_object_bsdf_convex,
+            ylabel=ylabel, xlabel_txt=all_objects,
+            title=title,
+            filename=f'scatter_{geometry_metric}_v_data_{hull_or_full}_normalized_withconvex',
+            subdir='object_geometry', save_to_txt=True, normalize=True)
+        ylabel = 'Centimeters' if geometry_metric == 'chamfer_distance' \
+            and 'full' in hull_or_full else ERROR_LABELS[geometry_metric]
+        self._do_scatter_plot_with_convex(
+            bp_data=by_object_bsdf_pll, bo_data=by_object_bsdf_only, bc_data=by_object_bsdf_convex,
+            ylabel=ylabel, xlabel_txt=all_objects,
+            title=title,
+            filename=f'scatter_{geometry_metric}_v_data_{hull_or_full}_true_units_withconvex',
+            subdir='object_geometry', save_to_txt=True, normalize=False)
+        
     def plot_object_geometry_scatter(
             self, hull_or_full: str, geometry_metric: str):
         # Get the scale of the metric.
@@ -1414,6 +1558,332 @@ class ResultsPlotter:
                 filename=f'all_gt_objs_{dynamics_metric}_for_gt_comp_' + \
                     f'{toss_subset}_{DYNAMICS_CATEGORY}_auc', subdir='dynamics')
 
+    def _do_scatter_plot_with_convex2(self, bp_data: list = None, 
+                         bo_data: list = None, bc_data: list = None,
+                         bch_data: list = None,
+                         ylabel: str = '', xlabel_txt: str = '',
+                         title: str = '', filename: str = '', subdir: str = '',
+                         save_to_txt: bool = False, normalize: bool = False):
+        assert bp_data is not None and bo_data is not None and bc_data is not None
+
+        # Make a plot for all the toss configurations.
+        toss_groups = [['1', '2', '3', '4', '5']] #, ['1-2'], ['1-3'], ['1-4'], ['1-5']]
+        for num_tosses, toss_strs in enumerate(toss_groups):
+            num_tosses += 1   # Use 1-indexing.
+
+            # Get longer lists repeating objects in groups, e.g. cube, cube, ...
+            # x_txts = [obj for obj in xlabel_txt for _ in toss_strs]
+            try:
+                bp_ys = [bp_data[obj][toss_str] for obj in xlabel_txt for toss_str \
+                    in toss_strs]
+            except:
+                pdb.set_trace()
+            bo_ys = [bo_data[obj][toss_str] for obj in xlabel_txt for toss_str \
+                in toss_strs]
+
+            bc_ys = [bc_data[obj][toss_str] for obj in xlabel_txt for toss_str \
+                in toss_strs]
+            
+            bch_ys = [bch_data[obj][toss_str] for obj in xlabel_txt for toss_str \
+                in toss_strs]
+
+            # Get in (n_object, n_toss_groups) 2D arrays.
+            bp_ys = np.array(bp_ys).reshape(-1, len(toss_strs))
+            bo_ys = np.array(bo_ys).reshape(-1, len(toss_strs))
+            bc_ys = np.array(bc_ys).reshape(-1, len(toss_strs))
+            bch_ys = np.array(bch_ys).reshape(-1, len(toss_strs))
+
+            # Convert the data into % of normalized units.
+            if normalize:
+                for i, obj_name in enumerate(xlabel_txt):
+                    bp_ys[i, :] /= CM_LENGTH_SCALES_BY_OBJ[obj_name]
+                    bp_ys[i, :] *= 100
+                    bo_ys[i, :] /= CM_LENGTH_SCALES_BY_OBJ[obj_name]
+                    bo_ys[i, :] *= 100
+                    bc_ys[i, :] /= CM_LENGTH_SCALES_BY_OBJ[obj_name]
+                    bc_ys[i, :] *= 100
+                    bch_ys[i, :] /= CM_LENGTH_SCALES_BY_OBJ[obj_name]
+                    bch_ys[i, :] *= 100
+
+            bp_ys_means = bp_ys.mean(axis=1).tolist()
+            bo_ys_means = bo_ys.mean(axis=1).tolist()
+            bc_ys_means = bc_ys.mean(axis=1).tolist()
+            bch_ys_means = bch_ys.mean(axis=1).tolist()
+
+            bp_ys = bp_ys.tolist()
+            bo_ys = bo_ys.tolist()
+            bc_ys = bc_ys.tolist()
+            bch_ys = bch_ys.tolist()
+
+            # Try sorting all the data so the average BundleSDF-only results are
+            # in increasing order.
+            combined = list(zip(
+                xlabel_txt, bp_ys_means, bo_ys_means, bc_ys_means, bch_ys_means,
+                bp_ys, bo_ys, bc_ys, bch_ys))
+            sorted_combined = sorted(combined, key=lambda x: x[2])
+            xlabel_txt, bp_ys_means, bo_ys_means, bc_ys_means, bch_ys_means, \
+                bp_ys, bo_ys, bc_ys, bch_ys = zip(*sorted_combined)
+
+            xs_means = np.array([i for i in range(len(xlabel_txt))])
+            xs = np.array([i for i in range(len(xlabel_txt)) for _ in \
+                           toss_strs])
+            bp_ys = np.array(bp_ys).reshape(-1).tolist()
+            bo_ys = np.array(bo_ys).reshape(-1).tolist()
+            bc_ys = np.array(bc_ys).reshape(-1).tolist()
+            bch_ys = np.array(bch_ys).reshape(-1).tolist()
+
+            fig = plt.figure()
+            ax = plt.gca()
+
+            if save_to_txt:
+                data_str = ''
+                data_str += f'NORMALIZING? --> {normalize=}\n'
+                data_str += f'{xlabel_txt=}'
+
+            # Vysics.
+            # plt.scatter(xs_means+0.2, bp_ys_means, s=MARKERSIZE*2,
+            #     color=BSDF_PLL_COLOR, label=BSDF_PLL_LABEL)
+            prefixes = [''] + ['_']*(len(xs_means)-1)
+            for i in range(len(xs_means)):
+                plt.plot([i-0.38, i+0.38], [bp_ys_means[i], bp_ys_means[i]],
+                         linestyle='-', linewidth=LINEWIDTH*2,
+                         color=BSDF_PLL_COLOR, label=prefixes[i]+BSDF_PLL_LABEL)
+            # plt.plot(xs_means, bp_ys_means, '.', linestyle='-',
+            #     markersize=MARKERSIZE/3, linewidth=LINEWIDTH,
+            #     color=BSDF_PLL_COLOR, label=BSDF_PLL_LABEL)
+            plt.scatter(xs+0.3, bp_ys, s=MARKERSIZE, color=BSDF_PLL_COLOR,
+                        label='_')
+            if save_to_txt:
+                data_str += f'\nbp_data:\n{bp_ys}'
+
+            # BundleSDF only.
+            # plt.scatter(xs_means-0.2, bo_ys_means, s=MARKERSIZE*2,
+            #     color=BSDF_ONLY_COLOR, label=BSDF_ONLY_LABEL)
+            # plt.plot(xs_means, bo_ys_means, '.', linestyle='-',
+            #     markersize=MARKERSIZE/3, linewidth=LINEWIDTH,
+            #     color=BSDF_ONLY_COLOR,
+            #     label=BSDF_ONLY_LABEL)
+            for i in range(len(xs_means)):
+                plt.plot([i-0.38, i+0.38], [bo_ys_means[i], bo_ys_means[i]],
+                         linestyle='-', linewidth=LINEWIDTH*2,
+                         color=BSDF_ONLY_COLOR,
+                         label=prefixes[i]+BSDF_ONLY_LABEL)
+            plt.scatter(xs-0.3, bo_ys, s=MARKERSIZE, color=BSDF_ONLY_COLOR,
+                        label='_')
+            if save_to_txt:
+                data_str += f'\nbo_data:\n{bo_ys}'
+
+            # BundleSDF convex.
+            # plt.scatter(xs_means-0.2, bc_ys_means, s=MARKERSIZE*2,
+            #     color=BSDF_CONVEX_COLOR, label=BSDF_CONVEX_LABEL)
+            # plt.plot(xs_means, bc_ys_means, '.', linestyle='-',
+            #     markersize=MARKERSIZE/3, linewidth=LINEWIDTH,
+            #     color=BSDF_CONVEX_COLOR,
+            #     label=BSDF_CONVEX_LABEL)
+            for i in range(len(xs_means)):
+                plt.plot([i-0.38, i+0.38], [bc_ys_means[i], bc_ys_means[i]],
+                         linestyle='-', linewidth=LINEWIDTH*2,
+                         color=BSDF_CONVEX_COLOR,
+                         label=prefixes[i]+BSDF_CONVEX_LABEL)
+            plt.scatter(xs-0.1, bc_ys, s=MARKERSIZE, color=BSDF_CONVEX_COLOR,
+                        label='_')
+            if save_to_txt:
+                data_str += f'\nbc_data:\n{bc_ys}'
+
+            # BundleSDF convex hull.
+            # plt.scatter(xs_means-0.2, bch_ys_means, s=MARKERSIZE*2,
+            #     color=BSDF_CONVEX_HULL_COLOR, label=BSDF_CONVEX_HULL_LABEL)
+            # plt.plot(xs_means, bch_ys_means, '.', linestyle='-',
+            #     markersize=MARKERSIZE/3, linewidth=LINEWIDTH,
+            #     color=BSDF_CONVEX_HULL_COLOR,
+            #     label=BSDF_CONVEX_HULL_LABEL)
+
+            for i in range(len(xs_means)):
+                plt.plot([i-0.38, i+0.38], [bch_ys_means[i], bch_ys_means[i]],
+                         linestyle='-', linewidth=LINEWIDTH*2,
+                         color=BSDF_CONVEX_HULL_COLOR,
+                         label=prefixes[i]+BSDF_CONVEX_HULL_LABEL)
+            plt.scatter(xs+0.1, bch_ys, s=MARKERSIZE, color=BSDF_CONVEX_HULL_COLOR,
+                        label='_')
+            if save_to_txt:
+                data_str += f'\nbch_data:\n{bch_ys}'
+
+
+            plt.xticks(range(len(xlabel_txt)), xlabel_txt, rotation=45,
+                       ha='right', fontsize=20)
+
+            if normalize:
+                ylabel = ylabel.replace('[cm]', '[% length]')
+            plt.ylabel(ylabel)
+            plt.title(title)
+            plt.legend()
+
+            self._beautify_plot(fig, ax, xs_means, False, scatter=True,
+                                normalized=normalize)
+
+            plot_filename = filename.split('.')[0]
+            plot_filename += f'_{num_tosses}.png'
+            file_utils.assure_created(op.join(self.plot_dir, subdir))
+            fig_path = op.join(self.plot_dir, subdir, plot_filename)
+            fig.savefig(fig_path, dpi=100)
+            plt.close()
+
+            # Save the string to a text file as well.
+            if save_to_txt:
+                str_filepath = fig_path.replace('.png', '.txt')
+                with open(str_filepath, 'w') as txt_file:
+                    txt_file.write(data_str)
+                print(f'Wrote to {str_filepath}')
+
+
+    def _do_scatter_plot_with_convex(self, bp_data: list = None, 
+                         bo_data: list = None, bc_data: list = None,
+                         ylabel: str = '', xlabel_txt: str = '',
+                         title: str = '', filename: str = '', subdir: str = '',
+                         save_to_txt: bool = False, normalize: bool = False):
+        assert bp_data is not None and bo_data is not None and bc_data is not None
+
+        # Make a plot for all the toss configurations.
+        toss_groups = [['1', '2', '3', '4', '5']] #, ['1-2'], ['1-3'], ['1-4'], ['1-5']]
+        for num_tosses, toss_strs in enumerate(toss_groups):
+            num_tosses += 1   # Use 1-indexing.
+
+            # Get longer lists repeating objects in groups, e.g. cube, cube, ...
+            # x_txts = [obj for obj in xlabel_txt for _ in toss_strs]
+            try:
+                bp_ys = [bp_data[obj][toss_str] for obj in xlabel_txt for toss_str \
+                    in toss_strs]
+            except:
+                pdb.set_trace()
+            bo_ys = [bo_data[obj][toss_str] for obj in xlabel_txt for toss_str \
+                in toss_strs]
+
+            bc_ys = [bc_data[obj][toss_str] for obj in xlabel_txt for toss_str \
+                in toss_strs]
+
+            # Get in (n_object, n_toss_groups) 2D arrays.
+            bp_ys = np.array(bp_ys).reshape(-1, len(toss_strs))
+            bo_ys = np.array(bo_ys).reshape(-1, len(toss_strs))
+            bc_ys = np.array(bc_ys).reshape(-1, len(toss_strs))
+
+            # Convert the data into % of normalized units.
+            if normalize:
+                for i, obj_name in enumerate(xlabel_txt):
+                    bp_ys[i, :] /= CM_LENGTH_SCALES_BY_OBJ[obj_name]
+                    bp_ys[i, :] *= 100
+                    bo_ys[i, :] /= CM_LENGTH_SCALES_BY_OBJ[obj_name]
+                    bo_ys[i, :] *= 100
+                    bc_ys[i, :] /= CM_LENGTH_SCALES_BY_OBJ[obj_name]
+                    bc_ys[i, :] *= 100
+
+            bp_ys_means = bp_ys.mean(axis=1).tolist()
+            bo_ys_means = bo_ys.mean(axis=1).tolist()
+            bc_ys_means = bc_ys.mean(axis=1).tolist()
+
+            bp_ys = bp_ys.tolist()
+            bo_ys = bo_ys.tolist()
+            bc_ys = bc_ys.tolist()
+
+            # Try sorting all the data so the average BundleSDF-only results are
+            # in increasing order.
+            combined = list(zip(
+                xlabel_txt, bp_ys_means, bo_ys_means, bc_ys_means, 
+                bp_ys, bo_ys, bc_ys))
+            sorted_combined = sorted(combined, key=lambda x: x[2])
+            xlabel_txt, bp_ys_means, bo_ys_means, bc_ys_means, \
+                bp_ys, bo_ys, bc_ys = zip(*sorted_combined)
+
+            xs_means = np.array([i for i in range(len(xlabel_txt))])
+            xs = np.array([i for i in range(len(xlabel_txt)) for _ in \
+                           toss_strs])
+            bp_ys = np.array(bp_ys).reshape(-1).tolist()
+            bo_ys = np.array(bo_ys).reshape(-1).tolist()
+            bc_ys = np.array(bc_ys).reshape(-1).tolist()
+
+            fig = plt.figure()
+            ax = plt.gca()
+
+            if save_to_txt:
+                data_str = ''
+                data_str += f'NORMALIZING? --> {normalize=}\n'
+                data_str += f'{xlabel_txt=}'
+
+            # Vysics.
+            # plt.scatter(xs_means+0.2, bp_ys_means, s=MARKERSIZE*2,
+            #     color=BSDF_PLL_COLOR, label=BSDF_PLL_LABEL)
+            prefixes = [''] + ['_']*(len(xs_means)-1)
+            for i in range(len(xs_means)):
+                plt.plot([i-0.38, i+0.38], [bp_ys_means[i], bp_ys_means[i]],
+                         linestyle='-', linewidth=LINEWIDTH*2,
+                         color=BSDF_PLL_COLOR, label=prefixes[i]+BSDF_PLL_LABEL)
+            # plt.plot(xs_means, bp_ys_means, '.', linestyle='-',
+            #     markersize=MARKERSIZE/3, linewidth=LINEWIDTH,
+            #     color=BSDF_PLL_COLOR, label=BSDF_PLL_LABEL)
+            plt.scatter(xs+0.2, bp_ys, s=MARKERSIZE, color=BSDF_PLL_COLOR,
+                        label='_')
+            if save_to_txt:
+                data_str += f'\nbp_data:\n{bp_ys}'
+
+            # BundleSDF only.
+            # plt.scatter(xs_means-0.2, bo_ys_means, s=MARKERSIZE*2,
+            #     color=BSDF_ONLY_COLOR, label=BSDF_ONLY_LABEL)
+            # plt.plot(xs_means, bo_ys_means, '.', linestyle='-',
+            #     markersize=MARKERSIZE/3, linewidth=LINEWIDTH,
+            #     color=BSDF_ONLY_COLOR,
+            #     label=BSDF_ONLY_LABEL)
+            for i in range(len(xs_means)):
+                plt.plot([i-0.38, i+0.38], [bo_ys_means[i], bo_ys_means[i]],
+                         linestyle='-', linewidth=LINEWIDTH*2,
+                         color=BSDF_ONLY_COLOR,
+                         label=prefixes[i]+BSDF_ONLY_LABEL)
+            plt.scatter(xs-0.2, bo_ys, s=MARKERSIZE, color=BSDF_ONLY_COLOR,
+                        label='_')
+            if save_to_txt:
+                data_str += f'\nbo_data:\n{bo_ys}'
+
+            # BundleSDF convex.
+            # plt.scatter(xs_means-0.2, bc_ys_means, s=MARKERSIZE*2,
+            #     color=BSDF_CONVEX_COLOR, label=BSDF_CONVEX_LABEL)
+            # plt.plot(xs_means, bc_ys_means, '.', linestyle='-',
+            #     markersize=MARKERSIZE/3, linewidth=LINEWIDTH,
+            #     color=BSDF_CONVEX_COLOR,
+            #     label=BSDF_CONVEX_LABEL)
+            for i in range(len(xs_means)):
+                plt.plot([i-0.38, i+0.38], [bc_ys_means[i], bc_ys_means[i]],
+                         linestyle='-', linewidth=LINEWIDTH*2,
+                         color=BSDF_CONVEX_COLOR,
+                         label=prefixes[i]+BSDF_CONVEX_LABEL)
+            plt.scatter(xs, bc_ys, s=MARKERSIZE, color=BSDF_CONVEX_COLOR,
+                        label='_')
+            if save_to_txt:
+                data_str += f'\nbc_data:\n{bc_ys}'
+
+            plt.xticks(range(len(xlabel_txt)), xlabel_txt, rotation=45,
+                       ha='right', fontsize=20)
+
+            if normalize:
+                ylabel = ylabel.replace('[cm]', '[% length]')
+            plt.ylabel(ylabel)
+            plt.title(title)
+            plt.legend()
+
+            self._beautify_plot(fig, ax, xs_means, False, scatter=True,
+                                normalized=normalize)
+
+            plot_filename = filename.split('.')[0]
+            plot_filename += f'_{num_tosses}.png'
+            file_utils.assure_created(op.join(self.plot_dir, subdir))
+            fig_path = op.join(self.plot_dir, subdir, plot_filename)
+            fig.savefig(fig_path, dpi=100)
+            plt.close()
+
+            # Save the string to a text file as well.
+            if save_to_txt:
+                str_filepath = fig_path.replace('.png', '.txt')
+                with open(str_filepath, 'w') as txt_file:
+                    txt_file.write(data_str)
+                print(f'Wrote to {str_filepath}')
+
     def _do_scatter_plot(self, bp_data: list = None, bo_data: list = None,
                          ylabel: str = '', xlabel_txt: str = '',
                          title: str = '', filename: str = '', subdir: str = '',
@@ -1538,7 +2008,8 @@ class ResultsPlotter:
                  bo_data: list = None, #po_data: list = None,
                  #pt_data: list = None, pb_data: list = None,
                  pv_data: list = None, ps_data: list = None,
-                 pbb_data: list = None, pbt_data: list = None, gt: list = None,
+                 pbb_data: list = None, pbt_data: list = None, 
+                 bc_data: list = None, gt: list = None,
                  ylabel: str = '', xlabel: str = '', title: str = None,
                  filename: str = None, subdir: str = ''):
         # Skip individual object plots, but not if comparing against GT.
@@ -1571,6 +2042,9 @@ class ResultsPlotter:
         if pbt_data is not None and len(pbt_data[0]) > 0:
             ax.plot(pbt_data[0], pbt_data[1], linewidth=LINEWIDTH,
                     color=PLL_BLIND_T_COLOR, label=PLL_BLIND_T_LABEL)
+        if bc_data is not None and len(bc_data[0]) > 0:
+            ax.plot(bc_data[0], bc_data[1], linewidth=LINEWIDTH,
+                    color=BSDF_CONVEX_COLOR, label=BSDF_CONVEX_LABEL)
         if gt is not None:
             ax.hlines(np.mean(gt), xmin=0.5, xmax=np.max(bp_data[0])+0.5,
                       color='black', linestyle='--', linewidth=LINEWIDTH,
@@ -1639,7 +2113,8 @@ class ResultsPlotter:
             self, bp_data: list = None, n_data: list = None,
             bo_data: list = None,
             pv_data: list = None, ps_data: list = None,
-            pbb_data: list = None, pbt_data: list = None, gt: list = None,
+            pbb_data: list = None, pbt_data: list = None, 
+            bc_data: list = None, gt: list = None,
             ylabel: str = '', xlabel: str = '',
             title: str = None, filename: str = None, subdir: str = '',
             save_to_txt: bool = False):
@@ -1717,6 +2192,15 @@ class ResultsPlotter:
             if save_to_txt:
                 data_str = self._add_to_string(
                     data_str, 'pbt_data', x, y, l, u, pbt_data[1],
+                    compare_with=bp_data[1])
+        if bc_data is not None and len(bc_data[0]) > 0:
+            x, y, l, u = xs_and_ys_to_x_mean_lower_upper(bc_data[0], bc_data[1])
+            ax.plot(x, y, linewidth=LINEWIDTH,
+                    color=BSDF_CONVEX_COLOR, label=BSDF_CONVEX_LABEL)
+            ax.fill_between(x, l, u, alpha=0.3, color=BSDF_CONVEX_COLOR)
+            if save_to_txt:
+                data_str = self._add_to_string(
+                    data_str, 'bc_data', x, y, l, u, bc_data[1],
                     compare_with=bp_data[1])
         if gt is not None:
             ax.hlines(np.mean(gt), xmin=0.5, xmax=np.max(bp_data[0])+0.5,
@@ -1860,7 +2344,11 @@ def process_auc_command():
 # Use 'gather' command to gather all the results into yaml files, one for
 # BundleSDF-PLL, one for BundleSDF-only, and another for PLL-only.
 @cli.command('gather')
-def process_gather_command():
+@click.option('--single-toss', is_flag=True,
+              help='Whether to only gather single-toss results.')
+@click.option('--exclude-pll', is_flag=True,
+                help='Whether to exclude PLL results.')
+def process_gather_command(single_toss, exclude_pll):
     # Start dictionaries for each of the four result types.
     bsdf_pll_results = {}       # 02_2
     nerf_on_results = {}        # 03_2
@@ -1871,6 +2359,8 @@ def process_gather_command():
     pll_blind_b_results = {}    # pll 07_1
     pll_blind_t_results = {}    # pll 09_0
 
+    bsdf_convex_results = {}    # bsdf 00-cvwo_1 or bsdf 00-cvw_1
+
     # Iterate over every evaluation subdirectory.
     for subdir in os.listdir(file_utils.evaluation_dir()):
         eval_subdir = op.join(file_utils.evaluation_dir(), subdir)
@@ -1878,20 +2368,30 @@ def process_gather_command():
             print(f'  No results in {subdir}.')
             continue
 
-        if 'bsdf' in subdir and subdir.endswith('_1') and '00' in subdir:
+        toss_id = subdir.split('_')[1]
+
+        if single_toss and len(toss_id) > 1:
+            print(f'  Only gathering single-toss, skipping {subdir}')
+            continue
+        if exclude_pll and 'pll' in subdir:
+            print(f'  Excluding PLL, skipping {subdir}')
+            continue
+        if 'bsdf' in subdir and subdir.endswith('_1') and '00_' in subdir:
             add_to_results = bsdf_only_results
-        elif 'pll' in subdir and subdir.endswith('_1') and '00' in subdir:
+        elif 'pll' in subdir and subdir.endswith('_1') and '00_' in subdir:
             add_to_results = pll_vision_results
-        elif 'pll' in subdir and subdir.endswith('_1') and '04' in subdir:
+        elif 'pll' in subdir and subdir.endswith('_1') and '04_' in subdir:
             add_to_results = pll_size_results
-        elif 'pll' in subdir and subdir.endswith('_1') and '07' in subdir:
+        elif 'pll' in subdir and subdir.endswith('_1') and '07_' in subdir:
             add_to_results = pll_blind_b_results
-        elif 'pll' in subdir and subdir.endswith('_0') and '09' in subdir:
+        elif 'pll' in subdir and subdir.endswith('_0') and '09_' in subdir:
             add_to_results = pll_blind_t_results
-        elif '02' in subdir and subdir.endswith('_2'):
+        elif '02-cvwo_' in subdir and subdir.endswith('_2'):
             add_to_results = bsdf_pll_results
-        elif '03' in subdir and subdir.endswith('_2'):
+        elif '03_' in subdir and subdir.endswith('_2'):
             add_to_results = nerf_on_results
+        elif 'bsdf' in subdir and subdir.endswith('_1') and '00-cvwo_' in subdir:
+            add_to_results = bsdf_convex_results
         else:
             print(f'  Skipping {subdir}')
             continue
@@ -1914,25 +2414,28 @@ def process_gather_command():
         bsdf_only_results, file_utils.evaluation_dir(),
         filename='bsdf_only.yaml')
     file_utils.save_results_to_yaml(
-        pll_vision_results, file_utils.evaluation_dir(),
-        filename='pll_vision.yaml')
-    file_utils.save_results_to_yaml(
-        pll_size_results, file_utils.evaluation_dir(),
-        filename='pll_size.yaml')
-    file_utils.save_results_to_yaml(
-        pll_blind_b_results, file_utils.evaluation_dir(),
-        filename='pll_blind_b.yaml')
-    file_utils.save_results_to_yaml(
-        pll_blind_t_results, file_utils.evaluation_dir(),
-        filename='pll_blind_t.yaml')
-
+        bsdf_convex_results, file_utils.evaluation_dir(),
+        filename='bsdf_convex.yaml')
+    if not exclude_pll:
+        file_utils.save_results_to_yaml(
+            pll_vision_results, file_utils.evaluation_dir(),
+            filename='pll_vision.yaml')
+        file_utils.save_results_to_yaml(
+            pll_size_results, file_utils.evaluation_dir(),
+            filename='pll_size.yaml')
+        file_utils.save_results_to_yaml(
+            pll_blind_b_results, file_utils.evaluation_dir(),
+            filename='pll_blind_b.yaml')
+        file_utils.save_results_to_yaml(
+            pll_blind_t_results, file_utils.evaluation_dir(),
+            filename='pll_blind_t.yaml')
 
 # Use 'plot' command to load the previously generated yaml files with results
 # and to generate plots with them.
 PLOT_TRACKING = False           # figure unused, text in table in manuscript
 PLOT_DYNAMICS = False           # figure unused, text in table in manuscript
 PLOT_GEOMETRY = False           # unused for manuscript
-PLOT_GEOMETRY_SCATTERS = False  # Fig 5 of manuscript
+PLOT_GEOMETRY_SCATTERS = True  # Fig 5 of manuscript
 PLOT_GT_COMPARISON = True       # exploration during rebuttal phase
 @cli.command('plot')
 @click.option('--do-objects/--skip-objects',
@@ -1951,6 +2454,8 @@ def process_plot_command(do_objects: bool):
         'pll_blind_b.yaml')
     pll_blind_t_results = file_utils.load_gathered_results_yaml(
         'pll_blind_t.yaml')
+    bsdf_convex_results = file_utils.load_gathered_results_yaml(
+        'bsdf_convex.yaml')
 
     # Ground truth results.
     cube_gt_results = file_utils.load_gathered_results_yaml('cube_GT.yaml')
@@ -1969,6 +2474,7 @@ def process_plot_command(do_objects: bool):
         pll_size_results=pll_size_results,
         pll_blind_b_results=pll_blind_b_results,
         pll_blind_t_results=pll_blind_t_results,
+        bsdf_convex_results=bsdf_convex_results,
         gt_results=gt_results,
         do_objects=do_objects
     )
@@ -2038,7 +2544,8 @@ def process_plot_command(do_objects: bool):
                     'convex_hull', metric)
             if PLOT_GEOMETRY_SCATTERS:
                 print(f'Plotting convex hull geometry scatters {metric}')
-                results_plotter.plot_object_geometry_scatter(
+                # results_plotter.plot_object_geometry_scatter(
+                results_plotter.plot_object_geometry_scatter_withconvex(
                     'convex_hull', metric)
         if metric in \
             empty_results['geometry_metrics']['full_geometry'].keys():
@@ -2048,7 +2555,8 @@ def process_plot_command(do_objects: bool):
                     'full_geometry', metric)
             if PLOT_GEOMETRY_SCATTERS:
                 print(f'Plotting full geometry geometry scatters {metric}')
-                results_plotter.plot_object_geometry_scatter(
+                # results_plotter.plot_object_geometry_scatter(
+                results_plotter.plot_object_geometry_scatter_withconvex(
                     'full_geometry', metric)
         if metric in \
             empty_results['geometry_metrics']['hull_to_full'].keys():
@@ -2059,8 +2567,17 @@ def process_plot_command(do_objects: bool):
             if PLOT_GEOMETRY_SCATTERS:
                 print(f'Plotting predicted hull vs full gt geometry ' + \
                       f'scatters {metric}')
-                results_plotter.plot_object_geometry_scatter(
+                # results_plotter.plot_object_geometry_scatter(
+                results_plotter.plot_object_geometry_scatter_withconvex(
                     'hull_to_full', metric)
+
+        if metric in \
+            empty_results['geometry_metrics']['full_geometry'].keys():
+            if PLOT_GEOMETRY_SCATTERS:
+                print(f'Plotting full geometry (with hull_to_full) geometry scatters {metric}')
+                # results_plotter.plot_object_geometry_scatter(
+                results_plotter.plot_object_geometry_scatter_withconvex2(
+                    'full_geometry', metric)
 
 
 if __name__ == '__main__':
