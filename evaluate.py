@@ -2283,6 +2283,7 @@ def main_command(vision_asset: str, bundlesdf_id: str, nerf_bundlesdf_id: str,
                 results['dynamics_rollout_metrics']
             old_results['dynamics_single_step_metrics'] = \
                 results['dynamics_single_step_metrics']
+            results = old_results
 
         else:
             raise ValueError(f'Invalid {overwrite=}.  Choose none, all, ' + \
