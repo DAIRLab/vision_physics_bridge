@@ -1227,10 +1227,12 @@ class DynamicsPredictor:
         if self.last_bsdf_iteration > 1:
             old_urdf_path = op.join(
                 self.pll_results_dir, 'urdfs', 'with_bundlesdf_mesh.urdf')
+            new_urdf_path = op.join(self.eval_dir, 'bsdf_mesh_pll_params.urdf')
         else:
-            old_urdf_path = file_utils.template_urdf_filepath()
+            old_urdf_path = file_utils.average_dynamics_urdf_filepath()
+            new_urdf_path = op.join(
+                self.eval_dir, 'bsdf_mesh_average_dynamics.urdf')
 
-        new_urdf_path = op.join(self.eval_dir, 'bsdf_mesh_pll_params.urdf')
         os.system(f'cp {old_urdf_path} {new_urdf_path}')
 
         if self.pll_id is None:
@@ -1329,52 +1331,11 @@ class DynamicsPredictor:
         # are stored without BundleSDF runs, these are wrt the TagSLAM body
         # origin.  In either case, we can safely "convert to BundleSDF body
         # frame" since for the former case, this transformation is the identity.
-        tagslam_trajs = eval_utils.get_pll_tagslam_trajectories_pll_format(
+        tagslam_trajs = eval_utils.get_tagslam_b_trajectories_pll_format(
             object=self.object)
 
         if tagslam_trajs is not None:
-            # Convert the TagSLAM trajectories to be represented with respect to
-            # the BundleSDF body origin.
-            # TODO:  Realized 8/5/2024 I think PLL's TagSLAM trajectories are
-            # already represented wrt the BundleSDF body origin.  However this
-            # additional conversion is inconsequential since it should just
-            # result in b_mat = t_mat.
-            tagslam_trajs_of_b_origin = {}
-            for toss_key, tagslam_traj in tagslam_trajs.items():
-                # Get synchronized BundleSDF and TagSLAM poses.
-                if (self.bundlesdf_trajs is not None) and \
-                    (toss_key in self.bundlesdf_trajs.keys()):
-                    print(f'Can synchronize toss {toss_key} with BundleSDF.')
-                    b_mat = math_utils.pll_format_to_trans_mat(
-                        self.bundlesdf_trajs[toss_key][0])
-                    t_mat = math_utils.pll_format_to_trans_mat(tagslam_traj[0])
-
-                elif last_bsdf_id is not None:
-                    print(f'Will use a BundleSDF keyframe to synchronize for' +\
-                          f' toss {toss_key}.')
-                    b_mat, t_mat = \
-                        eval_utils.get_synced_bsdf_keyframe_tagslam_toss_poses(
-                            vision_asset=self.vision_asset,
-                            tracking_bundlesdf_id=last_bsdf_id,
-                            nerf_bundlesdf_id=last_bsdf_id,
-                            cycle_iteration=self.last_bsdf_iteration,
-                        )
-
-                else:
-                    print(f'PLL trained on TagSLAM, no need to synchronize ' + \
-                          f'for toss {toss_key}.')
-                    b_mat = np.eye(4)
-                    t_mat = np.eye(4)
-
-                # Do the conversion.
-                tagslam_trajs_of_b_origin[toss_key] = \
-                    math_utils.transform_t_origin_to_b_origin_pll_format(
-                        full_tagslam_trajectory=tagslam_traj,
-                        synced_bsdf_pose=b_mat,
-                        synced_tagslam_pose=t_mat
-                    )
-
-            self.tagslam_b_trajs = tagslam_trajs_of_b_origin
+            self.tagslam_b_trajs = tagslam_trajs
 
     def generate_rollout_trajectories(self):
         """Generate rollouts for the object using the learned parameters."""
@@ -1829,8 +1790,8 @@ class GTParameterDynamicsPredictor(DynamicsPredictor):
     NOTE:  While written as inheriting from DynamicsPredictor, this current
     implementation does not use any of its parent's functionality.
 
-    NOTE:  This is currently only well-defined for the cube, whose ground-truth
-    parameters are more or less known.
+    NOTE:  This is currently only well-defined for a few systems whose ground
+    truth parameters are well estimated.
 
     Workflow:
         - init
@@ -1841,6 +1802,10 @@ class GTParameterDynamicsPredictor(DynamicsPredictor):
     def __init__(self, vision_asset: str):
         self.vision_asset = vision_asset
         self.object = '_'.join(vision_asset.split('_')[:-1])
+
+        assert self.object in file_utils.OBJECTS_WITH_GT_URDF, f'Cannot do ' + \
+            f'GT dynamics predictions for {self.object} since only have ' + \
+            f'GT URDFs for {file_utils.OBJECTS_WITH_GT_URDF}.'
 
         # Make evaluation subdirectory.
         self.eval_dir = file_utils.evaluation_subdir_for_gt(
@@ -2317,7 +2282,6 @@ def main_command(vision_asset: str, bundlesdf_id: str, nerf_bundlesdf_id: str,
             old_results['dynamics_single_step_metrics'] = \
                 results['dynamics_single_step_metrics']
 
-
         else:
             raise ValueError(f'Invalid {overwrite=}.  Choose none, all, ' + \
                 'tracking, or tracking_geometry.')
@@ -2353,9 +2317,13 @@ def main_command(vision_asset: str, bundlesdf_id: str, nerf_bundlesdf_id: str,
 
     ### Dynamics predictions.
     # Compute dynamics metrics if last run was PLL or PLL was ever run.
-    if do_dynamics and (pll_id is not None or cycle_iteration > 1) and \
-        'dynamics_rollout_metrics' in results.keys():
+    # if do_dynamics and (pll_id is not None or cycle_iteration > 1) and \
+    #     'dynamics_rollout_metrics' in results.keys():
+    if do_dynamics and 'dynamics_rollout_metrics' in results.keys():
         print(f'\nDOING DYNAMICS METRICS\n')
+        if pll_id is None and cycle_iteration <= 1:
+            print(f'\tGENERATING PREDICTIONS FOR BSDF RUN USING AVERAGE ' + \
+                  f'INERTIA AND FRICTION')
         dynamics_predictor.generate_rollout_trajectories()
         dynamics_predictor.generate_single_step_predictions()
         dynamics_predictor.save_predictions()

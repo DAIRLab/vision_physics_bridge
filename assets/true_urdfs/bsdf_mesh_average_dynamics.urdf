@@ -1,0 +1,54 @@
+<?xml version="1.0"?>
+
+<!-- Has average inertia and friction parameters, taken over the distribution of
+learned Vysics parameters (15 objects * 9 experiments per object = 135 total
+data points per value).  Done via cnets-data-generation's test_mesh_inertia.py
+script, which generated the following, assuming a mass value of 0.37 kg:
+
+    Average ixx:  0.000661575117464238
+    Average ixy:  1.9218050453048516e-05
+    Average ixz:  -2.9015579995290577e-05
+    Average iyy:  0.0006421816459272001
+    Average iyz:  2.3406250472376115e-05
+    Average izz:  0.0005936200404697388
+    Average com_x:  0.00021273024864491136
+    Average com_y:  -8.387688552308679e-05
+    Average com_z:  0.0035041140706447314
+    Average mu:  0.22641832497181646
+-->
+
+<robot name="object" xmlns:drake="https://drake.mit.edu/">
+    <link name="body">
+        <inertial>
+            <origin
+                xyz="0.00021273024864491136 -8.387688552308679e-05 0.0035041140706447314"
+                rpy="0 0 0"/>
+            <mass value="0.37" />
+            <inertia
+                ixx="0.000661575117464238"
+                ixy="1.9218050453048516e-05"
+                ixz="-2.9015579995290577e-05"
+                iyy="0.0006421816459272001"
+                iyz="2.3406250472376115e-05"
+                izz="0.0005936200404697388"/>
+        </inertial>
+        <visual>
+            <origin xyz="0 0 0" rpy="0 0 0" />
+            <geometry>
+                <mesh filename="bsdf_mesh.obj"/>
+            </geometry>
+            <material name="pennred">
+                <color rgba="0.6 0 0 1.0" />
+            </material>
+        </visual>
+        <collision>
+            <geometry>
+                <mesh filename="bsdf_mesh.obj"/>
+            </geometry>
+            <origin xyz="0 0 0" rpy="0 0 0" />
+            <drake:proximity_properties>
+                <drake:mu_static value="0.22641832497181646" />
+            </drake:proximity_properties>
+        </collision>
+    </link>
+</robot>

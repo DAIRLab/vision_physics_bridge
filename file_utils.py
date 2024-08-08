@@ -371,6 +371,11 @@ def ground_truth_object_urdf_obj_filepaths(object: str, body_t: bool = False):
     obj_path = op.join(DATA_GEN_DIR, 'assets', 'true_urdfs', f'{object}_gt.obj')
     return urdf_path, obj_path
 
+def average_dynamics_urdf_filepath():
+    """Path to the URDF with average dynamics parameters."""
+    return op.join(
+        DATA_GEN_DIR, 'assets', 'true_urdfs', 'bsdf_mesh_average_dynamics.urdf')
+
 
 """Manual inspection directories."""
 def inspection_dir() -> str:

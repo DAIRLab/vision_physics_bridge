@@ -330,7 +330,8 @@ def overwrite_mesh_name_in_urdf(urdf_path: str, new_obj_name: str) -> None:
                 ).replace('"bundlesdf_mesh.obj"', f'"{new_obj_name}"'
                 ).replace('"true_geom_aligned.obj"', f'"{new_obj_name}"'
                 ).replace('"true_geom_aligned_assist.obj"', f'"{new_obj_name}"'
-                ).replace('"test_best.obj"', f'"{new_obj_name}"')
+                ).replace('"test_best.obj"', f'"{new_obj_name}"'
+                ).replace('"bsdf_mesh.obj"', f'"{new_obj_name}"')
             write_file.write(line)
 
     os.system(f'mv {urdf_path}.tmp {urdf_path}')
@@ -393,10 +394,13 @@ def create_empty_results_dict(
             del empty_results[category_key]['against_tagslam']
 
     # Third modification:  Get rid of any dynamics predictions if PLL has never
-    # been run.
-    if cycle_iteration <= 1 and last_run_was_bsdf:
-        del empty_results['dynamics_rollout_metrics']
-        del empty_results['dynamics_single_step_metrics']
+    # been run and there are no TagSLAM trajectories to use.  If there are
+    # TagSLAM trajectories to use, then dynamics predictions can be run using
+    # the BundleSDF mesh and average dynamics parameters.
+    if object in file_utils.TAGLESS_OBJECTS or object.startswith('robot'):
+        if cycle_iteration <= 1 and last_run_was_bsdf:
+            del empty_results['dynamics_rollout_metrics']
+            del empty_results['dynamics_single_step_metrics']
 
     # Fourth modification:  Get rid of any tracking metrics if the last run was
     # PLL instead of BundleSDF.

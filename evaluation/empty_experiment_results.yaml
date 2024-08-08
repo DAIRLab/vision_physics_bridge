@@ -9,7 +9,10 @@ _overview:
   nerf_bundlesdf_id: null
 
 ##### Performance results for dynamics predictions.
-dynamics_rollout_metrics:   # Delete sub-section for BundleSDF-only baseline.
+dynamics_rollout_metrics:   # Remove if BundleSDF-only _and_ tagless object.
+                            # If tagged object and BundleSDF-only, this can be
+                            # evaluated with BundleSDF mesh and average dynamics
+                            # parameters.
   against_bundlesdf:  # Add toss keys for every toss contained in vision asset.
     position_error:
       toss_1:
@@ -191,7 +194,7 @@ dynamics_rollout_metrics:   # Delete sub-section for BundleSDF-only baseline.
         mean: null
 
 
-dynamics_single_step_metrics: # Delete sub-section for BundleSDF-only baseline.
+dynamics_single_step_metrics: # Only kept if also above^.
   against_bundlesdf:  # Add toss keys for every toss contained in vision asset.
     position_error:
       toss_1:
