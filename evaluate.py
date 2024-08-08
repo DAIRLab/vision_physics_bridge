@@ -2245,6 +2245,8 @@ def main_command(vision_asset: str, bundlesdf_id: str, nerf_bundlesdf_id: str,
         )
         exit()
     elif overwrite == 'all' and op.exists(eval_dir):
+        raise RuntimeError('WARNING:  Overwriting an existing directory ' + \
+                           f'that might contain a manually-aligned GT mesh.')
         print(f'Overwriting results in {eval_dir}')
         os.system(f'rm -rf {eval_dir}/*')
     elif op.exists(op.join(eval_dir, 'results.yaml')):
