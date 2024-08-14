@@ -460,17 +460,17 @@ tosses:
     - toss: 1
       start_time:
         secs: 1716134386
-        nsecs: 085243000
+        nsecs: 85243000
       end_time:
         secs: 1716134388
-        nsecs: 063486000
+        nsecs: 63486000
       start_frame: 19
       end_frame: 44
       start_adjust: 0
     - toss: 2
       start_time:
         secs: 1716134388
-        nsecs: 063486000
+        nsecs: 63486000
       end_time:
         secs: 1716134392
         nsecs: 533757000
@@ -585,24 +585,24 @@ tosses:
         nsecs: 410534000
       end_time:
         secs: 1716135426
-        nsecs: 022699000
+        nsecs: 22699000
       start_frame: 67
       end_frame: 103
       start_adjust: 0
     - toss: 4
       start_time:
         secs: 1716135426
-        nsecs: 022699000
+        nsecs: 22699000
       end_time:
         secs: 1716135430
-        nsecs: 023868000
+        nsecs: 23868000
       start_frame: 58
       end_frame: 111
       start_adjust: 0
     - toss: 5
       start_time:
         secs: 1716135430
-        nsecs: 023868000
+        nsecs: 23868000
       end_time:
         secs: 1716135433
         nsecs: 314138000
@@ -635,14 +635,14 @@ tosses:
         nsecs: 150199000
       end_time:
         secs: 1716135444
-        nsecs: 026155000
+        nsecs: 26155000
       start_frame: 
       end_frame: 
       start_adjust: 0
     - toss: 9
       start_time:
         secs: 1716135444
-        nsecs: 026155000
+        nsecs: 26155000
       end_time:
         secs: 1716135448
         nsecs: 868955000
@@ -869,24 +869,24 @@ tosses:
         nsecs: 156858000
       end_time:
         secs: 1716135282
-        nsecs: 014181000
+        nsecs: 14181000
       start_frame: 
       end_frame: 
       start_adjust: 0
     - toss: 9
       start_time:
         secs: 1716135282
-        nsecs: 014181000
+        nsecs: 14181000
       end_time:
         secs: 1716135285
-        nsecs: 047284000
+        nsecs: 47284000
       start_frame: 
       end_frame: 
       start_adjust: 0
     - toss: 10
       start_time:
         secs: 1716135285
-        nsecs: 047284000
+        nsecs: 47284000
       end_time:
         secs: 1716135289
         nsecs: 292192000
@@ -961,14 +961,14 @@ tosses:
         nsecs: 922580000
       end_time:
         secs: 1716135129
-        nsecs: 035627000
+        nsecs: 35627000
       start_frame: 58
       end_frame: 119
       start_adjust: 0
     - toss: 5
       start_time:
         secs: 1716135129
-        nsecs: 035627000
+        nsecs: 35627000
       end_time:
         secs: 1716135135
         nsecs: 294329000
@@ -1011,14 +1011,14 @@ tosses:
         nsecs: 653947000
       end_time:
         secs: 1716135151
-        nsecs: 068926000
+        nsecs: 68926000
       start_frame: 
       end_frame: 
       start_adjust: 0
     - toss: 10
       start_time:
         secs: 1716135151
-        nsecs: 068926000
+        nsecs: 68926000
       end_time:
         secs: 1716135153
         nsecs: 701807000
@@ -1041,14 +1041,14 @@ tosses:
         nsecs: 670406000
       end_time:
         secs: 1716135162
-        nsecs: 083590000
+        nsecs: 83590000
       start_frame:
       end_frame:
       start_adjust: 0
     - toss: 13
       start_time:
         secs: 1716135162
-        nsecs: 083590000
+        nsecs: 83590000
       end_time:
         secs: 1716135167
         nsecs: 396901000
@@ -1327,14 +1327,14 @@ tosses:
         nsecs: 532957000
       end_time:
         secs: 1716135330
-        nsecs: 002117000
+        nsecs: 02117000
       start_frame: 72
       end_frame: 118
       start_adjust: 0
     - toss: 4
       start_time:
         secs: 1716135330
-        nsecs: 002117000
+        nsecs: 02117000
       end_time:
         secs: 1716135333
         nsecs: 569834000
@@ -1489,14 +1489,14 @@ tosses:
         nsecs: 611921000
       end_time:
         secs: 1716133857
-        nsecs: 023684000
+        nsecs: 23684000
       start_frame: 
       end_frame: 
       start_adjust: 0
     - toss: 8
       start_time:
         secs: 1716133857 #1716133858
-        nsecs: 023684 #811643000
+        nsecs: 23684 #811643000
       end_time:
         secs: 1716133861
         nsecs: 673292000
@@ -1519,14 +1519,14 @@ tosses:
         nsecs: 154037000
       end_time:
         secs: 1716133870
-        nsecs: 076079000
+        nsecs: 76079000
       start_frame: 
       end_frame: 
       start_adjust: 0
     - toss: 11
       start_time:
         secs: 1716133870
-        nsecs: 076079000
+        nsecs: 76079000
       end_time:
         secs: 1716133874
         nsecs: 244603000
@@ -1640,7 +1640,7 @@ tosses:
     - toss: 1
       start_time:
         secs: 1716135478
-        nsecs: 067024000
+        nsecs: 67024000
       end_time:
         secs: 1716135480
         nsecs: 246378000
@@ -1723,14 +1723,14 @@ tosses:
         nsecs: 311256000
       end_time:
         secs: 1716135508
-        nsecs: 057539000
+        nsecs: 57539000
       start_frame: 
       end_frame: 
       start_adjust: 0
     - toss: 10
       start_time:
         secs: 1716135508
-        nsecs: 057539000
+        nsecs: 57539000
       end_time:
         secs: 1716135511
         nsecs: 383581000
@@ -1897,14 +1897,14 @@ tosses:
         nsecs: 440723000
       end_time:
         secs: 1716135682
-        nsecs: 008255000
+        nsecs: 08255000
       start_frame: 57
       end_frame: 106
       start_adjust: 0
     - toss: 5
       start_time:
         secs: 1716135682
-        nsecs: 008255000
+        nsecs: 08255000
       end_time:
         secs: 1716135686
         nsecs: 148067000
@@ -1937,14 +1937,14 @@ tosses:
         nsecs: 147828000
       end_time:
         secs: 1716135699
-        nsecs: 011692000
+        nsecs: 11692000
       start_frame: 
       end_frame: 
       start_adjust: 0
     - toss: 9
       start_time:
         secs: 1716135699
-        nsecs: 011692000
+        nsecs: 11692000
       end_time:
         secs: 1716135702
         nsecs: 611995000
@@ -2029,24 +2029,24 @@ tosses:
         nsecs: 537804000
       end_time:
         secs: 1716134031
-        nsecs: 072851000
+        nsecs: 72851000
       start_frame: 58
       end_frame: 104
       start_adjust: 0
     - toss: 4
       start_time:
         secs: 1716134031
-        nsecs: 072851000
+        nsecs: 72851000
       end_time:
         secs: 1716134034
-        nsecs: 028280000
+        nsecs: 28280000
       start_frame: 42
       end_frame: 79
       start_adjust: 1
     - toss: 5
       start_time:
         secs: 1716134034
-        nsecs: 028280000
+        nsecs: 28280000
       end_time:
         secs: 1716134037
         nsecs: 530684000
@@ -2069,14 +2069,14 @@ tosses:
         nsecs: 677289000
       end_time:
         secs: 1716134044
-        nsecs: 066313000
+        nsecs: 66313000
       start_frame: 
       end_frame: 
       start_adjust: 0
     - toss: 8
       start_time:
         secs: 1716134044
-        nsecs: 066313000
+        nsecs: 66313000
       end_time:
         secs: 1716134047
         nsecs: 168341000
@@ -2099,7 +2099,7 @@ tosses:
         nsecs: 147812000
       end_time:
         secs: 1716134056
-        nsecs: 049743000
+        nsecs: 49743000
       start_frame: 
       end_frame:
       start_adjust: 0
@@ -2171,14 +2171,14 @@ tosses:
         nsecs: 855553000
       end_time:
         secs: 1716134773
-        nsecs: 039698000
+        nsecs: 39698000
       start_frame: 
       end_frame: 
       start_adjust: 0
     - toss: 8
       start_time:
         secs: 1716134773
-        nsecs: 039698000
+        nsecs: 39698000
       end_time:
         secs: 1716134776
         nsecs: 991803000
@@ -2230,7 +2230,7 @@ tosses:
     - toss: 1
       start_time:
         secs: 1716134890
-        nsecs: 080216000
+        nsecs: 80216000
       end_time:
         secs: 1716134891
         nsecs: 779543000
@@ -2313,14 +2313,14 @@ tosses:
         nsecs: 518030000
       end_time:
         secs: 1716134921
-        nsecs: 066449000
+        nsecs: 66449000
       start_frame: 
       end_frame: 
       start_adjust: 0
     - toss: 10
       start_time:
         secs: 1716134921
-        nsecs: 066449000
+        nsecs: 66449000
       end_time:
         secs: 1716134924
         nsecs: 889161000
@@ -2444,7 +2444,7 @@ tosses:
     - toss: 1
       start_time:
         secs: 1716134942
-        nsecs: 010948000
+        nsecs: 10948000
       end_time:
         secs: 1716134945
         nsecs: 165666000
@@ -2547,14 +2547,14 @@ tosses:
         nsecs: 382558000
       end_time:
         secs: 1716134981
-        nsecs: 068570000
+        nsecs: 68570000
       start_frame: 
       end_frame:
       start_adjust: 0
     - toss: 12
       start_time:
         secs: 1716134981
-        nsecs: 068570000
+        nsecs: 68570000
       end_time:
         secs: 1716134984
         nsecs: 230947000
@@ -2610,7 +2610,7 @@ tosses:
         nsecs: 337955
       end_time:
         secs: 1695415515
-        nsecs: 033583
+        nsecs: 33583
       start_adjust: 0
     - toss: 6
       start_time: 
@@ -2631,15 +2631,15 @@ tosses:
     - toss: 8
       start_time: 
         secs: 1695415543
-        nsecs: 011538
+        nsecs: 11538
       end_time:
         secs: 1695415545
-        nsecs: 047358
+        nsecs: 47358
       start_adjust: 0
     - toss: 9
       start_time: 
         secs: 1695415554
-        nsecs: 081926
+        nsecs: 81926
       end_time:
         secs: 1695415556
         nsecs: 505787
@@ -3978,7 +3978,7 @@ tosses:
     - toss: 1
       start_time:
         secs: 1720533996
-        nsecs: 093014307
+        nsecs: 93014307
       end_time:
         secs: 1720534019
         nsecs: 764427760
@@ -3989,7 +3989,7 @@ tosses:
       end_time:
         secs: 1720534029
         nsecs: 105905417
-  robot_bakingbox_sticky_B:
+  robot_bakingbox:
     - toss: 0
     - toss: 1
       start_time:
@@ -4011,11 +4011,11 @@ tosses:
         nsecs: 170770046
       end_time:
         secs: 1720534099
-        nsecs: 095206737
+        nsecs: 95206737
     - toss: 4
       start_time:
         secs: 1720534099
-        nsecs: 095206737
+        nsecs: 95206737
       end_time:
         secs: 1720534119
         nsecs: 920455824
@@ -4032,12 +4032,12 @@ tosses:
         nsecs: 376667300
       end_time:
         secs: 1720534135
-        nsecs: 043166978
+        nsecs: 43166978
     - toss: 7
     # unsuccesful toss
       start_time:
         secs: 1720534135
-        nsecs: 043166978
+        nsecs: 43166978
       end_time:
         secs: 1720534145
         nsecs: 373904257
@@ -4047,11 +4047,11 @@ tosses:
         nsecs: 373904257
       end_time:
         secs: 1720534152
-        nsecs: 068026965
+        nsecs: 68026965
     - toss: 9
       start_time:
         secs: 1720534152
-        nsecs: 068026965
+        nsecs: 68026965
       end_time:
         secs: 1720534169
         nsecs: 611472115
@@ -4119,11 +4119,11 @@ tosses:
         nsecs: 246024105
       end_time:
         secs: 1720534608
-        nsecs: 058279803
+        nsecs: 58279803
     - toss: 6
       start_time:
         secs: 1720534608
-        nsecs: 058279803
+        nsecs: 58279803
       end_time:
         secs: 1720534618
         nsecs: 784081658
@@ -4133,11 +4133,11 @@ tosses:
         nsecs: 784081658
       end_time:
         secs: 1720534628
-        nsecs: 003857150
+        nsecs: 03857150
     - toss: 8
       start_time:
         secs: 1720534628
-        nsecs: 003857150
+        nsecs: 03857150
       end_time:
         secs: 1720534639
         nsecs: 542506547
@@ -4191,11 +4191,11 @@ tosses:
         nsecs: 531456494
       end_time:
         secs: 1720535111
-        nsecs: 052830114
+        nsecs: 52830114
     - toss: 5
       start_time:
         secs: 1720535111
-        nsecs: 052830114
+        nsecs: 52830114
       end_time:
         secs: 1720535119
         nsecs: 594937726
@@ -4205,18 +4205,18 @@ tosses:
         nsecs: 594937726
       end_time:
         secs: 1720535136
-        nsecs: 033409264
+        nsecs: 33409264
     - toss: 7
       start_time:
         secs: 1720535136
-        nsecs: 033409264
+        nsecs: 33409264
       end_time:
         secs: 1720535148
-        nsecs: 025570346
+        nsecs: 25570346
     - toss: 8
       start_time:
         secs: 1720535148
-        nsecs: 025570346
+        nsecs: 25570346
       end_time:
         secs: 1720535161
         nsecs: 743102197
@@ -4305,11 +4305,11 @@ tosses:
         nsecs: 911714885
       end_time:
         secs: 1720536008
-        nsecs: 036813863
+        nsecs: 36813863
     - toss: 10
       start_time:
         secs: 1720536008
-        nsecs: 036813863
+        nsecs: 36813863
       end_time:
         secs: 1720536023
         nsecs: 110092442
