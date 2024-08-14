@@ -309,17 +309,13 @@ prism:
   8: null
   9: null
   10: null
-robot_bakingbox_sticky_A:
+robot_bakingbox:
   0: null
-  1: -0.00975
-  2: -0.00966
-robot_bakingbox_sticky_B:
-  0: null
-  1: -0.00963
-  2: -0.00938
-  3: -0.00989
-  4: -0.00955
-  5: -0.00967
+  1: -0.00613
+  2: -0.00584
+  3: -0.00615
+  4: -0.006
+  5: -0.00614
   6: null
   7: null
   8: null
@@ -327,6 +323,69 @@ robot_bakingbox_sticky_B:
   10: null
   11: null
   12: null
+robot_bakingbox_sticky_A:
+  0: null
+  1: -0.00975
+  2: -0.00966
+robot_greencan:
+  0: null
+  1: -0.01013
+  2: -0.00999
+  3: -0.00994
+  4: -0.00994
+  5: -0.0102
+  6: null
+  7: null
+  8: null
+  9: null
+  10: null
+  11: null
+robot_milk:
+  0: null
+  1: -0.01003
+  2: -0.00938
+  3: -0.00956
+  4: -0.00987
+  5: -0.01003
+  6: null
+  7: null
+  8: null
+  9: null
+  10: null
+  11: null
+robot_oatly:
+  0: null
+  1: -0.01006
+  2: -0.00977
+  3: -0.00996
+  4: -0.01047
+  5: -0.00995
+  6: null
+  7: null
+  8: null
+  9: null
+  10: null
+robot_stapler:
+  0: null
+  1: -0.01006
+  2: -0.00978
+  3: -0.0099
+  4: -0.01055
+  5: -0.01
+  6: null
+  7: null
+  8: null
+  9: null
+  10: null
+  11: null
+  12: null
+  13: null
+  14: null
+  15: null
+  16: null
+  17: null
+  18: null
+  19: null
 stapler:
   0: null
   1: -0.03053
