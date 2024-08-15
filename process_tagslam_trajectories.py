@@ -394,6 +394,10 @@ class TagSLAMTrajectoryConverter:
         assert ps.shape == (ts.shape[0], 3), f'{ps.shape=} not of expected ' + \
             f'size ({ts.shape[0]}, 3).'
 
+        # First handle the possibility that only one position is provided.
+        if ps.shape[0] == 1:
+            return np.zeros((1, 3))
+
         # Compute time differences.
         t_start = ts[0]
         t = ts - t_start
@@ -437,6 +441,10 @@ class TagSLAMTrajectoryConverter:
         assert ts.ndim == 1, f'{ts.shape=} not of expected size (N,).'
         assert qs.shape == (ts.shape[0], 4), f'{qs.shape=} not of expected ' + \
             f'size ({ts.shape[0]}, 4).'
+
+        # First handle the possibility that only one orientation is provided.
+        if qs.shape[0] == 1:
+            return np.zeros((1, 3))
 
         # Compute time differences.
         t_start = ts[0]
