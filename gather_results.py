@@ -221,7 +221,7 @@ T_SCORE_PER_DOF = {1: 12.71, 2: 4.303, 3: 3.182, 4: 2.776,
                    21: 2.080, 22: 2.074, 23: 2.069, 24: 2.064,
                    25: 2.060, 26: 2.056, 27: 2.052, 28: 2.048,
                    29: 2.045, 30: 2.042}
-for i in range(31, 100):
+for i in range(31, 200):
     T_SCORE_PER_DOF[i] = 1.960
 
 
@@ -234,6 +234,7 @@ PLL_BLIND_B_COLOR = '#ffff00'  #'#92668d'
 PLL_BLIND_T_COLOR = '#ff00ff'  #'#95001a'
 BSDF_CONVEX_COLOR = '#00ffff'  #'#ff0000'
 BSDF_CONVEX_HULL_COLOR = '#8eaadb'
+BSDF_PLL_CONVEX_COLOR = '#f000ff'
 
 BSDF_PLL_LABEL = 'Vysics'
 NERF_ON_LABEL = 'BundleSDF-PLL NeRF Online'
@@ -244,6 +245,7 @@ PLL_BLIND_B_LABEL = 'Blind PLL on Vision-Based Tracking'
 PLL_BLIND_T_LABEL = 'Blind PLL on Fiducial-Based Tracking'
 BSDF_CONVEX_LABEL = 'BundleSDF Convex Loss'
 BSDF_CONVEX_HULL_LABEL = 'BundleSDF Convex Hull'
+BSDF_PLL_CONVEX_LABEL = 'Vysics Convex Loss'
 GT_LABEL = 'Using Ground Truth URDF'
 
 LINEWIDTH = 5
@@ -291,8 +293,10 @@ def xs_and_ys_to_x_mean_lower_upper(mixed_xs, mixed_ys):
     return xs, ys, lowers, uppers
 
 def set_of_vals_to_t_confidence_interval(ys):
-    if len(ys) <= 1:
+    if len(ys) <= 0:
         return None, None, None
+    elif len(ys) == 1:
+        return ys[0], None, None
 
     dof = len(ys) - 1
 
@@ -555,12 +559,13 @@ class ResultsPlotter:
                  #pll_tagslam_results: dict, pll_blind_results: dict,
                  pll_vision_results: dict, pll_size_results: dict,
                  pll_blind_b_results: dict, pll_blind_t_results: dict,
-                 bsdf_convex_results: dict,
+                 bsdf_convex_results: dict, bsdf_pll_convex_results: dict,
                  gt_results: dict, do_objects: bool):
         # Store the results dictionaries.
         self.bsdf_pll_results = bsdf_pll_results
         self.nerf_on_results = nerf_on_results
         self.bsdf_only_results = bsdf_only_results
+        self.bsdf_pll_convex_results = bsdf_pll_convex_results
         # self.pll_only_results = pll_only_results
         # self.pll_tagslam_results = pll_tagslam_results
         # self.pll_blind_results = pll_blind_results
@@ -792,6 +797,50 @@ class ResultsPlotter:
             filename=f'all_objs_{tracking_metric}_v_data_' + \
                 f'{full_or_toss}_auc', subdir='tracking')
 
+    def plot_object_tagslam_tracking_scatter(
+            self, full_or_toss: str, tracking_metric: str):
+        """Scatter plot of tracking metrics against TagSLAM.  Only doable for
+        tagged objects and not for PLL-only."""
+        # Get the scale of the metric.
+        scale = METRIC_SCALING[tracking_metric]
+
+        # For now just do this for BundleSDF-PLL and BundleSDF-Only.
+        by_object_bsdf_pll = {}  #[[], []] keys objects, vals [[toss_str], [ys]]
+        by_object_bsdf_only = {}  #[[], []]
+
+        # Prepare to zip in consistent order:  BSDF-PLL, BundleSDF Only.
+        by_objects = [by_object_bsdf_pll, by_object_bsdf_only]
+        result_dicts = [self.bsdf_pll_results, self.bsdf_only_results]
+
+        # Iterate over all the approaches.
+        for by_object, result_dict in zip(by_objects, result_dicts):
+
+            # Iterate over tagged objects.
+            for obj in self.tagged_objects:
+                if 'tagged_objects' not in result_dict.keys():
+                    continue
+                if obj not in result_dict['tagged_objects'].keys():
+                    continue
+
+                by_object[obj] = {}
+
+                # Iterate over all the toss strings.
+                for trained_on, result in result_dict['tagged_objects'][obj].items():
+                    toss_str = trained_on.split('trained_on_toss_')[-1]
+
+                    by_object[obj][toss_str] = result['tracking_metrics'][
+                        full_or_toss]['against_tagslam'][tracking_metric]['mean'] * scale
+
+        # Generate the plots.
+        title = f'Scatter {full_or_toss.replace("_", " ")} Tracking'.title()
+        ylabel = ERROR_LABELS[tracking_metric]
+        self._do_scatter_plot(
+            bp_data=by_object_bsdf_pll, bo_data=by_object_bsdf_only,
+            ylabel=ylabel, xlabel_txt=self.tagged_objects,
+            title=title,
+            filename=f'scatter_tagslam_{tracking_metric}_mean_v_data_{full_or_toss}',
+            subdir='object_tracking', save_to_txt=True, normalize=False)
+        
     def plot_geometry_error_vs_data(
             self, hull_or_full: str, geometry_metric: str):
         """Geometry metrics.  Doable for all objects and approaches."""
@@ -804,17 +853,20 @@ class ResultsPlotter:
         all_objects_pll_blind_b_mean = [[], []]
         all_objects_pll_blind_t_mean = [[], []]
         all_objects_bsdf_convex_mean = [[], []]
+        all_objects_bsdf_pll_convex_mean = [[], []]
 
         # Prepare to zip in consistent order:  BSDF-PLL, NeRF Online, BundleSDF
         # Only, PLL Vision, PLL Size, PLL Blind B, PLL Blind T.
         means = [all_objects_bsdf_pll_mean, all_objects_nerf_on_mean,
                  all_objects_bsdf_only_mean, all_objects_pll_vision_mean,
                  all_objects_pll_size_mean, all_objects_pll_blind_b_mean,
-                 all_objects_pll_blind_t_mean, all_objects_bsdf_convex_mean]
+                 all_objects_pll_blind_t_mean, all_objects_bsdf_convex_mean, 
+                 all_objects_bsdf_pll_convex_mean]
         result_dicts = [self.bsdf_pll_results, self.nerf_on_results,
                         self.bsdf_only_results, self.pll_vision_results,
                         self.pll_size_results, self.pll_blind_b_results,
-                        self.pll_blind_t_results, self.bsdf_convex_results]
+                        self.pll_blind_t_results, self.bsdf_convex_results,
+                        self.bsdf_pll_convex_results]
 
         # Do both tagged and tagless objects.
         all_objects = self.tagless_objects + self.tagged_objects
@@ -831,10 +883,11 @@ class ResultsPlotter:
             pll_blind_b_mean = [[], []]
             pll_blind_t_mean = [[], []]
             bsdf_convex_mean = [[], []]
+            bsdf_pll_convex_mean = [[], []]
 
             obj_means = [bsdf_pll_mean, nerf_on_mean, bsdf_only_mean,
                          pll_vision_mean, pll_size_mean, pll_blind_b_mean,
-                         pll_blind_t_mean, bsdf_convex_mean]
+                         pll_blind_t_mean, bsdf_convex_mean, bsdf_pll_convex_mean]
 
             for all_mean, obj_mean, result_dict in zip(
                     means, obj_means, result_dicts):
@@ -862,6 +915,7 @@ class ResultsPlotter:
                 bo_data=bsdf_only_mean, pv_data=pll_vision_mean,
                 ps_data=pll_size_mean, pbb_data=pll_blind_b_mean,
                 pbt_data=pll_blind_t_mean, bc_data=bsdf_convex_mean,
+                bpc_data=bsdf_pll_convex_mean,
                 ylabel=ERROR_LABELS[geometry_metric], xlabel=NUM_TOSSES_LABEL,
                 title=f'{obj} {hull_or_full.replace("_", " ")} Geometry'.title(),
                 filename=f'{obj}_{geometry_metric}_v_data_{hull_or_full}',
@@ -877,6 +931,7 @@ class ResultsPlotter:
             pbb_data=all_objects_pll_blind_b_mean,
             pbt_data=all_objects_pll_blind_t_mean,
             bc_data=all_objects_bsdf_convex_mean,
+            bpc_data=all_objects_bsdf_pll_convex_mean,
             ylabel=ERROR_LABELS[geometry_metric], xlabel=NUM_TOSSES_LABEL,
             title=f'All Objects {hull_or_full.replace("_", " ")} Geometry'.title(),
             filename=f'all_objs_{geometry_metric}_v_data_{hull_or_full}',
@@ -1311,7 +1366,7 @@ class ResultsPlotter:
         # Prepare to zip in consistent order:  BSDF-PLL, BundleSDF Only.
         by_objects = [by_object_bsdf_pll, by_object_bsdf_only, \
                       by_object_bsdf_convex, by_object_bsdf_convex_hull]
-        result_dicts = [self.bsdf_pll_results, self.bsdf_only_results, \
+        result_dicts = [self.bsdf_pll_convex_results, self.bsdf_only_results, \
                         self.bsdf_convex_results, self.bsdf_only_results]
 
         # Iterate over all the approaches.
@@ -1379,7 +1434,7 @@ class ResultsPlotter:
 
         # Prepare to zip in consistent order:  BSDF-PLL, BundleSDF Only.
         by_objects = [by_object_bsdf_pll, by_object_bsdf_only, by_object_bsdf_convex]
-        result_dicts = [self.bsdf_pll_results, self.bsdf_only_results, self.bsdf_convex_results]
+        result_dicts = [self.bsdf_pll_convex_results, self.bsdf_only_results, self.bsdf_convex_results]
 
         # Iterate over all the approaches.
         for i_dict, (by_object, result_dict) in enumerate(zip(by_objects, result_dicts)):
@@ -2108,9 +2163,15 @@ class ResultsPlotter:
     def _do_plot(self, bp_data: list = None, n_data: list = None,
                  bo_data: list = None, pv_data: list = None,
                  ps_data: list = None, pbb_data: list = None,
-                 pbt_data: list = None, bc_data: list = None, gt: list = None,
+                 pbt_data: list = None, bc_data: list = None, 
+                 bpc_data: list = None, gt: list = None,
                  ylabel: str = '', xlabel: str = '', title: str = None,
                  filename: str = None, subdir: str = ''):
+        """Plot the data with respect to the number of tosses. At each number 
+        of tosses, there could be multiple (but not too many) data points, so
+        we scatter them to show the spread and plot the mean as a line. If 
+        there are a lot of points per number of tosses, 
+        _do_confidence_interval_plot might be better."""
         # Skip individual object plots, but not if comparing against GT.
         if not self.do_objects and gt is None:
             return
@@ -2121,29 +2182,58 @@ class ResultsPlotter:
         ax = plt.gca()
 
         if bp_data is not None and len(bp_data[0]) > 0:
-            ax.plot(bp_data[0], bp_data[1], linewidth=LINEWIDTH,
-                    color=BSDF_PLL_COLOR, label=BSDF_PLL_LABEL)
+            x, y, _, _ = xs_and_ys_to_x_mean_lower_upper(bp_data[0], bp_data[1])
+            ax.plot(x, y, linewidth=LINEWIDTH, color=BSDF_PLL_COLOR,
+                    label=BSDF_PLL_LABEL)
+            ax.scatter(bp_data[0], bp_data[1], s=MARKERSIZE,
+                    color=BSDF_PLL_COLOR, label='_')
         if n_data is not None and len(n_data[0]) > 0:
-            ax.plot(n_data[0], n_data[1], linewidth=LINEWIDTH,
-                    color=NERF_ON_COLOR, label=NERF_ON_LABEL)
+            x, y, _, _ = xs_and_ys_to_x_mean_lower_upper(n_data[0], n_data[1])
+            ax.plot(x, y, linewidth=LINEWIDTH, color=NERF_ON_COLOR,
+                    label=NERF_ON_LABEL)
+            ax.scatter(n_data[0], n_data[1], s=MARKERSIZE,
+                    color=NERF_ON_COLOR, label='_')
         if bo_data is not None and len(bo_data[0]) > 0:
-            ax.plot(bo_data[0], bo_data[1], linewidth=LINEWIDTH,
-                    color=BSDF_ONLY_COLOR, label=BSDF_ONLY_LABEL)
+            x, y, _, _ = xs_and_ys_to_x_mean_lower_upper(bo_data[0], bo_data[1])
+            ax.plot(x, y, linewidth=LINEWIDTH, color=BSDF_ONLY_COLOR,
+                    label=BSDF_ONLY_LABEL)
+            ax.scatter(bo_data[0], bo_data[1], s=MARKERSIZE,
+                    color=BSDF_ONLY_COLOR, label='_')
         if pv_data is not None and len(pv_data[0]) > 0:
-            ax.plot(pv_data[0], pv_data[1], linewidth=LINEWIDTH,
-                    color=PLL_VISION_COLOR, label=PLL_VISION_LABEL)
+            x, y, _, _ = xs_and_ys_to_x_mean_lower_upper(pv_data[0], pv_data[1])
+            ax.plot(x, y, linewidth=LINEWIDTH, color=PLL_VISION_COLOR,
+                    label=PLL_VISION_LABEL)
+            ax.scatter(pv_data[0], pv_data[1], s=MARKERSIZE,
+                    color=PLL_VISION_COLOR, label='_')
         if ps_data is not None and len(ps_data[0]) > 0:
-            ax.plot(ps_data[0], ps_data[1], linewidth=LINEWIDTH,
-                    color=PLL_SIZE_COLOR, label=PLL_SIZE_LABEL)
+            x, y, _, _ = xs_and_ys_to_x_mean_lower_upper(ps_data[0], ps_data[1])
+            ax.plot(x, y, linewidth=LINEWIDTH, color=PLL_SIZE_COLOR,
+                    label=PLL_SIZE_LABEL)
+            ax.scatter(ps_data[0], ps_data[1], s=MARKERSIZE,
+                    color=PLL_SIZE_COLOR, label='_')
         if pbb_data is not None and len(pbb_data[0]) > 0:
-            ax.plot(pbb_data[0], pbb_data[1], linewidth=LINEWIDTH,
-                    color=PLL_BLIND_B_COLOR, label=PLL_BLIND_B_LABEL)
+            x, y, _, _ = xs_and_ys_to_x_mean_lower_upper(pbb_data[0], pbb_data[1])
+            ax.plot(x, y, linewidth=LINEWIDTH, color=PLL_BLIND_B_COLOR,
+                    label=PLL_BLIND_B_LABEL)
+            ax.scatter(pbb_data[0], pbb_data[1], s=MARKERSIZE,
+                    color=PLL_BLIND_B_COLOR, label='_')
         if pbt_data is not None and len(pbt_data[0]) > 0:
-            ax.plot(pbt_data[0], pbt_data[1], linewidth=LINEWIDTH,
-                    color=PLL_BLIND_T_COLOR, label=PLL_BLIND_T_LABEL)
+            x, y, _, _ = xs_and_ys_to_x_mean_lower_upper(pbt_data[0], pbt_data[1])
+            ax.plot(x, y, linewidth=LINEWIDTH, color=PLL_BLIND_T_COLOR,
+                    label=PLL_BLIND_T_LABEL)
+            ax.scatter(pbt_data[0], pbt_data[1], s=MARKERSIZE,
+                    color=PLL_BLIND_T_COLOR, label='_')
         if bc_data is not None and len(bc_data[0]) > 0:
-            ax.plot(bc_data[0], bc_data[1], linewidth=LINEWIDTH,
-                    color=BSDF_CONVEX_COLOR, label=BSDF_CONVEX_LABEL)
+            x, y, _, _ = xs_and_ys_to_x_mean_lower_upper(bc_data[0], bc_data[1])
+            ax.plot(x, y, linewidth=LINEWIDTH, color=BSDF_CONVEX_COLOR,
+                    label=BSDF_CONVEX_LABEL)
+            ax.scatter(bc_data[0], bc_data[1], s=MARKERSIZE,
+                    color=BSDF_CONVEX_COLOR, label='_')
+        if bpc_data is not None and len(bpc_data[0]) > 0:
+            ax.plot(x, y, linewidth=LINEWIDTH, color=BSDF_PLL_CONVEX_COLOR, 
+                    label=BSDF_PLL_CONVEX_LABEL)
+            ax.scatter(bpc_data[0], bpc_data[1], s=MARKERSIZE,
+                    color=BSDF_PLL_CONVEX_COLOR, label='_')
         if gt is not None:
             ax.hlines(np.mean(gt), xmin=0.5, xmax=np.max(bp_data[0])+0.5,
                       color='black', linestyle='--', linewidth=LINEWIDTH,
@@ -2221,9 +2311,12 @@ class ResultsPlotter:
             self, bp_data: list = None, n_data: list = None,
             bo_data: list = None, pv_data: list = None, ps_data: list = None,
             pbb_data: list = None, pbt_data: list = None, bc_data: list = None, 
-            gt: list = None, ylabel: str = '', xlabel: str = '',
+            bpc_data: list = None, gt: list = None, ylabel: str = '', xlabel: str = '',
             title: str = None, filename: str = None, subdir: str = '',
             save_to_txt: bool = False):
+        """Plot the data with respect to the number of tosses. At each number
+        of tosses, we assume there are more than one data points, so that the 
+        confidence intervals can be plotted."""
 
         if filename in PLOTS_TO_PRINT:
             save_to_txt = True
@@ -2307,6 +2400,15 @@ class ResultsPlotter:
             if save_to_txt:
                 data_str = self._add_to_string(
                     data_str, 'bc_data', x, y, l, u, bc_data[1],
+                    compare_with=bp_data[1])
+        if bpc_data is not None and len(bpc_data[0]) > 0:
+            x, y, l, u = xs_and_ys_to_x_mean_lower_upper(bpc_data[0], bpc_data[1])
+            ax.plot(x, y, linewidth=LINEWIDTH,
+                    color=BSDF_PLL_CONVEX_COLOR, label=BSDF_PLL_CONVEX_LABEL)
+            ax.fill_between(x, l, u, alpha=0.3, color=BSDF_PLL_CONVEX_COLOR)
+            if save_to_txt:
+                data_str = self._add_to_string(
+                    data_str, 'bpc_data', x, y, l, u, bpc_data[1],
                     compare_with=bp_data[1])
         if gt is not None:
             ax.hlines(np.mean(gt), xmin=0.5, xmax=np.max(bp_data[0])+0.5,
@@ -2459,6 +2561,7 @@ def process_gather_command(single_toss, exclude_pll):
     bsdf_pll_results = {}       # 02_2
     nerf_on_results = {}        # 03_2
     bsdf_only_results = {}      # bsdf 00_1
+    bsdf_pll_convex_results = {}# 02-cvwo_2 or 02-cvwo2_2
 
     pll_vision_results = {}     # pll 00_1
     pll_size_results = {}       # pll 04_1 (or pll 05_1)
@@ -2493,8 +2596,10 @@ def process_gather_command(single_toss, exclude_pll):
             add_to_results = pll_blind_b_results
         elif 'pll' in subdir and subdir.endswith('_0') and '09_' in subdir:
             add_to_results = pll_blind_t_results
-        elif '02-cvwo_' in subdir and subdir.endswith('_2'):
+        elif '02_' in subdir and subdir.endswith('_2'):
             add_to_results = bsdf_pll_results
+        elif '02-cvwo2x2_' in subdir and subdir.endswith('_2'):
+            add_to_results = bsdf_pll_convex_results
         elif '03_' in subdir and subdir.endswith('_2'):
             add_to_results = nerf_on_results
         elif 'bsdf' in subdir and subdir.endswith('_1') and '00-cvwo_' in subdir:
@@ -2529,6 +2634,9 @@ def process_gather_command(single_toss, exclude_pll):
     file_utils.save_results_to_yaml(
         bsdf_convex_results, file_utils.evaluation_dir(),
         filename='bsdf_convex.yaml')
+    file_utils.save_results_to_yaml(
+        bsdf_pll_convex_results, file_utils.evaluation_dir(),
+        filename='bsdf_pll_convex.yaml')
     if not exclude_pll:
         file_utils.save_results_to_yaml(
             pll_vision_results, file_utils.evaluation_dir(),
@@ -2547,11 +2655,12 @@ def process_gather_command(single_toss, exclude_pll):
     
 # Use 'plot' command to load the previously generated yaml files with results
 # and to generate plots with them.
-PLOT_TRACKING = False           # figure unused, text in table in manuscript
+PLOT_TRACKING = True           # figure unused, text in table in manuscript
+PLOT_TRACKING_SCATTERS = True  # unused for manuscript
 PLOT_DYNAMICS = False           # figure unused, text in table in manuscript
-PLOT_GEOMETRY = False           # unused for manuscript
-PLOT_GEOMETRY_SCATTERS = False  # Fig 5 of manuscript
-PLOT_GT_COMPARISON = True       # exploration during rebuttal phase
+PLOT_GEOMETRY = True           # unused for manuscript
+PLOT_GEOMETRY_SCATTERS = True  # Fig 5 of manuscript
+PLOT_GT_COMPARISON = False       # exploration during rebuttal phase
 @cli.command('plot')
 @click.option('--do-objects/--skip-objects',
               type=bool, default=False,
@@ -2571,6 +2680,8 @@ def process_plot_command(do_objects: bool):
         'pll_blind_t.yaml')
     bsdf_convex_results = file_utils.load_gathered_results_yaml(
         'bsdf_convex.yaml')
+    bsdf_pll_convex_results = file_utils.load_gathered_results_yaml(
+        'bsdf_pll_convex.yaml')
 
     # Ground truth results.
 
@@ -2589,6 +2700,7 @@ def process_plot_command(do_objects: bool):
         pll_blind_b_results=pll_blind_b_results,
         pll_blind_t_results=pll_blind_t_results,
         bsdf_convex_results=bsdf_convex_results,
+        bsdf_pll_convex_results=bsdf_pll_convex_results,
         gt_results=gt_results,
         do_objects=do_objects
     )
@@ -2601,6 +2713,10 @@ def process_plot_command(do_objects: bool):
                 if PLOT_TRACKING:
                     print(f'Plotting TagSLAM {trajectory}, {metric}')
                     results_plotter.plot_tagslam_tracking_error_vs_data(
+                        trajectory, metric)
+                if PLOT_TRACKING_SCATTERS:
+                    print(f'Plotting TagSLAM {trajectory} scatters, {metric}')
+                    results_plotter.plot_object_tagslam_tracking_scatter(
                         trajectory, metric)
             if metric in \
                 empty_results['tracking_metrics']['against_bundlesdf'].keys():
@@ -2672,26 +2788,29 @@ def process_plot_command(do_objects: bool):
                 # results_plotter.plot_object_geometry_scatter(
                 results_plotter.plot_object_geometry_scatter_withconvex(
                     'full_geometry', metric)
-        if metric in \
-            empty_results['geometry_metrics']['hull_to_full'].keys():
-            if PLOT_GEOMETRY:
-                print(f'Plotting predicted hull vs full gt geometry {metric}')
-                results_plotter.plot_geometry_error_vs_data(
-                    'hull_to_full', metric)
-            if PLOT_GEOMETRY_SCATTERS:
-                print(f'Plotting predicted hull vs full gt geometry ' + \
-                      f'scatters {metric}')
-                # results_plotter.plot_object_geometry_scatter(
-                results_plotter.plot_object_geometry_scatter_withconvex(
-                    'hull_to_full', metric)
+        
+        ### Commented out because not all experiments are evaluated with hull_to_full
+        ### and preliminary results show that hull_to_full does not outperform full_geometry.
+        # if metric in \
+        #     empty_results['geometry_metrics']['hull_to_full'].keys():
+        #     if PLOT_GEOMETRY:
+        #         print(f'Plotting predicted hull vs full gt geometry {metric}')
+        #         results_plotter.plot_geometry_error_vs_data(
+        #             'hull_to_full', metric)
+        #     if PLOT_GEOMETRY_SCATTERS:
+        #         print(f'Plotting predicted hull vs full gt geometry ' + \
+        #               f'scatters {metric}')
+        #         # results_plotter.plot_object_geometry_scatter(
+        #         results_plotter.plot_object_geometry_scatter_withconvex(
+        #             'hull_to_full', metric)
 
-        if metric in \
-            empty_results['geometry_metrics']['full_geometry'].keys():
-            if PLOT_GEOMETRY_SCATTERS:
-                print(f'Plotting full geometry (with hull_to_full) geometry scatters {metric}')
-                # results_plotter.plot_object_geometry_scatter(
-                results_plotter.plot_object_geometry_scatter_withconvex2(
-                    'full_geometry', metric)
+        # if metric in \
+        #     empty_results['geometry_metrics']['full_geometry'].keys():
+        #     if PLOT_GEOMETRY_SCATTERS:
+        #         print(f'Plotting full geometry (with hull_to_full) geometry scatters {metric}')
+        #         # results_plotter.plot_object_geometry_scatter(
+        #         results_plotter.plot_object_geometry_scatter_withconvex2(
+                    # 'full_geometry', metric)
 
 
 if __name__ == '__main__':
