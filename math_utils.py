@@ -715,3 +715,34 @@ def quaternion_errors(quat1_wxyz, quat2_wxyz):
     angle_error = rot_shift.magnitude()
 
     return angle_error
+
+def transform_points(points: np.ndarray, transformation_matrix: np.ndarray):
+    ones = np.ones((points.shape[0], 1))
+    points_homogeneous = np.hstack([points, ones])
+    transformed_points = points_homogeneous @ transformation_matrix.T
+    return transformed_points[:, :3]
+
+def transform_pts_to_normalized_space(points, translation, sc_factor, offset):
+    """From Utils.py's mesh_to_real_world function, we've uncovered that the
+    conversion from the SDF function's space to real world space is:
+    
+        # The basic structure from Utils.py's mesh_to_real_world implements:
+        geom_origin_pts = sdf_pts/sc_factor - translation
+        track_origin_pts = geom_origin_pts.apply(offset)
+
+    Thus, this function needs to do the opposite.
+
+        # Reverse order yields:
+        geom_origin_pts = track_origin_pts.apply(inv(offset))
+        sdf_pts = (geom_origin_pts + translation) * sc_factor
+    """
+    # The provided points are wrt the tracking body origin.
+    track_origin_pts = points
+
+    # Convert to wrt the geometry body origin, determined via the offset.
+    inv_offset = inverse_homogeneous_transformation(offset)
+    geom_origin_pts = transform_points(track_origin_pts, inv_offset)
+
+    # Convert to the scaled space of the SDF inputs.
+    sdf_pts = (geom_origin_pts + translation.reshape(1,3)) * sc_factor
+    return sdf_pts

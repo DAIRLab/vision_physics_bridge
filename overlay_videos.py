@@ -44,7 +44,8 @@ class OverlayVideoGenerator:
     observed RGB images."""
     def __init__(self, vision_asset: str, tracking_bundlesdf_id: str,
                  nerf_bundlesdf_id: str, cycle_iteration: int,
-                 bsdf_only: bool = False, remote: bool = False):
+                 bsdf_only: bool = False, remote: bool = False, 
+                 gt_mesh: bool = False) -> None:
         # First decode the system and start/end tosses from the provided asset
         # directory.
         assert cycle_iteration >= 0, f'Invalid {cycle_iteration=}.'
@@ -115,14 +116,20 @@ class OverlayVideoGenerator:
             tracking_bundlesdf_id=tracking_bundlesdf_id,
             nerf_bundlesdf_id=nerf_bundlesdf_id
         )
-        self.mesh_file = op.join(nerf_results_dir, 'textured_mesh.obj')
+        if gt_mesh:
+            self.mesh_file = file_utils.aligned_true_geometry_filepath(
+                dataset=vision_asset, tracking_bundlesdf_id=tracking_bundlesdf_id,
+                nerf_bundlesdf_id=nerf_bundlesdf_id, cycle_iteration=cycle_iteration
+            )
+        else:
+            self.mesh_file = op.join(nerf_results_dir, 'textured_mesh.obj')
 
         # Plan to put the output video in a single directory for all overlay
         # videos.
         self.output_file = file_utils.inspection_overlay_video_filepath(
             dataset=vision_asset, tracking_bundlesdf_id=tracking_bundlesdf_id,
             nerf_bundlesdf_id=nerf_bundlesdf_id,
-            cycle_iteration=cycle_iteration
+            cycle_iteration=cycle_iteration, gt_mesh=gt_mesh
         )
         if not op.exists(op.dirname(self.output_file)):
             os.makedirs(op.dirname(self.output_file))
@@ -498,13 +505,16 @@ class OverlayVideoGenerator:
 @click.option('--remote/--local',
               default=False,
               help="whether to run on a remote server.")
+@click.option('--gt-mesh',
+              is_flag=True,
+              help="whether to use ground truth mesh for video.")
 
 def main_command(vision_asset: str, bundlesdf_id: str, nerf_bundlesdf_id: str,
                  cycle_iteration: int, bsdf_only: bool, all: bool,
-                 remote: bool):
+                 remote: bool, gt_mesh: bool) -> None:
     overlay_video_generator = OverlayVideoGenerator(
         vision_asset, bundlesdf_id, nerf_bundlesdf_id, cycle_iteration,
-        bsdf_only=bsdf_only, remote=remote
+        bsdf_only=bsdf_only, remote=remote, gt_mesh=gt_mesh
     )
 
     if all:

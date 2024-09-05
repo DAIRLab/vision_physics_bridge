@@ -26,6 +26,18 @@ FRICTION_KEY = 'multibody_terms.contact_terms.friction_params'
 FORCE_USE_ALIGNED_GT_GEOMETRY = True
 REUSE_ALIGNED_GT_GEOMETRY = True
 
+def trimesh_split(mesh, min_edge=1000):
+  '''!NOTE mesh.split takes too much memory for large mesh. That's why we have this function
+  '''
+  components = trimesh.graph.connected_components(mesh.edges, min_len=min_edge, nodes=None, engine=None)
+  meshes = []
+  for i,c in enumerate(components):
+    mask = np.zeros(len(mesh.vertices),dtype=bool)
+    mask[c] = 1
+    cur_mesh = mesh.copy()
+    cur_mesh.update_vertices(mask=mask.astype(bool))
+    meshes.append(cur_mesh)
+  return meshes
 
 def traverse_run_history_from_bsdf(
         vision_asset: str, bundlesdf_id: str, cycle_iteration: int) -> dict:
@@ -409,7 +421,7 @@ class TrajectoryPerformanceEvaluator:
                     old_urdf_path = op.join(
                         pll_results_dir, 'urdfs', 'bundlesdf_cube_mesh.urdf')
                     assert op.exists(old_urdf_path), f'Did not find ' + \
-                        f'true_mesh_pll_params.urdf or bundlesdf_cube_mesh.urdf' + \
+                        f'with_bundlesdf_mesh.urdf or bundlesdf_cube_mesh.urdf' + \
                         f'in {op.join(pll_results_dir, "urdfs")}.'
 
             elif self.last_bsdf_iteration > 1:
@@ -428,7 +440,7 @@ class TrajectoryPerformanceEvaluator:
                     old_urdf_path = op.join(
                         pll_results_dir, 'urdfs', 'bundlesdf_cube_mesh.urdf')
                     assert op.exists(old_urdf_path), f'Did not find ' + \
-                        f'true_mesh_pll_params.urdf or bundlesdf_cube_mesh.urdf' + \
+                        f'with_bundlesdf_mesh.urdf or bundlesdf_cube_mesh.urdf' + \
                         f'in {op.join(pll_results_dir, "urdfs")}.'
 
             else:
@@ -484,7 +496,7 @@ class TrajectoryPerformanceEvaluator:
         # Do a test with bsdf_t_full_states and tagslam_b_full_states.
         cycle_key = f'cycle_iteration_{self.last_bsdf_iteration}'
         target_traj = Tensor(self.tagslam_b_full_states[cycle_key])
-        pred_traj = Tensor(self.bsdf_t_full_states[cycle_key])
+        pred_traj = Tensor(self.bsdf_b_full_states[cycle_key])
 
         pos_error = self._compute_pos_error(target_traj, pred_traj)
         rot_error = self._compute_rot_error(target_traj, pred_traj)
@@ -538,6 +550,24 @@ class TrajectoryPerformanceEvaluator:
 
         return TrajectoryMetrics.adds_error(
             target_traj, pred_traj, self.aligned_true_cloud)
+
+    def visualize_phis(self):
+        """Visualize the penetration metrics."""
+        cycle_key = f'cycle_iteration_{self.last_bsdf_iteration}'
+
+        traj = self.bsdf_b_full_states[cycle_key]
+        phi_true_geom = TrajectoryMetrics.signed_distance(
+        traj, self._get_true_geometry_pll_system())
+        phi_learned_geom = TrajectoryMetrics.signed_distance(
+            traj, self._get_learned_pll_system())
+
+        print("Plotting phi")
+        plt.ion()
+        plt.plot(phi_true_geom, label='True geometry on bsdf trajectory')
+        plt.plot(phi_learned_geom, label='Learned geometry on bsdf trajectory')
+        plt.legend()
+        plt.ylabel('Signed distance [m]')
+        plt.show(block=True)
 
     def visualize_metrics(self, pos_error, rot_error, pen_true_geom_error,
                           pen_true_traj_error, add_error, adds_error):
@@ -779,23 +809,41 @@ class GeometryEvaluator:
         self.vision_asset = vision_asset
         self.history = history
         self.last_bsdf_iteration = last_bsdf_iteration
+        self.last_tracking_bsdf_id = last_tracking_bsdf_id
+        self.nerf_bundlesdf_id = nerf_bundlesdf_id
 
         # Get the meshes -- handle alignment differently for BundleSDF and PLL
         # since ICP probably works poorly for PLL geometries.
         if self.pll_id is None:
             self._get_meshes()
+            self._get_grids()
         else:
             self._handle_pll_geometry()
+
+    def _get_grids(self):
+        """Get the grids for the learned and ground truth meshes."""
+        # Learned grid.
+        learned_grid_path = op.join(self.eval_dir, 'occ_grid.npz')
+        if not op.exists(learned_grid_path):
+            print(f'Cannot find {learned_grid_path=} for BundleSDF ' + \
+                  'evaluation, so will not load it.')
+            self.learned_grid = None
+        else:
+            self.learned_grid = np.load(learned_grid_path)
 
     def _get_meshes(self):
         """Loads the learned and ground truth meshes from the evaluation
         directory."""
         # Learned mesh.
         learned_mesh_path = op.join(self.eval_dir, 'bsdf_mesh.obj')
+        # The bsdf_mesh.obj file is created by DynamicsPredictor from
+        # textured_mesh.obj if pll_id is None, or from pll_urdf/test.obj if
+        # pll_id is not None.
         assert op.exists(learned_mesh_path), f'GeometryEvaluator requires ' + \
             f'{learned_mesh_path=} to exist for BundleSDF experiments, but ' + \
             f'does not exist.'
         self.learned_mesh = icp.load_mesh_from_obj(learned_mesh_path)
+        self.learned_mesh_trimesh = trimesh.load_mesh(learned_mesh_path)
 
         # Ground truth mesh.  Always first try to use
         # true_geom_aligned_assist.obj.
@@ -810,8 +858,10 @@ class GeometryEvaluator:
             f'{true_mesh_path=}, _assist, and _assist_copied but did not ' + \
             f'find any -- needed to recompute results from files.'
         self.true_mesh = icp.load_mesh_from_obj(true_mesh_path)
+        self.true_mesh_trimesh = trimesh.load_mesh(true_mesh_path)
 
         # Get each of their convex hulls too.
+        # The meshes are open3d.geometry.TriangleMesh obj.
         self.learned_hull, _ = self.learned_mesh.compute_convex_hull()
         self.true_hull, _ = self.true_mesh.compute_convex_hull()
 
@@ -949,21 +999,101 @@ class GeometryEvaluator:
 
         return self.true_geom_pll_system
 
-    def compute_metrics(self):
-        self._compute_chamfer_distance()
+    def compute_metrics(self, plot_geo_errors=False):
+        self._compute_chamfer_distance(plot_geo_errors)
         self._compute_f_score()
+        self._compute_convex_volume_error()
         self._compute_volume_error()
 
-    def _compute_chamfer_distance(self):
+    def _compute_chamfer_distance(self, plot_geo_errors):
         # Sample point clouds on both meshes.
         true_cloud = Tensor(np.asarray(
             self.true_mesh.sample_points_poisson_disk(2000).points))
-        learned_cloud = Tensor(np.asarray(
-            self.learned_mesh.sample_points_poisson_disk(2000).points))
+        ### min_edge should be consistent with bundlesdf.py
+        learned_meshes = trimesh_split(self.learned_mesh_trimesh, min_edge=5)
+        if len(learned_meshes) == 1:
+            learned_cloud = Tensor(np.asarray(
+                self.learned_mesh.sample_points_poisson_disk(2000).points))
+        else:
+            ### Sample each segmented mesh, making sure the small ones 
+            ### generated by contacts are sampled. 
+            largest_size = 0
+            for m in learned_meshes:
+                if m.vertices.shape[0] > largest_size:
+                    largest_size = m.vertices.shape[0]
+            samples_on_small = 10
+            samples_on_largest = 2000 - samples_on_small * (len(learned_meshes) - 1)
+            learned_clouds = []
+            for m in learned_meshes:
+                m_open3d = o3d.geometry.TriangleMesh()
+                m_open3d.vertices = o3d.utility.Vector3dVector(m.vertices)
+                m_open3d.triangles = o3d.utility.Vector3iVector(m.faces)
+                if m.vertices.shape[0] == largest_size:
+                    samples = samples_on_largest
+                else:
+                    samples = samples_on_small
+                learned_clouds.append(Tensor(np.asarray(
+                    m_open3d.sample_points_poisson_disk(samples).points)))
+            learned_cloud = torch.cat(learned_clouds, dim=0)
 
         # Compute chamfer distance on these clouds.
         self.chamfer_distance = eval_utils.chamfer_distance(
             true_cloud, learned_cloud).item()
+
+        if plot_geo_errors:
+            if self.pll_id is not None:
+                if self.pll_id.startswith('pll_id_'):
+                    pll_id = self.pll_id[7:]
+                else:
+                    pll_id = self.pll_id
+                label_exp = f'{self.vision_asset}_pll_{pll_id}_{self.last_bsdf_iteration}'
+            else:
+                if self.last_tracking_bsdf_id.startswith('bundlesdf_id_'):
+                    tracking_bsdf_id = self.last_tracking_bsdf_id[13:]
+                    nerf_bundlesdf_id = self.nerf_bundlesdf_id[13:]
+                else:
+                    tracking_bsdf_id = self.last_tracking_bsdf_id
+                    nerf_bundlesdf_id = self.nerf_bundlesdf_id
+                label_exp = f'{self.vision_asset}_bsdf_{tracking_bsdf_id}_\n' + \
+                    f'{nerf_bundlesdf_id}_{self.last_bsdf_iteration}'
+            # plot the two point clouds colored by chamfer distance
+            true_cloud_np = np.asarray(true_cloud)
+            learned_cloud_np = np.asarray(learned_cloud)
+            dists_from_learned, dists_from_true = eval_utils.point_wise_chamfer_distance(
+                true_cloud_np, learned_cloud_np)
+            mean_dist_from_learned = np.mean(dists_from_learned)
+            mean_dist_from_true = np.mean(dists_from_true)
+            print(f'Mean distance from learned to true: {mean_dist_from_learned}')
+            print(f'Mean distance from true to learned: {mean_dist_from_true}')
+            chamfer_distance = 0.5*(mean_dist_from_learned + mean_dist_from_true)
+            print(f'Chamfer distance from per point: {chamfer_distance}')
+            print(f'Chamfer distance from eval_utils: {self.chamfer_distance}')
+            # plot
+            fig = plt.figure(figsize=(12, 5))
+            ax = fig.add_subplot(121, projection='3d')
+            colored_1 = ax.scatter(true_cloud_np[:, 0], true_cloud_np[:, 1], 
+                                   true_cloud_np[:, 2], c=dists_from_true, cmap='rainbow', s=2)
+            ax.set_xlabel('x(m)')
+            ax.set_ylabel('y(m)')
+            ax.set_zlabel('z(m)')
+            ax.set_title(f'{label_exp} true cloud: {mean_dist_from_true:.4f}')
+            ax.set_box_aspect([np.ptp(arr) for arr in [ax.get_xlim(), ax.get_ylim(), ax.get_zlim()]])
+            colorbar_1 = fig.colorbar(colored_1, ax=ax)
+            colorbar_1.set_label('CD from true')
+            ax = fig.add_subplot(122, projection='3d')
+            colored_2 = ax.scatter(learned_cloud_np[:, 0], learned_cloud_np[:, 1], 
+                                   learned_cloud_np[:, 2], c=dists_from_learned, cmap='rainbow', s=2)
+            ax.set_xlabel('x(m)')
+            ax.set_ylabel('y(m)')
+            ax.set_zlabel('z(m)')
+            ax.set_title(f'{label_exp} learned cloud: {mean_dist_from_learned:.4f}')
+            ax.set_box_aspect([np.ptp(arr) for arr in [ax.get_xlim(), ax.get_ylim(), ax.get_zlim()]])
+            colorbar_2 = fig.colorbar(colored_2, ax=ax)
+            colorbar_2.set_label('CD from learned')
+            plt.tight_layout(pad=3.0)
+            # plt.show()
+            fig_path = op.join(self.eval_dir, 'chamfer_distance.png')
+            fig.savefig(fig_path)
 
         # Do the same thing for the convex hull.
         true_hull_cloud = Tensor(np.asarray(
@@ -982,7 +1112,7 @@ class GeometryEvaluator:
         self.hull_f_score = None
         self.hull_to_full_f_score = None
 
-    def _compute_volume_error(self):
+    def _compute_convex_volume_error(self):
         # Get the vertices of each mesh.
         true_hull_vertices = Tensor(np.asarray(self.true_hull.vertices))
         learned_hull_vertices = Tensor(np.asarray(self.learned_hull.vertices))
@@ -991,11 +1121,32 @@ class GeometryEvaluator:
         self.convex_volume_error = eval_utils.convex_volume_error(
             true_hull_vertices, learned_hull_vertices).item()
 
+    def _compute_volume_error(self):
+        if self.pll_id is not None:
+            print(f'Cannot compute volume error for PLL runs. ')
+            self.volume_error = None
+            self.iou = None
+            return
+        if self.learned_grid is None:
+            print(f'Cannot compute volume error since occ_grid.npz is not loaded. ')
+            self.volume_error = None
+            self.iou = None
+            return
+        if not self.true_mesh_trimesh.is_watertight:
+            print(f'Cannot compute volume error since true mesh is not watertight. ')
+            self.volume_error = None
+            self.iou = None
+            return
+        self.volume_error, self.iou = eval_utils.volume_error(
+            self.true_mesh_trimesh, self.learned_grid)
+
     def store_geometry_metrics(self, results: dict):
         """Store the geometry metrics in the results dictionary."""
         full_geometry_results = results['geometry_metrics']['full_geometry']
         full_geometry_results['chamfer_distance'] = self.chamfer_distance
         full_geometry_results['f_score'] = self.f_score
+        full_geometry_results['volume_error'] = self.volume_error
+        full_geometry_results['iou'] = self.iou
 
         hull_geometry_results = results['geometry_metrics']['convex_hull']
         hull_geometry_results['chamfer_distance'] = self.hull_chamfer_distance
@@ -1122,19 +1273,6 @@ class DynamicsPredictor:
             dataset=self.vision_asset, cycle_iteration=pll_iteration,
             pll_id=pll_id)
 
-        # TODO BIBIT decide if config/stats are necessary/useful
-        config, stats, checkpoint = eval_utils.get_pll_config_stats_checkpoint(
-            self.pll_results_dir)
-
-        best_system_state = checkpoint['best_learned_system_state']
-        params_dict = self._get_physical_parameters(
-            best_system_state, self.pll_results_dir)
-        # run_dict['learned_params'] = params_dict
-
-        # init_params_dict = get_init_physical_parameters(
-        #     system, body_names, checkpoint, wandb_api)
-        # run_dict['initial_params'] = init_params_dict
-        return params_dict
 
     def _look_up_latest_bundlesdf_results(self):
         """Also stores self.nerf_results_dir."""
@@ -1154,72 +1292,17 @@ class DynamicsPredictor:
         bsdf_params['bsdf_geometry_hull'] = geometry.convex_hull
         return bsdf_params
 
-    def _get_physical_parameters(
-            self, system_state: dict, pll_results_dir: str) -> dict:
-        """Extract the physical parameters PLL learned from the given system
-        state dictionary.  This dictionary will contain keys:
-            - friction:  The friction coefficient.
-            - mass:  The mass of the object.
-            - com_x:  The x-coordinate of the center of mass.
-            - com_y:  The y-coordinate of the center of mass.
-            - com_z:  The z-coordinate of the center of mass.
-            - I_xx:  The moment of inertia about the x-axis.
-            - I_yy:  The moment of inertia about the y-axis.
-            - I_zz:  The moment of inertia about the z-axis.
-            - I_xy:  The moment of inertia about the xy-plane.
-            - I_xz:  The moment of inertia about the xz-plane.
-            - I_yz:  The moment of inertia about the yz-plane.
-            - geometry:  The geometry of the object as a trimesh object.
-        """
-        learned_params = {}
-
-        # =========== FRICTION: The friction is a single parameter, stored at
-        # index 0 at the friction key value (index 1 is the ground).
-        learned_params['friction'] = system_state[FRICTION_KEY][0].item()
-
-        # =========== INERTIA: Interpret inertia into individual parts.
-        inertia_theta = system_state[INERTIA_THETA_KEY]
-        inertia_pi_cm = eval_utils.convert_inertia_theta_to_pi_cm(
-            inertia_theta).squeeze()
-
-        # Sadly the mass that is stored in this checkpoint is slightly
-        # incorrect since it was not manually overwritten to be the original
-        # value.  We can look this up in the URDF.
-        urdf_dir = op.join(pll_results_dir, 'urdfs')
-        mass = eval_utils.get_mass_from_urdf(urdf_dir)
-
-        # Reminder, pi_cm format is:
-        # [m, m * p_x, m * p_y, m * p_z, I_xx, I_yy, I_zz, I_xy, I_xz, I_yz]
-
-        # Divide out the mass.
-        inertia_pi_cm[1:4] /= mass
-
-        # Store the human-interpretable inertia parameters -- these should
-        # exactly match the URDF.
-        learned_params['mass'] = mass
-        learned_params['com_x'] = inertia_pi_cm[1].item()
-        learned_params['com_y'] = inertia_pi_cm[2].item()
-        learned_params['com_z'] = inertia_pi_cm[3].item()
-        learned_params['I_xx'] = inertia_pi_cm[4].item()
-        learned_params['I_yy'] = inertia_pi_cm[5].item()
-        learned_params['I_zz'] = inertia_pi_cm[6].item()
-        learned_params['I_xy'] = inertia_pi_cm[7].item()
-        learned_params['I_xz'] = inertia_pi_cm[8].item()
-        learned_params['I_yz'] = inertia_pi_cm[9].item()
-
-        # =========== GEOMETRY: Extract the geometry from the obj file.
-        obj_path = op.join(pll_results_dir, 'urdfs', 'test.obj')
-        if not op.exists(obj_path):
-            obj_path = op.join(pll_results_dir, 'urdfs', 'test_best.obj')
-        learned_params['pll_geometry'] = trimesh.load(obj_path, force='mesh')
-
-        return learned_params
 
     def _create_pll_sim_system(self):
         """Create a PLL MultibodyLearnableSystem, which can be simulated."""
         if hasattr(self, 'pll_system'):
             print(f'No need to remake PLL system in DynamicsPredictor.')
             return
+
+        # pll_results_dir = "/mnt/data0/minghz/repos/bundlenets/dair_pll/results/vision_bakingbox/bakingbox_2/bundlesdf_iteration_1/pll_id_00-cvwo-occleft-bsdf0"
+        # old_urdf_path = op.join(
+        #     pll_results_dir, 'urdfs', 'bundlesdf_cube_mesh.urdf')
+        # new_urdf_path = op.join(self.eval_dir, 'bsdf_mesh_pll_params.urdf')
 
         # First create a URDF.  This should be the same as the last PLL URDF,
         # possibly with the geometry replaced by the new BSDF geometry if the
@@ -1235,6 +1318,16 @@ class DynamicsPredictor:
 
         os.system(f'cp {old_urdf_path} {new_urdf_path}')
 
+        # old_obj_path = op.join(pll_results_dir, 'urdfs', 'test.obj')
+        # if not op.exists(old_obj_path):
+        #     old_obj_path = op.join(
+        #         pll_results_dir, 'urdfs', 'test_best.obj')
+        # if not op.exists(old_obj_path):
+        #     old_obj_path = op.join(
+        #         pll_results_dir, 'urdfs', 'body_best.obj')
+        # new_mesh_name = 'pll_mesh.obj'
+        # new_obj_path = op.join(self.eval_dir, new_mesh_name)
+
         if self.pll_id is None:
             old_obj_path = op.join(self.nerf_results_dir, 'textured_mesh.obj')
             new_mesh_name = 'bsdf_mesh.obj'
@@ -1245,7 +1338,21 @@ class DynamicsPredictor:
                     self.pll_results_dir, 'urdfs', 'test_best.obj')
             new_mesh_name = 'pll_mesh.obj'
         new_obj_path = op.join(self.eval_dir, new_mesh_name)
+        
         os.system(f'cp {old_obj_path} {new_obj_path}')
+
+        ### Copy the occupancy grid
+        if self.pll_id is None:
+            old_occ_grid_path = op.join(self.nerf_results_dir, 'occ_grid.npz')
+            if op.exists(old_occ_grid_path):
+                new_occ_grid_path = op.join(self.eval_dir, 'occ_grid.npz')
+                os.system(f'cp {old_occ_grid_path} {new_occ_grid_path}')
+                print(f'Copied occupancy grid occ_grid.npz. ')
+            else:
+                print(f'Warning: occupancy grid occ_grid.npz not found in {self.nerf_results_dir}.')
+        else:
+            ### TODO: generate occupancy grid from PLL run. 
+            print(f'No occupancy grid occ_grid.npz to copy for PLL run.')
 
         # Overwrite the geometry in the URDF to refer to the new obj.
         eval_utils.overwrite_mesh_name_in_urdf(new_urdf_path, new_mesh_name)
@@ -2048,6 +2155,19 @@ class TrajectoryMetrics:
         smallest_phis = phi.min(dim=1).values
         return -torch.clamp_max(smallest_phis, 0)
 
+    @staticmethod
+    def signed_distance(traj: Tensor, geometry_system: MultibodyLearnableSystem
+                    ) -> Tensor:
+        """Returns the signed distance of the geometry in the provided
+        geometry_system when swept over the provided trajectory."""
+        traj = Tensor(traj)
+
+        assert traj.shape[1] == geometry_system.space.n_x
+
+        phi, _J, _p_BiBc_B, _, _, _ = geometry_system.multibody_terms.contact_terms(traj)
+        phi = phi.detach().clone()
+        smallest_phis = phi.min(dim=1).values
+        return smallest_phis
 
 def recompute_results_from_existing_files(
         eval_dir: str, results: dict, vision_asset: str, history: dict,
@@ -2123,13 +2243,16 @@ def recompute_results_from_existing_files(
               help="whether to overwrite or keep previously generated " + \
                 "results:  results_yaml, all, tracking, tracking_geometry, " + \
                 "dynamics")
+@click.option('--plot-geo-errors',
+                is_flag=True,
+                help="Plot the geometric errors.")
 
 def main_command(vision_asset: str, bundlesdf_id: str, nerf_bundlesdf_id: str,
                  pll_id: str, cycle_iteration: int, gt: bool, do_videos: bool,
-                 overwrite: str):
+                 overwrite: str, plot_geo_errors: bool):
     do_tracking = True
-    do_dynamics = True
-    do_geometry = True
+    do_dynamics = False
+    do_geometry = False
 
     if cycle_iteration == 0:
         assert pll_id is not None, f'Need {pll_id=} if cycle_iteration is 0.'
@@ -2303,6 +2426,7 @@ def main_command(vision_asset: str, bundlesdf_id: str, nerf_bundlesdf_id: str,
         traj_evaluator.get_tracking_trajectories()
         if pll_id is None:
             traj_evaluator.store_tracking_metrics(results)
+            traj_evaluator.visualize_phis()
 
     ### Some prerequisites required by each other, sadly.
     dynamics_predictor = DynamicsPredictor(
@@ -2341,7 +2465,7 @@ def main_command(vision_asset: str, bundlesdf_id: str, nerf_bundlesdf_id: str,
     ### Geometry evaluation.
     if do_geometry:
         print(f'\nDOING GEOMETRY METRICS\n')
-        geometry_evaluator.compute_metrics()
+        geometry_evaluator.compute_metrics(plot_geo_errors)
         geometry_evaluator.store_geometry_metrics(results)
 
     ### Save the results.

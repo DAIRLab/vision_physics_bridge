@@ -34,9 +34,15 @@ def create_ssh_client(server, port, user, password):
               default=1,
               help="BundleSDF iteration number (can't choose 0 since that " + \
                 "means use TagSLAM poses).")
+@click.option('--aligned',
+              is_flag=True,
+              help="Whether to collect the aligned mesh.")
+@click.option('--local',
+              is_flag=True,
+              help="Whether to copy the mesh file to a local directory.")
 
 def main_command(vision_asset: str, bundlesdf_id: str, nerf_bundlesdf_id: str,
-                 cycle_iteration: int):
+                 cycle_iteration: int, aligned: bool, local: bool):
     assert cycle_iteration > 0, f'Invalid {cycle_iteration=}.'
     assert '_' in vision_asset, f'Invalid {vision_asset=}.'
     object = '_'.join(vision_asset.split('_')[:-1])
@@ -65,30 +71,50 @@ def main_command(vision_asset: str, bundlesdf_id: str, nerf_bundlesdf_id: str,
     # mesh_file = op.join(nerf_results_dir, 'mesh_cleaned.obj') # normalized
     mesh_file = op.join(nerf_results_dir, 'textured_mesh.obj')  # true scale
 
-    # copy the mesh file to a remote device (which is local for the user on remote)
-    # Setup SSH connection
-    server = '158.130.72.130'#
-    port = 22
-    user = 'cnets-vision'
-    password = 'dairtobelieve'
-    ssh_client = create_ssh_client(server, port, user, password)
+    evaluation_dir = file_utils.evaluation_subdir(
+        dataset=vision_asset, cycle_iteration=cycle_iteration, 
+        tracking_bundlesdf_id=bundlesdf_id, nerf_bundlesdf_id=nerf_bundlesdf_id, 
+        create=False
+)
+    aligned_mesh_file = op.join(evaluation_dir, 'true_geom_aligned_assist.obj')
+
 
     # Copy the mesh file to local device
-    local_mesh_file = mesh_file
+    if aligned:
+        origin_mesh_file = aligned_mesh_file
+    else:
+        origin_mesh_file = mesh_file
 
     # Get the current date in MMDD format
     now = datetime.datetime.now()
     date_str = now.strftime('%m%d')
-    remote_mesh_file_name = f'{date_str}_{vision_asset}_{bundlesdf_id[13:]}_{nerf_bundlesdf_id[13:]}_{cycle_iteration}.obj'
-    remote_directory = '/home/cnets-vision/Desktop/mesh_collection'
+    dest_mesh_file_name = f'{date_str}_{vision_asset}_{bundlesdf_id[13:]}_{nerf_bundlesdf_id[13:]}_{cycle_iteration}.obj'
 
-    remote_mesh_file = op.join(remote_directory, remote_mesh_file_name)
-    print(f'Copying {local_mesh_file} to {remote_mesh_file}...')
+    if local:
+        dest_directory = 'mesh_collection'
+        dest_mesh_file = op.join(dest_directory, dest_mesh_file_name)
+        print(f'Copying {origin_mesh_file} to {dest_mesh_file}...')
 
-    # Copy the mesh file to the remote device
-    sftp = ssh_client.open_sftp()
-    sftp.put(local_mesh_file, remote_mesh_file)
-    sftp.close()
+        os.makedirs(dest_directory, exist_ok=True)
+        os.system(f'cp {origin_mesh_file} {dest_mesh_file}')
+        return
+    else:        
+        # copy the mesh file to a remote device (which is local for the user on remote)
+        # Setup SSH connection
+        server = '158.130.72.130'#
+        port = 22
+        user = 'cnets-vision'
+        password = ''
+        ssh_client = create_ssh_client(server, port, user, password)
+
+        dest_directory = '/home/cnets-vision/Desktop/mesh_collection'
+        dest_mesh_file = op.join(dest_directory, dest_mesh_file_name)
+        print(f'Copying {origin_mesh_file} to {dest_mesh_file} on {server}...')
+
+        # Copy the mesh file to the remote device
+        sftp = ssh_client.open_sftp()
+        sftp.put(origin_mesh_file, dest_mesh_file)
+        sftp.close()
 
 
 if __name__ == '__main__':

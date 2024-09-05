@@ -14,6 +14,8 @@ only have results for tosses 1-3.
                             chamfer_distance:
                             f_score:
                         full_geometry:
+                            volume_error:
+                            iou:
                             chamfer_distance:
                             f_score:
                         hull_to_full:
@@ -177,6 +179,7 @@ ERROR_LABELS = {
         'Predicted Penetration [cm]',
     'volume_error': 'Relative Volume Error',
     'chamfer_distance': 'Chamfer Distance [cm]',
+    'iou': 'IoU',
     #'f_score': TODO this isn't implemented so exclude from dictionary
 }
 AUC_LABELS = {
@@ -209,6 +212,7 @@ METRIC_SCALING = {
     'penetration_true_geom_predicted_traj': 100,    # [cm]
     'volume_error': 1,                              # weird fractional units
     'chamfer_distance': 100,                        # [cm]
+    'iou': 1,                                       # [%]
     #'f_score': TODO this isn't implemented so exclude from dictionary
 }
 
@@ -224,6 +228,50 @@ T_SCORE_PER_DOF = {1: 12.71, 2: 4.303, 3: 3.182, 4: 2.776,
 for i in range(31, 200):
     T_SCORE_PER_DOF[i] = 1.960
 
+BSDF_PLL = 'bsdf_pll'
+NERF_ON = 'nerf_on'
+BSDF_ONLY = 'bsdf_only'
+PLL_VISION = 'pll_vision'
+PLL_SIZE = 'pll_size'
+PLL_BLIND_B = 'pll_blind_b'
+PLL_BLIND_T = 'pll_blind_t'
+BSDF_CONVEX = 'bsdf_convex'
+BSDF_CONVEX_HULL = 'bsdf_convex_hull'
+BSDF_PLL_CONVEX = 'bsdf_pll_convex'
+GT = 'gt'
+BSDF_CONVEX_OCC = 'bsdf_convex_occ'
+BSDF_PLL_CONVEX_OCC = 'bsdf_pll_convex_occ'
+
+COLORS = {
+    BSDF_PLL: '#7030a0',  #'#398537',  #'#8c59b3',
+    NERF_ON: '#ff0000',  #'#92668d',
+    BSDF_ONLY: '#f9a602',  #'#a1b8e1',  #'#8eaadb',  #'#4472c4',  #'cd5b45',
+    PLL_VISION: '#00ff00',  #'#833785',
+    PLL_SIZE: '#0000ff',  #'#4a0042',
+    PLL_BLIND_B: '#ffff00',  #'#92668d',
+    PLL_BLIND_T: '#ff00ff',  #'#95001a',
+    BSDF_CONVEX: '#00ffff',  #'#ff0000',
+    BSDF_CONVEX_HULL: '#8eaadb',
+    BSDF_PLL_CONVEX: '#f000ff',
+    BSDF_CONVEX_OCC: '#00ffff',
+    BSDF_PLL_CONVEX_OCC: '#f000ff',
+}
+
+LABELS = {
+    BSDF_PLL: 'Vysics',
+    NERF_ON: 'BundleSDF-PLL NeRF Online',
+    BSDF_ONLY: 'BundleSDF [1]',
+    PLL_VISION: 'PLL with Vision Supervision',
+    PLL_SIZE: 'PLL with Vision-Supervised Size Only',
+    PLL_BLIND_B: 'Blind PLL on Vision-Based Tracking',
+    PLL_BLIND_T: 'Blind PLL on Fiducial-Based Tracking',
+    BSDF_CONVEX: 'BundleSDF Convex Loss',
+    BSDF_CONVEX_HULL: 'BundleSDF Convex Hull',
+    BSDF_PLL_CONVEX: 'Vysics Convex Loss',
+    GT: 'Using Ground Truth URDF',
+    BSDF_CONVEX_OCC: 'BundleSDF Convex Loss (Occluded)',
+    BSDF_PLL_CONVEX_OCC: 'Vysics Convex Loss (Occluded)',
+}
 
 BSDF_PLL_COLOR = '#7030a0'  #'#398537'  #'#8c59b3'
 NERF_ON_COLOR = '#ff0000'  #'#92668d'
@@ -560,8 +608,24 @@ class ResultsPlotter:
                  pll_vision_results: dict, pll_size_results: dict,
                  pll_blind_b_results: dict, pll_blind_t_results: dict,
                  bsdf_convex_results: dict, bsdf_pll_convex_results: dict,
+                 bsdf_convex_occ_results: dict, bsdf_pll_convex_occ_results: dict,
                  gt_results: dict, do_objects: bool):
         # Store the results dictionaries.
+        self.results = {
+            BSDF_PLL: bsdf_pll_results,
+            NERF_ON: nerf_on_results,
+            BSDF_ONLY: bsdf_only_results,
+            BSDF_PLL_CONVEX: bsdf_pll_convex_results,
+            PLL_VISION: pll_vision_results,
+            PLL_SIZE: pll_size_results,
+            PLL_BLIND_B: pll_blind_b_results,
+            PLL_BLIND_T: pll_blind_t_results,
+            BSDF_CONVEX: bsdf_convex_results,
+            BSDF_CONVEX_OCC: bsdf_convex_occ_results,
+            BSDF_PLL_CONVEX_OCC: bsdf_pll_convex_occ_results,
+            GT: gt_results,
+        }
+
         self.bsdf_pll_results = bsdf_pll_results
         self.nerf_on_results = nerf_on_results
         self.bsdf_only_results = bsdf_only_results
@@ -798,22 +862,19 @@ class ResultsPlotter:
                 f'{full_or_toss}_auc', subdir='tracking')
 
     def plot_object_tagslam_tracking_scatter(
-            self, full_or_toss: str, tracking_metric: str):
+            self, full_or_toss: str, tracking_metric: str, 
+            exps: list = [BSDF_ONLY, BSDF_PLL], do_sort: bool = True):
         """Scatter plot of tracking metrics against TagSLAM.  Only doable for
         tagged objects and not for PLL-only."""
         # Get the scale of the metric.
         scale = METRIC_SCALING[tracking_metric]
 
-        # For now just do this for BundleSDF-PLL and BundleSDF-Only.
-        by_object_bsdf_pll = {}  #[[], []] keys objects, vals [[toss_str], [ys]]
-        by_object_bsdf_only = {}  #[[], []]
+        by_objects = {key: dict() for key in exps}
+        sort_key = exps[0] if do_sort else ''
 
-        # Prepare to zip in consistent order:  BSDF-PLL, BundleSDF Only.
-        by_objects = [by_object_bsdf_pll, by_object_bsdf_only]
-        result_dicts = [self.bsdf_pll_results, self.bsdf_only_results]
-
-        # Iterate over all the approaches.
-        for by_object, result_dict in zip(by_objects, result_dicts):
+        for exp_key in exps:
+            by_object = by_objects[exp_key]
+            result_dict = self.results[exp_key]
 
             # Iterate over tagged objects.
             for obj in self.tagged_objects:
@@ -835,12 +896,11 @@ class ResultsPlotter:
         title = f'Scatter {full_or_toss.replace("_", " ")} Tracking'.title()
         ylabel = ERROR_LABELS[tracking_metric]
         self._do_scatter_plot(
-            bp_data=by_object_bsdf_pll, bo_data=by_object_bsdf_only,
-            ylabel=ylabel, xlabel_txt=self.tagged_objects,
-            title=title,
+            data_dict=by_objects, sort_key=sort_key, ylabel=ylabel, 
+            xlabel_txt=self.tagged_objects, title=title, 
             filename=f'scatter_tagslam_{tracking_metric}_mean_v_data_{full_or_toss}',
-            subdir='object_tracking', save_to_txt=True, normalize=False)
-        
+            subdir='object_tracking', save_to_txt=True, normalize=False, show_toss_id=True)
+
     def plot_geometry_error_vs_data(
             self, hull_or_full: str, geometry_metric: str):
         """Geometry metrics.  Doable for all objects and approaches."""
@@ -1377,6 +1437,10 @@ class ResultsPlotter:
             object_labels = ['tagless_objects'] * len(self.tagless_objects) + \
                 ['tagged_objects'] * len(self.tagged_objects)
 
+            # ### Only include the objects with good tracking
+            # all_objects = ['bakingbox', 'bottle', 'egg', 'oatly']
+            # object_labels = ['tagless_objects', 'tagged_objects', 'tagged_objects', 'tagless_objects']
+
             for obj, tag_label in zip(all_objects, object_labels):
                 if tag_label not in result_dict.keys():
                     continue
@@ -1487,61 +1551,83 @@ class ResultsPlotter:
             subdir='object_geometry', save_to_txt=True, normalize=False)
         
     def plot_object_geometry_scatter(
-            self, hull_or_full: str, geometry_metric: str):
+            self, hull_or_full: str, geometry_metric: str, 
+            exps: list = [BSDF_ONLY, BSDF_PLL], do_sort: bool = True):
         # Get the scale of the metric.
         scale = METRIC_SCALING[geometry_metric]
 
-        # For now just do this for BundleSDF-PLL and BundleSDF-Only.
-        by_object_bsdf_pll = {}  #[[], []] keys objects, vals [[toss_str], [ys]]
-        by_object_bsdf_only = {}  #[[], []]
+        for obj_scope in ['tagged', 'all']:
+            by_objects = {key: {} for key in exps}
+            sort_key = exps[0] if do_sort else ''
+            
+            # Iterate over all the approaches.
+            for exp_key in exps:
+                by_object = by_objects[exp_key]
+                result_dict = self.results[exp_key]
 
-        # Prepare to zip in consistent order:  BSDF-PLL, BundleSDF Only.
-        by_objects = [by_object_bsdf_pll, by_object_bsdf_only]
-        result_dicts = [self.bsdf_pll_results, self.bsdf_only_results]
+                if obj_scope == 'tagged':
+                    all_objects = self.tagged_objects
+                    object_labels = ['tagged_objects'] * len(self.tagged_objects)
+                elif obj_scope == 'all':
+                    # Iterate over all the objects.
+                    all_objects = self.tagless_objects + self.tagged_objects
+                    object_labels = ['tagless_objects'] * len(self.tagless_objects) + \
+                        ['tagged_objects'] * len(self.tagged_objects)
+                else:
+                    raise ValueError(f'Unknown object scope {obj_scope}')
+                
+                # all_objects = self.tagged_objects
+                # object_labels = ['tagged_objects'] * len(self.tagged_objects)
+                
+                for obj, tag_label in zip(all_objects, object_labels):
+                    if tag_label not in result_dict.keys():
+                        continue
+                    if obj not in result_dict[tag_label].keys():
+                        continue
 
-        # Iterate over all the approaches.
-        for by_object, result_dict in zip(by_objects, result_dicts):
+                    by_object[obj] = {}
 
-            # Iterate over all the objects.
-            all_objects = self.tagless_objects + self.tagged_objects
-            object_labels = ['tagless_objects'] * len(self.tagless_objects) + \
-                ['tagged_objects'] * len(self.tagged_objects)
+                    # Iterate over all the toss strings.
+                    for trained_on, result in result_dict[tag_label][obj].items():
+                        toss_str = trained_on.split('trained_on_toss_')[-1]
 
-            for obj, tag_label in zip(all_objects, object_labels):
-                if tag_label not in result_dict.keys():
-                    continue
-                if obj not in result_dict[tag_label].keys():
-                    continue
+                        by_object[obj][toss_str] = result['geometry_metrics'][
+                            hull_or_full][geometry_metric] * scale
 
-                by_object[obj] = {}
-
-                # Iterate over all the toss strings.
-                for trained_on, result in result_dict[tag_label][obj].items():
-                    toss_str = trained_on.split('trained_on_toss_')[-1]
-
-                    by_object[obj][toss_str] = result['geometry_metrics'][
-                        hull_or_full][geometry_metric] * scale
-
-        # Generate the plots.
-        title = 'Chamfer Distance' if \
-            geometry_metric == 'chamfer_distance' and 'full' in hull_or_full \
-            else f'Scatter {hull_or_full.replace("_", " ")} Geometry'.title()
-        ylabel = '% object length' if geometry_metric == 'chamfer_distance' \
-            and 'full' in hull_or_full else ERROR_LABELS[geometry_metric]
-        self._do_scatter_plot(
-            bp_data=by_object_bsdf_pll, bo_data=by_object_bsdf_only,
-            ylabel=ylabel, xlabel_txt=all_objects,
-            title=title,
-            filename=f'scatter_{geometry_metric}_v_data_{hull_or_full}_normalized',
-            subdir='object_geometry', save_to_txt=True, normalize=True)
-        ylabel = 'Centimeters' if geometry_metric == 'chamfer_distance' \
-            and 'full' in hull_or_full else ERROR_LABELS[geometry_metric]
-        self._do_scatter_plot(
-            bp_data=by_object_bsdf_pll, bo_data=by_object_bsdf_only,
-            ylabel=ylabel, xlabel_txt=all_objects,
-            title=title,
-            filename=f'scatter_{geometry_metric}_v_data_{hull_or_full}_true_units',
-            subdir='object_geometry', save_to_txt=True, normalize=False)
+            # Generate the plots.
+            title = 'Chamfer Distance' if \
+                geometry_metric == 'chamfer_distance' and 'full' in hull_or_full \
+                else f'Scatter {hull_or_full.replace("_", " ")} Geometry'.title()
+            
+            ylabel = '% object length' if geometry_metric == 'chamfer_distance' \
+                and 'full' in hull_or_full else ERROR_LABELS[geometry_metric]
+            if obj_scope == 'tagged':
+                filename = f'scatter_{geometry_metric}_v_data_{hull_or_full}_normalized'
+            elif obj_scope == 'all':
+                filename = f'scatter_{geometry_metric}_v_data_allobj_{hull_or_full}_normalized'
+            else:
+                raise ValueError(f'Unknown object scope {obj_scope}')
+            self._do_scatter_plot(
+                data_dict=by_objects, sort_key=sort_key, ylabel=ylabel, 
+                xlabel_txt=all_objects, title=title,
+                # filename=f'scatter_{geometry_metric}_v_data_allobj_{hull_or_full}_normalized',
+                filename=filename,
+                subdir='object_geometry', save_to_txt=True, normalize=True, 
+                show_toss_id=True)
+            
+            ylabel = 'Centimeters' if geometry_metric == 'chamfer_distance' \
+                and 'full' in hull_or_full else ERROR_LABELS[geometry_metric]
+            if obj_scope == 'tagged':
+                filename = f'scatter_{geometry_metric}_v_data_{hull_or_full}_true_units'
+            elif obj_scope == 'all':
+                filename = f'scatter_{geometry_metric}_v_data_allobj_{hull_or_full}_true_units'
+            else:
+                raise ValueError(f'Unknown object scope {obj_scope}')
+            self._do_scatter_plot(
+                data_dict=by_objects, sort_key=sort_key, ylabel=ylabel, 
+                xlabel_txt=all_objects, title=title,
+                filename=filename,
+                subdir='object_geometry', save_to_txt=True, normalize=False, show_toss_id=True)
 
     def plot_gt_dynamics_comparison(
             self, toss_subset: str, dynamics_metric: str):
@@ -1713,6 +1799,385 @@ class ResultsPlotter:
                     f'{toss_subset}_{DYNAMICS_CATEGORY}_auc',
                 subdir='gt_dynamics')
 
+    def plot_tracking_geometry_diff_correlation(self, exp_tracking: str,
+                                                exp_geometry_diff: list):
+        """
+        Plotting the correlation between the tracking metrics of one experiment and the
+        difference in geometry metrics between two experiments.
+        """
+
+        empty_results = file_utils.load_empty_results_yaml()
+
+        # List of tracking metrics
+        tracking_metrics_name = []
+        tracking_metrics_data = []
+        tracking_metrics_dict = {}
+        for metric in ERROR_LABELS.keys():
+            # Tracking.
+            scale = METRIC_SCALING[metric]
+            for trajectory in ['full', 'toss']:
+                if metric in \
+                    empty_results['tracking_metrics']['against_tagslam'].keys():
+                    tracking_metric_name = f'{metric}_{trajectory}'
+                    tracking_metrics_name.append(tracking_metric_name)
+                    tracking_metrics_data.append([])
+                    tracking_metrics_dict[tracking_metric_name] = {}
+                    metric_dict = tracking_metrics_dict[tracking_metric_name]
+                    # Load the tracking data.
+
+                    # Iterate over all the objects.
+                    all_objects = self.tagged_objects
+                    object_labels = ['tagged_objects'] * len(self.tagged_objects)
+                    for obj, tag_label in zip(all_objects, object_labels):
+                        if tag_label not in self.results[exp_tracking].keys():
+                            continue
+                        if obj not in self.results[exp_tracking][tag_label].keys():
+                            continue
+                        metric_dict[obj] = {}
+                        metric_obj_dict = metric_dict[obj]
+
+                        # Iterate over all the toss strings.
+                        toss_ids = ['1', '2', '3', '4', '5']
+                        for toss_id in toss_ids:
+                            if obj == 'napkin' and toss_id in ['1', '2', '5']:
+                                continue
+                            toss_str = f'trained_on_toss_{toss_id}'
+                            assert toss_str in self.results[exp_tracking][
+                                tag_label][obj].keys()
+                            result = self.results[exp_tracking][
+                                tag_label][obj][toss_str]
+
+                            metric_obj_dict[toss_id] = result['tracking_metrics'][
+                                trajectory]['against_tagslam'][metric]['mean'] * scale
+                            tracking_metrics_data[-1].append(
+                                metric_obj_dict[toss_id])
+                            
+        # List of geometry metrics
+        geometry_metrics_name = []
+        geometry_metrics_data = []
+        geometry_metrics_dict = {}
+        for metric in ERROR_LABELS.keys():
+            # Geometry.
+            scale = METRIC_SCALING[metric]
+            for hull_or_full in ['full_geometry', 'convex_hull']:
+                for normalized in [True, False]:
+                    if metric in \
+                        empty_results['geometry_metrics'][hull_or_full].keys():
+                        geometry_metric_name = f'{metric}_{hull_or_full}_' + \
+                            f'{"normalized" if normalized else "true_units"}'
+                        geometry_metrics_name.append(geometry_metric_name)
+                        geometry_metrics_data.append([])
+                        geometry_metrics_dict[geometry_metric_name] = {}
+                        metric_dict = geometry_metrics_dict[geometry_metric_name]
+                        # Load the geometry data.
+
+                        # Iterate over all the objects.
+                        all_objects = self.tagged_objects
+                        object_labels = ['tagged_objects'] * len(self.tagged_objects)
+                        for obj, tag_label in zip(all_objects, object_labels):
+                            if tag_label not in self.results[
+                                exp_geometry_diff[0]].keys():
+                                continue
+                            if obj not in self.results[
+                                exp_geometry_diff[0]][tag_label].keys():
+                                continue
+                            metric_dict[obj] = {}
+                            metric_obj_dict = metric_dict[obj]
+
+                            # Iterate over all the toss strings.
+                            toss_ids = ['1', '2', '3', '4', '5']
+                            for toss_id in toss_ids:
+                                if obj == 'napkin' and toss_id in ['1', '2', '5']:
+                                    continue
+                                toss_str = f'trained_on_toss_{toss_id}'
+                                assert toss_str in self.results[exp_geometry_diff[0]][
+                                    tag_label][obj].keys()
+                                result_0 = self.results[exp_geometry_diff[0]][
+                                    tag_label][obj][toss_str]
+                                try:
+                                    result_1 = self.results[exp_geometry_diff[1]][
+                                        tag_label][obj][toss_str]
+                                except:
+                                    pdb.set_trace()
+
+                                error_0 = result_0['geometry_metrics'][
+                                    hull_or_full][metric] * scale
+                                error_1 = result_1['geometry_metrics'][
+                                    hull_or_full][metric] * scale
+                                if normalized:
+                                    error_0 /= CM_LENGTH_SCALES_BY_OBJ[obj]
+                                    error_0 *= 100
+                                    error_1 /= CM_LENGTH_SCALES_BY_OBJ[obj]
+                                    error_1 *= 100
+                                metric_obj_dict[toss_id] = error_1 - error_0
+                                geometry_metrics_data[-1].append(error_1 - error_0)
+
+        title = f'Spearman Correlation between {exp_tracking} Tracking \n and ' + \
+                f'Geometry Metrics Diff {exp_geometry_diff[1]} - {exp_geometry_diff[0]}'
+        self._do_correlation_matrix_plot(tracking_metrics_data, geometry_metrics_data, 
+                                         tracking_metrics_name, geometry_metrics_name,
+                                         title=title, subdir='tracking_geometry_diff')
+        
+        title=f'{exp_tracking} Tracking vs. \n' + \
+            f'{exp_geometry_diff[1]} - {exp_geometry_diff[0]} Geometry Metrics'
+        self._do_correlation_scatter_plot(tracking_metrics_data, geometry_metrics_data,
+                                     tracking_metrics_name, geometry_metrics_name,
+                                     tracking_metrics_dict, geometry_metrics_dict, 
+                                     distinguish_exp = False, 
+                                     title = title, subdir = 'tracking_geometry_diff')
+
+    def plot_tracking_geometry_correlation(
+            self, exps: list = [BSDF_ONLY, BSDF_PLL]):
+        """
+        Plotting the correlation between tracking and geometry metrics.
+        Given a list of experiments, go through each pair of tracking and geometric metrics, 
+        using log-transformed data if necessary, and apply standardization to the data.
+        Then calculate the correlation between the two metrics, and plot the results.
+        Use the Spearman correlation coefficient. 
+        """
+
+        empty_results = file_utils.load_empty_results_yaml()
+        # List of tracking metrics
+        tracking_metrics_name = []
+        tracking_metrics_data = []
+        tracking_metrics_dict = {}
+        for metric in ERROR_LABELS.keys():
+            # Tracking.
+            scale = METRIC_SCALING[metric]
+            for trajectory in ['full', 'toss']:
+                if metric in \
+                    empty_results['tracking_metrics']['against_tagslam'].keys():
+                    tracking_metric_name = f'{metric}_{trajectory}'
+                    tracking_metrics_name.append(tracking_metric_name)
+                    tracking_metrics_data.append([])
+                    tracking_metrics_dict[tracking_metric_name] = {}
+                    metric_dict = tracking_metrics_dict[tracking_metric_name]
+                    # Load the tracking data.
+
+                    # Iterate over all the approaches.
+                    for exp_key in exps:
+                        result_dict = self.results[exp_key]
+                        metric_dict[exp_key] = {}
+                        metric_exp_dict = metric_dict[exp_key]
+
+                        # Iterate over all the objects.
+                        all_objects = self.tagged_objects
+                        object_labels = ['tagged_objects'] * len(self.tagged_objects)
+                        for obj, tag_label in zip(all_objects, object_labels):
+                            if tag_label not in result_dict.keys():
+                                continue
+                            if obj not in result_dict[tag_label].keys():
+                                continue
+                            metric_exp_dict[obj] = {}
+                            metric_exp_obj_dict = metric_exp_dict[obj]
+
+                            # Iterate over all the toss strings.
+                            toss_ids = ['1', '2', '3', '4', '5']
+                            for toss_id in toss_ids:
+                                if obj == 'napkin' and toss_id in ['1', '2', '5']:
+                                    continue
+                                toss_str = f'trained_on_toss_{toss_id}'
+                                assert toss_str in result_dict[tag_label][obj].keys()
+                                result = result_dict[tag_label][obj][toss_str]
+
+                                metric_exp_obj_dict[toss_id] = result['tracking_metrics'][
+                                    trajectory]['against_tagslam'][metric]['mean'] * scale
+                                
+                                tracking_metrics_data[-1].append(
+                                    metric_exp_obj_dict[toss_id])
+                                
+        # List of geometry metrics
+        geometry_metrics_name = []
+        geometry_metrics_data = []
+        geometry_metrics_dict = {}
+        geometry_metrics_dict_one_level = {}
+        for metric in ERROR_LABELS.keys():
+            # Geometry.
+            scale = METRIC_SCALING[metric]
+            for hull_or_full in ['full_geometry', 'convex_hull']:
+                for normalized in [True, False]:
+                    if metric in \
+                        empty_results['geometry_metrics'][hull_or_full].keys():
+                        geometry_metric_name = f'{metric}_{hull_or_full}_' + \
+                            f'{"normalized" if normalized else "true_units"}'
+                        geometry_metrics_name.append(geometry_metric_name)
+                        geometry_metrics_data.append([])
+                        geometry_metrics_dict_one_level[geometry_metric_name] = \
+                            geometry_metrics_data[-1]
+                        geometry_metrics_dict[geometry_metric_name] = {}
+                        metric_dict = geometry_metrics_dict[geometry_metric_name]
+                        # Load the geometry data.
+
+                        # Iterate over all the approaches.
+                        for exp_key in exps:
+                            result_dict = self.results[exp_key]
+                            metric_dict[exp_key] = {}
+                            metric_exp_dict = metric_dict[exp_key]
+
+                            # Iterate over all the objects.
+                            all_objects = self.tagged_objects
+                            object_labels = ['tagged_objects'] * len(self.tagged_objects)
+                            for obj, tag_label in zip(all_objects, object_labels):
+                                if tag_label not in result_dict.keys():
+                                    continue
+                                if obj not in result_dict[tag_label].keys():
+                                    continue
+                                metric_exp_dict[obj] = {}
+                                metric_exp_obj_dict = metric_exp_dict[obj]
+
+                                # Iterate over all the toss strings.
+                                toss_ids = ['1', '2', '3', '4', '5']
+                                for toss_id in toss_ids:
+                                    if obj == 'napkin' and toss_id in ['1', '2', '5']:
+                                        continue
+                                    toss_str = f'trained_on_toss_{toss_id}'
+                                    assert toss_str in result_dict[tag_label][obj].keys()
+                                    result = result_dict[tag_label][obj][toss_str]
+
+                                    error = result['geometry_metrics'][
+                                        hull_or_full][metric] * scale
+                                    if normalized:
+                                        error /= CM_LENGTH_SCALES_BY_OBJ[obj]
+                                        error *= 100
+                                    metric_exp_obj_dict[toss_id] = error
+                                    geometry_metrics_data[-1].append(error)                        
+
+        title = 'Spearman Correlation between Tracking and Geometry Metrics \n' + \
+                f'in {", ".join(exps)} Experiments'
+        self._do_correlation_matrix_plot(tracking_metrics_data, geometry_metrics_data,
+                                         tracking_metrics_name, geometry_metrics_name,
+                                         title=title, subdir='tracking_geometry')
+        
+        title = f'Scatter Plot of Tracking vs. Geometry Metrics \n' + \
+                f'in {", ".join(exps)} Experiments'
+        self._do_correlation_scatter_plot(tracking_metrics_data, geometry_metrics_data,
+                                        tracking_metrics_name, geometry_metrics_name,
+                                        tracking_metrics_dict, geometry_metrics_dict,
+                                        distinguish_exp = True, title = title, 
+                                        subdir = 'tracking_geometry')
+        
+
+    def _do_correlation_matrix_plot(self, data_1: list, data_2: list, 
+                                    data_1_labels: list, data_2_labels: list,
+                                    title: str = 'Spearman Correlation', 
+                                    subdir: str = ''):
+        data_1 = np.array(data_1)
+        data_2 = np.array(data_2)
+
+        # Calculate the spearmanr correlation between tracking and geometry metrics.
+        spearmanr_correlation = stats.spearmanr(data_1, data_2, axis=1)
+        spearmanr_correlation_mat = spearmanr_correlation.statistic
+        pvalues = spearmanr_correlation.pvalue
+
+        ### Plot the correlation matrix.
+        fig, ax = plt.subplots()
+        im = ax.imshow(spearmanr_correlation_mat)
+
+        # We want to show all ticks...
+        ax.set_xticks(np.arange(len(data_2_labels))+len(data_1_labels))
+        ax.set_yticks(np.arange(len(data_1_labels)))
+        # ... and label them with the respective list entries
+        ax.set_xticklabels(data_2_labels)
+        ax.set_yticklabels(data_1_labels)
+
+        # Rotate the tick labels and set their alignment.
+        plt.setp(ax.get_xticklabels(), rotation=45, ha="right",
+                    rotation_mode="anchor")
+        
+        # Loop over data dimensions and create text annotations.
+        for i in range(len(data_1_labels)):
+            for j in range(len(data_1_labels), len(data_1_labels) + len(data_2_labels)):
+                text = ax.text(j, i, f'{spearmanr_correlation_mat[i, j]:.2f} \n' + \
+                                f'({pvalues[i, j]:.2f})',
+                            ha="center", va="center", color="w")
+                
+        ax.set_title(title, fontsize=20)
+        fig.set_size_inches(15, 15)
+        fig.tight_layout()
+        # plt.show()
+        filename = f'correlation_matrix.png'
+        file_utils.assure_created(op.join(self.plot_dir, subdir))
+        fig_path = op.join(self.plot_dir, subdir, filename)
+        fig.savefig(fig_path, dpi=100)
+        print(f'Saved {filename}')
+
+    def _do_correlation_scatter_plot(self, data_1: list, data_2: list,
+                                     data_1_labels: list, data_2_labels: list,
+                                     data_1_dict: dict, data_2_dict: dict, 
+                                     distinguish_exp: bool = False, title: str = '',
+                                     subdir: str = ''):
+        """For each pair of metrics in data_dict_1 and data_dict_2, 
+        plot the scatter plot."""
+        for i, data_1_label in enumerate(data_1_labels):
+            data_1_data = data_1[i]
+            for j, data_2_label in enumerate(data_2_labels):
+                data_2_data = data_2[j]
+
+                # Plot the scatter plot.
+                fig, ax = plt.subplots()
+
+                if not distinguish_exp:
+                    # Draw a horizontal line at y=0.
+                    ax.axhline(y=0, color='grey', linestyle='--')
+
+                if distinguish_exp:
+                    exp_legend_created = {exp_key: False for exp_key in \
+                                          data_1_dict[data_1_label].keys()}
+                # Add the text annotations.
+                if distinguish_exp:
+                    keys = sorted(list(data_1_dict[data_1_label].keys()))
+                    for exp_key in keys:
+                        assert exp_key in data_2_dict[data_2_label], \
+                        f'{exp_key} not in {data_2_dict[data_2_label].keys()}'
+                        for obj in data_1_dict[data_1_label][exp_key].keys():
+                            assert obj in data_2_dict[data_2_label][exp_key], \
+                            f'{obj} not in {data_2_dict[data_2_label][exp_key].keys()}'
+                            for toss_id in data_1_dict[data_1_label][
+                                exp_key][obj].keys():
+                                assert toss_id in data_2_dict[data_2_label][exp_key][obj], \
+                                f'{toss_id} not in {data_2_dict[data_2_label][exp_key][obj].keys()}'
+                                x = data_1_dict[data_1_label][exp_key][obj][toss_id]
+                                y = data_2_dict[data_2_label][exp_key][obj][toss_id]
+                                if not exp_legend_created[exp_key]:
+                                    exp_legend_created[exp_key] = True
+                                    ax.scatter(x, y, color=COLORS[exp_key], 
+                                                label=LABELS[exp_key])
+                                else:
+                                    ax.scatter(x, y, color=COLORS[exp_key])
+                                anno_txt = f'{obj[0]}{toss_id}'
+                                ax.annotate(anno_txt, (x, y), #color=COLORS[exp_key], 
+                                            ha='left', va='bottom')
+                else:
+                    for obj in data_1_dict[data_1_label].keys():
+                        for toss_id in data_1_dict[data_1_label][obj].keys():
+                            x = data_1_dict[data_1_label][obj][toss_id]
+                            y = data_2_dict[data_2_label][obj][toss_id]
+                            anno_txt = f'{obj[0]}{toss_id}'
+                            ax.annotate(anno_txt, (x, y), ha='left', va='bottom')
+
+                if not distinguish_exp:
+                    ax.scatter(data_1_data, data_2_data)
+                    # ax.scatter(data_1_data, data_2_data, color='black')
+                # else:
+                #     ax.scatter(data_1_data, data_2_data)
+                # Add the labels.
+                ax.set_xlabel(data_1_label, fontsize=20)
+                ax.set_ylabel(data_2_label, fontsize=20)
+                ax.set_title(title, fontsize=20)
+
+                if distinguish_exp:
+                    ax.legend(fontsize=20)
+                fig.set_size_inches(13, 10)
+                # plt.show()
+                filename = f'{data_1_label}_vs_{data_2_label}'
+                filename += '_diff' if not distinguish_exp else ''
+                filename += '.png' if not filename.endswith('.png') else ''
+                file_utils.assure_created(op.join(self.plot_dir, subdir))
+                fig_path = op.join(self.plot_dir, subdir, filename)
+                fig.savefig(fig_path, dpi=100)
+                print(f'Saved {filename}')
+                plt.close()
+    
     # TODO: Part of rebuttal exploration, eventually incorporate repeated code.
     def _do_scatter_plot_with_convex2(self, bp_data: list = None, 
                          bo_data: list = None, bc_data: list = None,
@@ -2040,58 +2505,87 @@ class ResultsPlotter:
                     txt_file.write(data_str)
                 print(f'Wrote to {str_filepath}')
 
-    def _do_scatter_plot(self, bp_data: list = None, bo_data: list = None,
+    def _do_scatter_plot(self, data_dict: dict = None, sort_key: str = '',
                          ylabel: str = '', xlabel_txt: str = '',
                          title: str = '', filename: str = '', subdir: str = '',
-                         save_to_txt: bool = False, normalize: bool = False):
-        assert bp_data is not None and bo_data is not None
+                         save_to_txt: bool = False, normalize: bool = False, 
+                         show_toss_id: bool = False):
+        assert data_dict is not None
+        if sort_key == '':
+            print('No sorting of the object list, plot will be in static order.')
+        else:
+            assert sort_key in data_dict.keys(), f'{sort_key=} not in {data_dict.keys()}'
+            print(f'Sorting the object list by the performance of {sort_key}.')
+        n_exp = len(data_dict)
+        exp_key_list = list(data_dict.keys())
+        exp_key_list.sort()
 
         # Make a plot for all the toss configurations.
         toss_groups = [['1', '2', '3', '4', '5']] #, ['1-2'], ['1-3'], ['1-4'], ['1-5']]
         for num_tosses, toss_strs in enumerate(toss_groups):
             num_tosses += 1   # Use 1-indexing.
 
+            ys = dict()
+            ys_means = dict()
             # Get longer lists repeating objects in groups, e.g. cube, cube, ...
             # x_txts = [obj for obj in xlabel_txt for _ in toss_strs]
-            try:
-                bp_ys = [bp_data[obj][toss_str] for obj in xlabel_txt for toss_str \
-                    in toss_strs]
-            except:
-                pdb.set_trace()
-            bo_ys = [bo_data[obj][toss_str] for obj in xlabel_txt for toss_str \
-                in toss_strs]
+            for exp_key in data_dict:
+                data = data_dict[exp_key]
+                try:
+                    ys[exp_key] = [data[obj][toss_str] for obj in xlabel_txt for toss_str \
+                        in toss_strs]
+                except:
+                    pdb.set_trace()
 
-            # Get in (n_object, n_toss_groups) 2D arrays.
-            bp_ys = np.array(bp_ys).reshape(-1, len(toss_strs))
-            bo_ys = np.array(bo_ys).reshape(-1, len(toss_strs))
+            if show_toss_id:
+                toss_ids = [toss_str for _ in xlabel_txt for toss_str in toss_strs]
+                # [1,2,3,4,5,1,2,3,4,5,...]
+                ## The later sorting is in terms of objects, not changing the toss_ids. 
 
-            # Convert the data into % of normalized units.
-            if normalize:
-                for i, obj_name in enumerate(xlabel_txt):
-                    bp_ys[i, :] /= CM_LENGTH_SCALES_BY_OBJ[obj_name]
-                    bp_ys[i, :] *= 100
-                    bo_ys[i, :] /= CM_LENGTH_SCALES_BY_OBJ[obj_name]
-                    bo_ys[i, :] *= 100
+            for exp_key, ys_exp in ys.items():
+                ys_exp = np.array(ys_exp).reshape(-1, len(toss_strs))
 
-            bp_ys_means = bp_ys.mean(axis=1).tolist()
-            bo_ys_means = bo_ys.mean(axis=1).tolist()
+                # Convert the data into % of normalized units.
+                if normalize:
+                    for i, obj_name in enumerate(xlabel_txt):
+                        ys_exp[i, :] /= CM_LENGTH_SCALES_BY_OBJ[obj_name]
+                        ys_exp[i, :] *= 100
 
-            bp_ys = bp_ys.tolist()
-            bo_ys = bo_ys.tolist()
+                ys_exp_means = ys_exp.mean(axis=1).tolist()
+                ys_exp = ys_exp.tolist()
 
-            # Try sorting all the data so the average BundleSDF-only results are
+                ys[exp_key] = ys_exp
+                ys_means[exp_key] = ys_exp_means
+
+            # Try sorting all the data so the results of the given key are
             # in increasing order.
-            combined = list(zip(
-                xlabel_txt, bp_ys_means, bo_ys_means, bp_ys, bo_ys))
-            sorted_combined = sorted(combined, key=lambda x: x[2])
-            xlabel_txt, bp_ys_means, bo_ys_means, bp_ys, bo_ys = \
-                zip(*sorted_combined)
+            if sort_key != '':
+                ys_list = []
+                ys_means_list = []
+                sort_key_i = None
+                for i_key, exp_key in enumerate(exp_key_list):
+                    ys_list.append(ys[exp_key])
+                    ys_means_list.append(ys_means[exp_key])
+                    if exp_key == sort_key:
+                        sort_key_i = i_key
+                assert sort_key_i is not None, f'{sort_key=} not in {data_dict.keys()}'
+                
+                combined = list(zip(xlabel_txt, *ys_means_list, *ys_list))
+                sorted_combined = sorted(combined, key=lambda x: x[sort_key_i+1])
+                xlabel_txt, *ys_means_list_and_ys = zip(*sorted_combined)
+                ys_means_list = ys_means_list_and_ys[:n_exp]
+                ys_list = ys_means_list_and_ys[n_exp:]
+
+                for i_key, exp_key in enumerate(exp_key_list):
+                    ys[exp_key] = ys_list[i_key]
+                    ys_means[exp_key] = ys_means_list[i_key]
 
             xs_means = np.array([i for i in range(len(xlabel_txt))])
             xs = np.array([i for i in range(len(xlabel_txt)) for _ in \
                            toss_strs])
-            bp_ys = np.array(bp_ys).reshape(-1).tolist()
-            bo_ys = np.array(bo_ys).reshape(-1).tolist()
+            
+            for exp_key in data_dict:
+                ys[exp_key] = np.array(ys[exp_key]).reshape(-1).tolist()
 
             fig = plt.figure()
             ax = plt.gca()
@@ -2101,38 +2595,37 @@ class ResultsPlotter:
                 data_str += f'NORMALIZING? --> {normalize=}\n'
                 data_str += f'{xlabel_txt=}'
 
-            # Vysics.
-            # plt.scatter(xs_means+0.2, bp_ys_means, s=MARKERSIZE*2,
-            #     color=BSDF_PLL_COLOR, label=BSDF_PLL_LABEL)
-            prefixes = [''] + ['_']*(len(xs_means)-1)
-            for i in range(len(xs_means)):
-                plt.plot([i-0.38, i+0.38], [bp_ys_means[i], bp_ys_means[i]],
-                         linestyle='-', linewidth=LINEWIDTH*2,
-                         color=BSDF_PLL_COLOR, label=prefixes[i]+BSDF_PLL_LABEL)
-            # plt.plot(xs_means, bp_ys_means, '.', linestyle='-',
-            #     markersize=MARKERSIZE/3, linewidth=LINEWIDTH,
-            #     color=BSDF_PLL_COLOR, label=BSDF_PLL_LABEL)
-            plt.scatter(xs+0.2, bp_ys, s=MARKERSIZE, color=BSDF_PLL_COLOR,
-                        label='_')
-            if save_to_txt:
-                data_str += f'\nbp_data:\n{bp_ys}'
+            # Calculate the horizontal position of the scatter points.
+            # Evenly distribute the scatter points for each object, which is of width 1. 
+            # e.g., if there are two experiments, the scatter points should be at x-0.25 and x+0.25
+            # for an object centered at x. 
+            width = 1 / n_exp
+            x_offsets = np.linspace(-0.5+width/2, 0.5-width/2, n_exp)
 
-            # BundleSDF only.
-            # plt.scatter(xs_means-0.2, bo_ys_means, s=MARKERSIZE*2,
-            #     color=BSDF_ONLY_COLOR, label=BSDF_ONLY_LABEL)
-            # plt.plot(xs_means, bo_ys_means, '.', linestyle='-',
-            #     markersize=MARKERSIZE/3, linewidth=LINEWIDTH,
-            #     color=BSDF_ONLY_COLOR,
-            #     label=BSDF_ONLY_LABEL)
-            for i in range(len(xs_means)):
-                plt.plot([i-0.38, i+0.38], [bo_ys_means[i], bo_ys_means[i]],
-                         linestyle='-', linewidth=LINEWIDTH*2,
-                         color=BSDF_ONLY_COLOR,
-                         label=prefixes[i]+BSDF_ONLY_LABEL)
-            plt.scatter(xs-0.2, bo_ys, s=MARKERSIZE, color=BSDF_ONLY_COLOR,
-                        label='_')
-            if save_to_txt:
-                data_str += f'\nbo_data:\n{bo_ys}'
+            for i_key, exp_key in enumerate(exp_key_list):
+                exp_color = COLORS[exp_key]
+                exp_label = LABELS[exp_key]
+                prefixes = [''] + ['_']*(len(xs_means)-1)
+                for i in range(len(xs_means)):
+                    plt.plot([i-0.38, i+0.38], [ys_means[exp_key][i], ys_means[exp_key][i]],
+                            linestyle='-', linewidth=LINEWIDTH*2,
+                            color=exp_color, label=prefixes[i]+exp_label)
+                plt.scatter(xs+x_offsets[i_key], ys[exp_key], s=MARKERSIZE, color=exp_color,
+                            label='_')
+                if i_key < len(exp_key_list)-1:
+                    # Draw lines connecting corresponding points of different experiments.
+                    for i in range(len(xs_means)):
+                        for j in range(len(toss_strs)):
+                            plt.plot([i-0.5+width*(i_key+0.5), i-0.5+width*(i_key+1.5)],
+                                    [ys[exp_key][i*len(toss_strs)+j], \
+                                     ys[exp_key_list[i_key+1]][i*len(toss_strs)+j]],
+                                    linestyle='-', linewidth=0.5*LINEWIDTH, color='grey', alpha=0.5)
+                if show_toss_id:
+                    for i, toss_id in enumerate(toss_ids):
+                        plt.annotate(toss_id, (xs[i]+x_offsets[i_key]+0.05, ys[exp_key][i]), fontsize=12,
+                                    ha='left', va='center')
+                if save_to_txt:
+                    data_str += f'\n{exp_key}_data:\n{ys[exp_key]}'
 
             plt.xticks(range(len(xlabel_txt)), xlabel_txt, rotation=45,
                        ha='right', fontsize=20)
@@ -2569,6 +3062,8 @@ def process_gather_command(single_toss, exclude_pll):
     pll_blind_t_results = {}    # pll 09_0
 
     bsdf_convex_results = {}    # bsdf 00-cvwo_1 or bsdf 00-cvw_1
+    bsdf_convex_occ_results = {}# bsdf 00-cvwo-occ_1
+    bsdf_pll_convex_occ_results = {}# bsdf 00-cvwo-occ2x2_1
     gt_results = {}
 
     # Iterate over every evaluation subdirectory.
@@ -2598,11 +3093,16 @@ def process_gather_command(single_toss, exclude_pll):
             add_to_results = pll_blind_t_results
         elif '02_' in subdir and subdir.endswith('_2'):
             add_to_results = bsdf_pll_results
-        elif '02-cvwo2x2_' in subdir and subdir.endswith('_2'):
+        # elif '02-cvwo2x2_' in subdir and subdir.endswith('_2'):
+        elif '00-cvwo2x2-grid_' in subdir and subdir.endswith('_1'):
             add_to_results = bsdf_pll_convex_results
         elif '03_' in subdir and subdir.endswith('_2'):
             add_to_results = nerf_on_results
-        elif 'bsdf' in subdir and subdir.endswith('_1') and '00-cvwo_' in subdir:
+        elif 'bsdf' in subdir and subdir.endswith('_1') and '00-cvwo-occ2x2-grid_' in subdir:
+            add_to_results = bsdf_pll_convex_occ_results
+        elif 'bsdf' in subdir and subdir.endswith('_1') and '00-cvwo-occ-grid_' in subdir:
+            add_to_results = bsdf_convex_occ_results
+        elif 'bsdf' in subdir and subdir.endswith('_1') and '00-cvwo-grid_' in subdir:
             add_to_results = bsdf_convex_results
         elif subdir.endswith('_GT'):
             print(f'Found GT {subdir}...', end='')
@@ -2637,6 +3137,12 @@ def process_gather_command(single_toss, exclude_pll):
     file_utils.save_results_to_yaml(
         bsdf_pll_convex_results, file_utils.evaluation_dir(),
         filename='bsdf_pll_convex.yaml')
+    file_utils.save_results_to_yaml(
+        bsdf_convex_occ_results, file_utils.evaluation_dir(),
+        filename='bsdf_convex_occ.yaml')
+    file_utils.save_results_to_yaml(
+        bsdf_pll_convex_occ_results, file_utils.evaluation_dir(),
+        filename='bsdf_pll_convex_occ.yaml')
     if not exclude_pll:
         file_utils.save_results_to_yaml(
             pll_vision_results, file_utils.evaluation_dir(),
@@ -2655,10 +3161,10 @@ def process_gather_command(single_toss, exclude_pll):
     
 # Use 'plot' command to load the previously generated yaml files with results
 # and to generate plots with them.
-PLOT_TRACKING = True           # figure unused, text in table in manuscript
-PLOT_TRACKING_SCATTERS = True  # unused for manuscript
+PLOT_TRACKING = False           # figure unused, text in table in manuscript
+PLOT_TRACKING_SCATTERS = False  # unused for manuscript
 PLOT_DYNAMICS = False           # figure unused, text in table in manuscript
-PLOT_GEOMETRY = True           # unused for manuscript
+PLOT_GEOMETRY = False           # unused for manuscript
 PLOT_GEOMETRY_SCATTERS = True  # Fig 5 of manuscript
 PLOT_GT_COMPARISON = False       # exploration during rebuttal phase
 @cli.command('plot')
@@ -2682,6 +3188,10 @@ def process_plot_command(do_objects: bool):
         'bsdf_convex.yaml')
     bsdf_pll_convex_results = file_utils.load_gathered_results_yaml(
         'bsdf_pll_convex.yaml')
+    bsdf_convex_occ_results = file_utils.load_gathered_results_yaml(
+        'bsdf_convex_occ.yaml')
+    bsdf_pll_convex_occ_results = file_utils.load_gathered_results_yaml(
+        'bsdf_pll_convex_occ.yaml')
 
     # Ground truth results.
 
@@ -2701,9 +3211,16 @@ def process_plot_command(do_objects: bool):
         pll_blind_t_results=pll_blind_t_results,
         bsdf_convex_results=bsdf_convex_results,
         bsdf_pll_convex_results=bsdf_pll_convex_results,
+        bsdf_convex_occ_results=bsdf_convex_occ_results,
+        bsdf_pll_convex_occ_results=bsdf_pll_convex_occ_results,
         gt_results=gt_results,
         do_objects=do_objects
     )
+
+    # results_plotter.plot_tracking_geometry_correlation([BSDF_CONVEX_OCC, BSDF_PLL_CONVEX_OCC])
+    # results_plotter.plot_tracking_geometry_diff_correlation(BSDF_CONVEX_OCC, [BSDF_CONVEX_OCC, BSDF_PLL_CONVEX_OCC])
+    results_plotter.plot_tracking_geometry_correlation([BSDF_CONVEX, BSDF_PLL_CONVEX])
+    results_plotter.plot_tracking_geometry_diff_correlation(BSDF_CONVEX, [BSDF_CONVEX, BSDF_PLL_CONVEX])
 
     for metric in ERROR_LABELS.keys():
         # Tracking.
@@ -2717,7 +3234,8 @@ def process_plot_command(do_objects: bool):
                 if PLOT_TRACKING_SCATTERS:
                     print(f'Plotting TagSLAM {trajectory} scatters, {metric}')
                     results_plotter.plot_object_tagslam_tracking_scatter(
-                        trajectory, metric)
+                        trajectory, metric, [BSDF_CONVEX, BSDF_PLL_CONVEX], False)
+                        # trajectory, metric, [BSDF_CONVEX_OCC, BSDF_PLL_CONVEX_OCC], False)
             if metric in \
                 empty_results['tracking_metrics']['against_bundlesdf'].keys():
                 if PLOT_TRACKING:
@@ -2774,9 +3292,10 @@ def process_plot_command(do_objects: bool):
                     'convex_hull', metric)
             if PLOT_GEOMETRY_SCATTERS:
                 print(f'Plotting convex hull geometry scatters {metric}')
-                # results_plotter.plot_object_geometry_scatter(
-                results_plotter.plot_object_geometry_scatter_withconvex(
-                    'convex_hull', metric)
+                results_plotter.plot_object_geometry_scatter(
+                # results_plotter.plot_object_geometry_scatter_withconvex(
+                    'convex_hull', metric, [BSDF_CONVEX, BSDF_PLL_CONVEX], False)
+                    # 'convex_hull', metric, [BSDF_CONVEX_OCC, BSDF_PLL_CONVEX_OCC], False)
         if metric in \
             empty_results['geometry_metrics']['full_geometry'].keys():
             if PLOT_GEOMETRY:
@@ -2785,9 +3304,10 @@ def process_plot_command(do_objects: bool):
                     'full_geometry', metric)
             if PLOT_GEOMETRY_SCATTERS:
                 print(f'Plotting full geometry geometry scatters {metric}')
-                # results_plotter.plot_object_geometry_scatter(
-                results_plotter.plot_object_geometry_scatter_withconvex(
-                    'full_geometry', metric)
+                results_plotter.plot_object_geometry_scatter(
+                # results_plotter.plot_object_geometry_scatter_withconvex(
+                    'full_geometry', metric, [BSDF_CONVEX, BSDF_PLL_CONVEX], False)
+                    # 'full_geometry', metric, [BSDF_CONVEX_OCC, BSDF_PLL_CONVEX_OCC], False)
         
         ### Commented out because not all experiments are evaluated with hull_to_full
         ### and preliminary results show that hull_to_full does not outperform full_geometry.

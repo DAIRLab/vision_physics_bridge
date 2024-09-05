@@ -392,7 +392,7 @@ def inspection_input_video_filepath(vision_asset: str) -> str:
 
 def inspection_overlay_video_filepath(
         dataset: str, tracking_bundlesdf_id: str, nerf_bundlesdf_id: str,
-        cycle_iteration: int) -> str:
+        cycle_iteration: int, gt_mesh: bool = False) -> str:
     """The directory for all overlay videos."""
     overlay_video_dir = op.join(inspection_dir(), 'overlay_videos')
 
@@ -403,8 +403,12 @@ def inspection_overlay_video_filepath(
 
     now = datetime.datetime.now()
     date_str = now.strftime('%m%d')
-    filename = f'{date_str}_{dataset}_{tracking_bundlesdf_id}_' + \
-        f'{nerf_bundlesdf_id}_{cycle_iteration}.mp4'
+    if gt_mesh:
+        filename = f'{date_str}_{dataset}_{tracking_bundlesdf_id}_' + \
+            f'{nerf_bundlesdf_id}_{cycle_iteration}_gt_mesh.mp4'
+    else:
+        filename = f'{date_str}_{dataset}_{tracking_bundlesdf_id}_' + \
+            f'{nerf_bundlesdf_id}_{cycle_iteration}.mp4'
 
     return op.join(overlay_video_dir, filename)
 
@@ -647,13 +651,28 @@ def aligned_object_scan_dir() -> str:
     return assure_created(
         op.join(object_scan_dir(), 'true_aligned_to_experiments'))
 
-def aligned_true_geometry_filepath(vision_asset: str, check_exists: bool =True
-                                   ) -> str:
+def aligned_true_geometry_filepath(
+        dataset: str, cycle_iteration: int, tracking_bundlesdf_id: str = None,
+        nerf_bundlesdf_id: str = None, pll_id: str = None, check_exists: bool = True
+) -> str:
     """Return the filepath of an object's ground truth scan."""
-    aligned_filepath = op.join(aligned_object_scan_dir(), f'{vision_asset}.obj')
+    run_eval_dir = evaluation_subdir(
+        dataset, cycle_iteration, tracking_bundlesdf_id=tracking_bundlesdf_id,
+        nerf_bundlesdf_id=nerf_bundlesdf_id, pll_id=pll_id
+    )
+    aligned_filepath = op.join(run_eval_dir, 'true_geom_aligned_assist.obj')
     if check_exists:
+        if not op.exists(aligned_filepath):
+            aligned_filepath = op.join(
+                run_eval_dir, 'true_geom_aligned_assist_copied.obj')
+        if not op.exists(aligned_filepath):
+            aligned_filepath = op.join(
+                run_eval_dir, 'true_geom_aligned.obj')
+        assert op.exists(aligned_filepath), f'Checked for true ' + \
+            f'geometry at {aligned_filepath=}, _assist, and _copied ' + \
+            f' but did not find either.'
         assert op.exists(aligned_filepath), f'No aligned scan found for ' + \
-            f'{vision_asset} in {aligned_object_scan_dir()}.'
+            f'{dataset} in {run_eval_dir}.'
     return aligned_filepath
 
 def template_urdf_filepath() -> str:

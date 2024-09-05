@@ -13,6 +13,7 @@ import torch
 from torch import Tensor
 from typing import Tuple
 import click
+import trimesh
 
 import meshcat
 import meshcat.geometry as g
@@ -22,7 +23,7 @@ import file_utils, math_utils, overlay_videos
 
 from conversion_bsdf_to_pll import TrajectoryConverterBundleSDFToPLL
 from overlay_videos import OverlayVideoGenerator
-
+import pdb
 DATA_GEN_DIR = op.dirname(op.realpath(__file__))
 REPO_DIR = op.dirname(DATA_GEN_DIR)
 PLL_DIR = op.join(REPO_DIR, 'dair_pll')
@@ -175,8 +176,103 @@ def _get_mesh_interior_point(halfspaces: np.ndarray) -> Tuple[np.ndarray,float]:
     interior_point_gap = res.x[-1]
     return interior_point, interior_point_gap
 
-def convex_volume_error(vertices_learned: Tensor,
-                        vertices_true: Tensor) -> Tensor:
+def volume_error(true_mesh: trimesh.Trimesh, learned_grid: dict, 
+                 visualize: bool = False) -> float:
+    occ_bits = learned_grid['occ_bits']
+    bounds = learned_grid['bounds']
+    voxel_size = learned_grid['voxel_size']
+    Nx = learned_grid['Nx']
+    sc_factor = learned_grid['sc_factor']
+    translation = learned_grid['translation']
+    offset = learned_grid['offset']
+    occ_grid = np.unpackbits(occ_bits, count=Nx*Nx*Nx).reshape(Nx, Nx, Nx)
+    print("Learned grid bounds: ", bounds)
+
+    ### Ground truth mesh is in real world scale. Input grid is in normalized unit cube scale.
+    ### Unify them to the normalized unit cube scale,
+    ### so that the resolution of different objects are similar. 
+
+    ### The ground truth mesh may go out of the unit cube bound. 
+    ### We first convert the ground truth mesh to the normalized unit cube scale. 
+    vertices_gt = true_mesh.vertices
+    vertices_gt_normalized = math_utils.transform_pts_to_normalized_space(
+        vertices_gt, translation, sc_factor, offset)
+    true_mesh.vertices = vertices_gt_normalized
+    ### print bound
+    print(f"True mesh bounds: {true_mesh.bounds}")
+
+    ### Calculate the bounding box of the ground truth mesh, 
+    ### then we determine the overall bounding box of the input mesh and the ground truth mesh, 
+    ### and initialize the voxel grid with the common bounding box.
+    ### The grid points of input grid should be a subset of the new grid.
+    min_bounds = np.minimum(bounds[0], true_mesh.bounds[0])
+    max_bounds = np.maximum(bounds[1], true_mesh.bounds[1])
+
+    ### Round the min and max bounds to the outer nearest grid point.
+    grid_zero_in_cube = bounds[0]
+    min_bounds_in_grid = np.floor((min_bounds - bounds[0]) / voxel_size)
+    min_bounds = min_bounds_in_grid * voxel_size + bounds[0]
+    max_bounds_in_grid = np.ceil((max_bounds - bounds[0]) / voxel_size)
+    max_bounds = max_bounds_in_grid * voxel_size + bounds[0]
+    grid_size = max_bounds_in_grid - min_bounds_in_grid + np.ones(3)
+    ### Make sure the grid_size is odd in each dimension.
+    for i in range(3):
+        if grid_size[i] % 2 == 0:
+            grid_size[i] += 1
+            max_bounds[i] += voxel_size
+            max_bounds_in_grid[i] += 1
+
+    ### Make the grid_size the same in each dimension.
+    max_grid_size = np.max(grid_size)
+    for i in range(3):
+        if grid_size[i] < max_grid_size:
+            diff = max_grid_size - grid_size[i]
+            min_bounds[i] -= diff / 2 * voxel_size
+            max_bounds[i] += diff / 2 * voxel_size
+            grid_size[i] = max_grid_size
+            min_bounds_in_grid[i] -= diff / 2
+            max_bounds_in_grid[i] += diff / 2
+
+    ### Find the cube coord of the center grid point.
+    grid_half_n = (max_grid_size - 1) / 2
+    print(f"{grid_half_n=}")
+    print(f"{min_bounds_in_grid=}, {max_bounds_in_grid=}")
+    print(f"{min_bounds=}, {max_bounds=}")
+    min_bounds_in_grid = min_bounds_in_grid.astype(int)
+    max_bounds_in_grid = max_bounds_in_grid.astype(int)
+    grid_half_n = int(grid_half_n)
+
+    center_in_grid = grid_half_n + min_bounds_in_grid
+    center_in_cube = center_in_grid * voxel_size + bounds[0]
+    gt_voxel_grid = trimesh.voxel.creation.local_voxelize(
+            true_mesh, center_in_cube, voxel_size, grid_half_n)
+
+    ### We copy the input grid to the corresponding position in the common voxel grid. 
+    ### The input grid should be a subset of the new grid.
+    input_grid = np.zeros((int(max_grid_size), int(max_grid_size), int(max_grid_size)), dtype=bool)
+    input_grid[
+        -min_bounds_in_grid[0]:Nx-min_bounds_in_grid[0],
+        -min_bounds_in_grid[1]:Nx-min_bounds_in_grid[1],
+        -min_bounds_in_grid[2]:Nx-min_bounds_in_grid[2]] = occ_grid
+
+    ### Calculate IoU (Intersection over Union)
+    intersection = np.logical_and(input_grid, gt_voxel_grid.matrix).sum()
+    union = np.logical_or(input_grid, gt_voxel_grid.matrix).sum()
+    iou = intersection / union
+
+    ### Calculate volumetric error
+    volumetric_error = (1 - iou) * union / gt_voxel_grid.volume
+    volumetric_error = volumetric_error.item()
+    iou = iou.item()
+    print(f"Volumetric Error: {volumetric_error}")
+    print(f"IoU: {iou}")
+    if visualize:
+        return volumetric_error, iou, gt_voxel_grid, input_grid
+    else:
+        return volumetric_error, iou
+
+def convex_volume_error(vertices_true: Tensor,
+                        vertices_learned: Tensor) -> Tensor:
     """Relative error between two convex hulls of provided vertices.  This
     definition comes from:
     https://github.com/ebianchi/dair_pll/blob/main/helpers/corl_plot.py#L428

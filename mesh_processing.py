@@ -212,11 +212,12 @@ class MeshProcessor:
         # Use an interactive visualizer with key callbacks to do a manual
         # alignment of the true mesh to the learned mesh.  Refer back to the
         # reference video for the target pose to match the learned mesh.
-        interactive_vis = InteractiveVisualizer(self.true_mesh, learned_cloud)
-        interactive_vis.run()
+        if not self.meshlab:
+            interactive_vis = InteractiveVisualizer(self.true_mesh, learned_cloud)
+            interactive_vis.run()
 
-        manual_adjustments = interactive_vis.total_transformation
-        print(f'Total transformation: {manual_adjustments}')
+            manual_adjustments = interactive_vis.total_transformation
+            print(f'Total transformation: {manual_adjustments}')
 
         # Double check the aggregate transformation from the little steps is
         # correct.
@@ -232,15 +233,19 @@ class MeshProcessor:
             o3d.visualization.draw_geometries(
                 [true_cloud, learned_cloud], window_name="Initial Comparison")
 
-        centered_transform = np.eye(4)
-        # centered_transform[:3, 3] = learned_cloud.get_center() - \
-        #     true_cloud.get_center()
-        transform_to_apply = manual_adjustments @ centered_transform
+        if not self.meshlab:
+            centered_transform = np.eye(4)
+            # centered_transform[:3, 3] = learned_cloud.get_center() - \
+            #     true_cloud.get_center()
+            transform_to_apply = manual_adjustments @ centered_transform
+        else:
+            transform_to_apply = np.eye(4)
         true_cloud.transform(transform_to_apply)
-        # Visualize the initial alignment.
-        o3d.visualization.draw_geometries(
-            [true_cloud, learned_cloud], window_name="Before ICP")
-        true_cloud.transform(np.linalg.inv(transform_to_apply))
+        if not self.meshlab:
+            # Visualize the initial alignment.
+            o3d.visualization.draw_geometries(
+                [true_cloud, learned_cloud], window_name="Before ICP")
+            true_cloud.transform(np.linalg.inv(transform_to_apply))
 
         # Apply ICP.
         reg_p2p = o3d.pipelines.registration.registration_icp(
@@ -253,9 +258,10 @@ class MeshProcessor:
         # Transform the true mesh's point cloud by the solved transform and
         # view the results.
         true_cloud.transform(reg_p2p.transformation)
-        o3d.visualization.draw_geometries(
-            [true_cloud, learned_cloud],
-            window_name=f'After ICP, starting from manual adjustments')
+        if not self.meshlab:
+            o3d.visualization.draw_geometries(
+                [true_cloud, learned_cloud],
+                window_name=f'After ICP, starting from manual adjustments')
 
         print(f'Solved TF matrix:\n{reg_p2p.transformation}')
 
