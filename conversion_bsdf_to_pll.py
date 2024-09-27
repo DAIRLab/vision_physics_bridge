@@ -84,7 +84,7 @@ class TrajectoryConverterBundleSDFToPLL(TagSLAMTrajectoryConverter):
                  cam_rot_axis_angle: np.ndarray, frame_rate: int,
                  z_table: float, relative_start_frames: list,
                  relative_end_frames: list, start_ros_times: list,
-                 plot: bool = False) -> None:
+                 plot: bool = False, bsdf_offset_frames: int = 1) -> None:
         """Prepare for processing pose data from TagSLAM and BundleSDF.
 
         Args:
@@ -116,6 +116,7 @@ class TrajectoryConverterBundleSDFToPLL(TagSLAMTrajectoryConverter):
         self.end_toss = end_toss
         self.object = object
         self.cycle_iteration = cycle_iteration
+        self.bsdf_offset_frames = bsdf_offset_frames
 
         if (object in file_utils.TAGLESS_OBJECTS or \
             object.startswith('robot')) and not bsdf_only:
@@ -159,6 +160,13 @@ class TrajectoryConverterBundleSDFToPLL(TagSLAMTrajectoryConverter):
             relative_start_frames, full_times, start_ros_times)
         self.end_frames = math_utils.convert_relative_frames_to_absolute(
             relative_end_frames, full_times, start_ros_times)
+        
+        if self.bsdf_offset_frames > 1:
+            assert self.bsdf_offset_frames < self.start_frames[0], \
+              f'{self.bsdf_offset_frames=} is too large for ' \
+              f'{self.start_frames[0]=}.'
+            self.start_frames = self.start_frames - self.bsdf_offset_frames + 1
+            self.end_frames = self.end_frames - self.bsdf_offset_frames + 1
 
     def _load_poses(self) -> None:
         """Load the timestamped poses reported from TagSLAM, BundleSDF, and the
@@ -208,6 +216,11 @@ class TrajectoryConverterBundleSDFToPLL(TagSLAMTrajectoryConverter):
             op.join(self.cnets_data_gen_dir, 'synced_joint_velocities.txt'))
         robot_joint_efforts = np.loadtxt(
             op.join(self.cnets_data_gen_dir, 'synced_joint_efforts.txt'))
+
+        if self.bsdf_offset_frames > 1:
+            raise NotImplementedError(
+                'Robot joint states are not offset by the BundleSDF offset ' + \
+                'frames yet.')
 
         n_time_steps = robot_joint_angles.shape[0]
         n_time_steps_expected = self.bundlesdf_full_times.shape[0]
@@ -1218,10 +1231,14 @@ class GeometryConverterBundleSDFToPLL:
 @click.option('--show/--noshow',
               default=True,
               help="whether to show the plots.")
+@click.option('--offset-frames',
+              type=int,
+              default=1,
+              help="how many frames to offset the BundleSDF poses by.")
 
 def main_command(vision_asset: str, bundlesdf_id: str, nerf_bundlesdf_id: str,
                  cycle_iteration: int, bsdf_only: bool, make_videos: bool,
-                 remote: bool, show: bool):
+                 remote: bool, show: bool, offset_frames: int):
     # First decode the system and start/end tosses from the provided asset
     # directory.
     assert cycle_iteration > 0, f'Invalid cycle iteration: {cycle_iteration}.'
@@ -1298,19 +1315,21 @@ def main_command(vision_asset: str, bundlesdf_id: str, nerf_bundlesdf_id: str,
         end_toss=end_toss, object=object, cycle_iteration=cycle_iteration,
         bsdf_only=bsdf_only, cam_trans=cam_trans,
         cam_rot_axis_angle=cam_rot_axis_angle, frame_rate=30, z_table=z_table,
-        plot=show
+        plot=show, bsdf_offset_frames=offset_frames,
     )
     traj_converter.do_process()
     traj_converter.plot_trajectory(full_trajectory=True)
     traj_converter.plot_trajectory(full_trajectory=False)
-    traj_converter.save_data(save_tagslam=not bsdf_only, save_bundlesdf=True)
+    save_tagslam = not bsdf_only and offset_frames == 1
+    traj_converter.save_data(save_tagslam=save_tagslam, save_bundlesdf=True)
 
     # Create an overlay video.
     if make_videos:
         overlay_generator = OverlayVideoGenerator(
             vision_asset=vision_asset, tracking_bundlesdf_id=bundlesdf_id,
             nerf_bundlesdf_id=nerf_bundlesdf_id, bsdf_only=bsdf_only,
-            cycle_iteration=cycle_iteration, remote=remote
+            cycle_iteration=cycle_iteration, remote=remote,
+            bsdf_offset_frames=offset_frames,
         )
         overlay_generator.make_overlay_video()
         overlay_generator.make_optimized_keyframe_overlay_images()
@@ -1321,7 +1340,8 @@ def main_command(vision_asset: str, bundlesdf_id: str, nerf_bundlesdf_id: str,
     if make_videos:
         sdf_slice_generator = SDFSliceViewer(
             vision_asset=vision_asset, tracking_bundlesdf_id=bundlesdf_id,
-            nerf_bundlesdf_id=nerf_bundlesdf_id, cycle_iteration=cycle_iteration
+            nerf_bundlesdf_id=nerf_bundlesdf_id, cycle_iteration=cycle_iteration,
+            remote=remote
         )
         sdf_slice_generator.visualization()
     else:

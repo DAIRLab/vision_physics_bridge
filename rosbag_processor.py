@@ -300,7 +300,8 @@ camera frame.  This gets stored as a 4x4 transformation matrix titled 0000.txt
 in the annotated_poses directory.  Called by create_dataset.py."""
 def save_initial_tagslam_pose_in_camera_frame(
         synced_tagslam_world_poses_dir: str, annotated_poses_dir: str,
-        cam_trans: np.ndarray, cam_rot_axis_angle: np.ndarray
+        cam_trans: np.ndarray, cam_rot_axis_angle: np.ndarray,
+        frame_id: int = 0,
 ) -> None:
     """Given the extracted TagSLAM poses in world frame stored in
     synced_tagslam.txt, write the 0th annotated pose as the TagSLAM origin's
@@ -311,21 +312,22 @@ def save_initial_tagslam_pose_in_camera_frame(
         annotated_poses_dir
         cam_trans
         cam_rot_axis_angle
+        frame_id (0-indexed)
     """
     # Load the previously extracted TagSLAM world-frame trajectory.
     data = np.loadtxt(
         os.path.join(synced_tagslam_world_poses_dir, "synced_tagslam.txt"))
 
     # Get the first pose by eliminating the timestamp and all subsequent poses.
-    init_pose = data[0, 1:]
+    init_pose = data[frame_id, 1:]
 
     # Represent initial pose as a 4x4 transformation matrix in camera frame.
     mat = math_utils.pos_quat_to_trans_mat(init_pose)
     mat_cam = math_utils.world_to_camera(mat, cam_trans, cam_rot_axis_angle)
 
     # Write the 4x4 transformation matrix in annotated poses directory.
-    np.savetxt(os.path.join(annotated_poses_dir, "0000.txt"), mat_cam)
-    print(f'Initial pose saved to {annotated_poses_dir}/0000.txt.')
+    np.savetxt(os.path.join(annotated_poses_dir, f"{frame_id:04d}.txt"), mat_cam)
+    print(f'Initial pose saved to {annotated_poses_dir}/{frame_id:04d}.txt.')
 
 
 """Extract the depth images from a depth bag file between start and end times.

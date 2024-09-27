@@ -31,7 +31,8 @@ class TagSLAMTrajectoryConverter:
     origin-converted version of these TagSLAM trajectories using BundleSDF
     results obtained via its BundleSDF ID and cycle iteration."""
     def __init__(self, vision_asset: str, z_table: float, cycle_iteration: int,
-                 tracking_bundlesdf_id: str, nerf_bundlesdf_id: str) -> None:
+                 tracking_bundlesdf_id: str, nerf_bundlesdf_id: str, 
+                 bsdf_offset_frames: int = 1) -> None:
         self.z_table = z_table
         self.tagslam_dir = file_utils.synchronized_tagslam_pose_dir(
             vision_asset, check_exists=True)
@@ -49,6 +50,7 @@ class TagSLAMTrajectoryConverter:
         self.cycle_iteration = cycle_iteration
         self.tracking_bundlesdf_id = tracking_bundlesdf_id
         self.nerf_bundlesdf_id = nerf_bundlesdf_id
+        self.bsdf_offset_frames = bsdf_offset_frames
 
         # Hard code frame rate.
         self.frame_rate = 30
@@ -93,7 +95,7 @@ class TagSLAMTrajectoryConverter:
             self.tagslam_dir = file_utils.synchronized_tagslam_pose_dir(
                 self.dataset, check_exists=True)
             self.annotated_dir = file_utils.bundlesdf_annotated_poses_dir(
-                self.dataset)
+                self.dataset, offset_frames=self.bsdf_offset_frames)
 
     def _get_absolute_toss_frames(self) -> None:
         object = '_'.join(self.dataset.split('_')[:-1])
@@ -177,6 +179,12 @@ class TagSLAMTrajectoryConverter:
         self.tagslam_full_times = tagslam_data[:, 0]
         self.tagslam_t_full_poses = tagslam_data[:, 1:]
 
+        if self.bsdf_offset_frames > 1:
+            self.tagslam_full_times = self.tagslam_full_times[
+                self.bsdf_offset_frames-1:]
+            self.tagslam_t_full_poses = self.tagslam_t_full_poses[
+                self.bsdf_offset_frames-1:]
+
         # Also convert the TagSLAM poses to the BundleSDF body origin.
 
         # Get synchronized BundleSDF and TagSLAM poses -- pick the last keyframe
@@ -214,6 +222,9 @@ class TagSLAMTrajectoryConverter:
         bundlesdf_b_poses = []
         bundlesdf_times = np.loadtxt(
             op.join(self.bsdf_cnets_data_gen_dir, 'bundlesdf_timestamps.txt'))
+
+        if self.bsdf_offset_frames > 1:
+            bundlesdf_times = bundlesdf_times[self.bsdf_offset_frames-1:]
 
         # Add 1 for range bounds because BundleSDF poses are 1-indexed.
         for i in range(1, bundlesdf_times.shape[0] + 1):

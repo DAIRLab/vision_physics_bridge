@@ -79,6 +79,23 @@ def get_pll_geometry_output_dir(system: str, cycle_iteration: int,
     
     return pll_geom_output_dir
 
+def get_pll_urdf_output_dir(system: str, cycle_iteration: int,
+                                run_name: str):
+    """Directory with PLL run's obj outputs."""
+    # Reconstruct the PLL storage name.
+    obj_name = '_'.join(system.split('_')[:-1])
+    data_asset = f'vision_{obj_name}'
+    pose_source = pose_source = 'tagslam' if cycle_iteration == 0 else \
+        f'bundlesdf_iteration_{cycle_iteration}'
+    storage_name = op.join(pll_file_utils.RESULTS_DIR, data_asset, system, pose_source)
+
+    # Get the geometry output directory from the PLL storage.
+    pll_urdf_output_dir = pll_file_utils.get_learned_urdf_dir(
+        storage_name, run_name)
+    assert os.listdir(pll_urdf_output_dir), \
+        f'No output found at {pll_urdf_output_dir}'
+    
+    return pll_urdf_output_dir
 
 """Directories."""
 def bundlesdf_run_results_dir(dataset: str, cycle_iteration: int,
@@ -121,12 +138,14 @@ def bundlesdf_nerf_results_dir(
         f'exist but not found.'
     return nerf_results_dir
 
-def bundlesdf_annotated_poses_dir(dataset: str, create: bool = False) -> str:
+def bundlesdf_annotated_poses_dir(dataset: str, create: bool = False, offset_frames: int = 1) -> str:
     """BundleSDF's input annotated pose directory for a particular dataset.
     Contains 0000.txt file with the first TagSLAM origin's pose represented in
     camera frame."""
     bundlesdf_video_dir = bsdf_file_utils.top_video_dir()
-    path = op.join(bundlesdf_video_dir, dataset, 'annotated_poses')
+    offset_label = f'_offset_{offset_frames}' if offset_frames != 1 else ''
+    annotated_pose_folder = 'annotated_poses' + offset_label
+    path = op.join(bundlesdf_video_dir, dataset, annotated_pose_folder)
     if create:
         return assure_created(path)
     assert op.exists(path), f'Requires {path} to exist but not found.'
@@ -391,24 +410,37 @@ def inspection_input_video_filepath(vision_asset: str) -> str:
     return op.join(input_video_dir, f'{vision_asset}.mp4')
 
 def inspection_overlay_video_filepath(
-        dataset: str, tracking_bundlesdf_id: str, nerf_bundlesdf_id: str,
-        cycle_iteration: int, gt_mesh: bool = False) -> str:
+        dataset: str, tracking_bundlesdf_id: str, nerf_bundlesdf_id: str, 
+        pll_id: str, cycle_iteration: int, gt_mesh: bool = False) -> str:
     """The directory for all overlay videos."""
     overlay_video_dir = op.join(inspection_dir(), 'overlay_videos')
 
-    if tracking_bundlesdf_id.startswith('bundlesdf_id_'):
-        tracking_bundlesdf_id = tracking_bundlesdf_id[13:]
-    if nerf_bundlesdf_id.startswith('bundlesdf_id_'):
-        nerf_bundlesdf_id = nerf_bundlesdf_id[13:]
+    if tracking_bundlesdf_id is not None:
+        if tracking_bundlesdf_id.startswith('bundlesdf_id_'):
+            tracking_bundlesdf_id = tracking_bundlesdf_id[13:]
+        if nerf_bundlesdf_id.startswith('bundlesdf_id_'):
+            nerf_bundlesdf_id = nerf_bundlesdf_id[13:]
+    if pll_id is not None:
+            pll_id = pll_id[7:]
 
     now = datetime.datetime.now()
     date_str = now.strftime('%m%d')
-    if gt_mesh:
-        filename = f'{date_str}_{dataset}_{tracking_bundlesdf_id}_' + \
-            f'{nerf_bundlesdf_id}_{cycle_iteration}_gt_mesh.mp4'
+
+    ### tracking id
+    if cycle_iteration == 0:
+        tracking_id = 'tagslam'
     else:
-        filename = f'{date_str}_{dataset}_{tracking_bundlesdf_id}_' + \
-            f'{nerf_bundlesdf_id}_{cycle_iteration}.mp4'
+        tracking_id = f'{tracking_bundlesdf_id}'
+
+    ### mesh id
+    if gt_mesh:
+        mesh_id = 'gt_mesh'
+    elif pll_id is not None:
+        mesh_id = f'pll_{pll_id}'
+    else:
+        mesh_id = f'nerf_{nerf_bundlesdf_id}'
+
+    filename = f'{date_str}_{dataset}_{tracking_id}_{mesh_id}_{cycle_iteration}.mp4'
 
     return op.join(overlay_video_dir, filename)
 

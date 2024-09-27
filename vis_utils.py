@@ -249,7 +249,7 @@ def visualize_three_pts_sdfs(pts1, sdf1, pts2, sdf2, pts3, sdf3, max_n=5000,
         cmap3 = 'coolwarm'
         cval3 = sdf3
         print("using sdf3")
-    elif cval_geo2:
+    elif cval_geo3:
         # cmap3 = 'plasma'
         cmap3 = 'viridis'
         # cval2 = pts2.sum(1)
@@ -340,7 +340,7 @@ class SDFSliceViewer:
     plotting other relevant points like points sampled on the generated mesh and
     contact points given during SDF training."""
     def __init__(self, vision_asset: str, tracking_bundlesdf_id: str,
-                 nerf_bundlesdf_id: str, cycle_iteration: int):
+                 nerf_bundlesdf_id: str, cycle_iteration: int, remote: bool = False):
         # First decode the system and start/end tosses from the provided asset
         # directory.
         assert cycle_iteration > 0, f'Invalid {cycle_iteration=}.'
@@ -364,6 +364,8 @@ class SDFSliceViewer:
         self.tracking_bundlesdf_id = tracking_bundlesdf_id
         self.nerf_bundlesdf_id = nerf_bundlesdf_id
         self.cycle_iteration = cycle_iteration
+
+        self.remote = remote
 
     def visualization(self):
         # Get output filenames for the raw figure and video.
@@ -400,18 +402,37 @@ class SDFSliceViewer:
         cps_slices_filepath = op.join(sdf_dir, 'cps_slices.pt')
         cps_slices_pred_filepath = op.join(sdf_dir, 'cps_slices_predsdf.pt')
 
-        if self.cycle_iteration == 1:
-            visualize_two_pts_sdfs(
-                mesh_cleaned_pts, None, cps_slices_filepath,
-                cps_slices_pred_filepath, video_output_file=video_output_file,
-                figure_output_file=figure_output_file)
+        ### Need x server to run. Either run locally or run remotely with x
+        # forward configured.
+        if self.remote:
+            # Run Xvfb to create a virtual display.
+            print("Running Xvfb (virtual display) for rendering.")
+            import subprocess
+            self.xvfb_process = subprocess.Popen(['Xvfb', ':99', '-screen', '0',
+                                                  '640x480x24'])
+            print(f"Changing display environment from " + \
+                  f"{os.environ['DISPLAY']} variable to :99")
+            self.old_display = os.environ['DISPLAY']
+            os.environ['DISPLAY'] = ':99'
 
-        else:
-            cps_near_pcd_filepath = op.join(sdf_dir, 'cps_near_pcd.pt')
-            cps_near_sdf_filepath = op.join(sdf_dir, 'cps_near_sdf_pred.pt')
+        cps_near_pcd_filepath = op.join(sdf_dir, 'cps_near_pcd.pt')
+        cps_near_sdf_filepath = op.join(sdf_dir, 'cps_near_sdf_pred.pt')
 
+        if op.exists(cps_near_pcd_filepath) and op.exists(cps_near_sdf_filepath):
             visualize_three_pts_sdfs(
                 mesh_cleaned_pts, None, cps_near_pcd_filepath,
                 cps_near_sdf_filepath, cps_slices_filepath,
                 cps_slices_pred_filepath, video_output_file=video_output_file,
                 figure_output_file=figure_output_file)
+        else:
+            visualize_two_pts_sdfs(
+                mesh_cleaned_pts, None, cps_slices_filepath,
+                cps_slices_pred_filepath, video_output_file=video_output_file,
+                figure_output_file=figure_output_file)
+
+        if self.remote:
+            # Restore the original display environment.
+            print(f"Restoring display environment to {self.old_display}")
+            os.environ['DISPLAY'] = self.old_display
+            self.xvfb_process.kill()
+            print("Killed Xvfb process.")

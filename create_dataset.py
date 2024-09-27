@@ -125,7 +125,7 @@ class DatasetCreator:
                 self.vision_asset, check_exists=False)
             file_utils.assure_created(self.synced_tagslam_dir)
 
-    def create(self):
+    def create(self, overwrite: str = None):
         # Get the ROS bag, ensuring the start toss and end tosses are in the
         # same bag.
         self.rosbag_number = file_utils.load_rosbag_number_from_yaml(
@@ -133,6 +133,14 @@ class DatasetCreator:
 
         print(f'Processing {self.vision_asset} in ROS bag ' + \
               f'{self.rosbag_number}.\n')
+
+        if overwrite is not None:
+            if overwrite == 'annotated_poses':
+                print('Overwriting annotated poses.')
+                self._create_annotated_poses()
+            else:
+                raise NotImplementedError(f'Invalid overwrite: {overwrite}.')
+            return
 
         if not self.tagslam_only:
             self._create_images()
@@ -376,9 +384,13 @@ class DatasetCreator:
             cam_trans=self.cam_trans, cam_rot_axis_angle=self.cam_axis_vec
         )
         frame_num = len([name for name in os.listdir(self.rgb_dir)])
-        for frame_id in range(1, frame_num+1):
-            file_utils.create_annotated_poses(
-                output_dir=self.annotated_poses_dir, frame_id=frame_id)
+        for frame_id in range(1, frame_num):
+            rosbag_processor.save_initial_tagslam_pose_in_camera_frame(
+                synced_tagslam_world_poses_dir=self.synced_tagslam_dir,
+                annotated_poses_dir=self.annotated_poses_dir,
+                cam_trans=self.cam_trans, cam_rot_axis_angle=self.cam_axis_vec,
+                frame_id=frame_id
+            )
 
     def _compute_table_offset(self):
         # Visualize the depth offset with the ability to make adjustments for
@@ -421,9 +433,13 @@ class DatasetCreator:
 @click.option('--clear-data/--keep-data',
               default=False,
               help="whether to clear data folder before regenerating.")
+@click.option('--overwrite',
+              type=str,
+              default=None,
+              help="specify a directory to overwrite.")
 
 def main_command(vision_asset: str, tagslam_only: bool, bsdf_only: bool,
-                 clear_data: bool):
+                 clear_data: bool, overwrite: str):
     # Automatically detect if BundleSDF-only is necessary based on if the object
     # is a tagless one.
     object = '_'.join(vision_asset.split('_')[:-1])
@@ -439,6 +455,13 @@ def main_command(vision_asset: str, tagslam_only: bool, bsdf_only: bool,
         if clear_data:
             print(f'Overwriting existing video data at {data_dir}.')
             os.system(f'rm -r {data_dir}')
+        elif overwrite is not None:
+            subdir = os.path.join(data_dir, overwrite)
+            if op.exists(subdir):
+                print(f'Overwriting existing video data at {subdir}.')
+                os.system(f'rm -r {subdir}')
+            else:
+                print(f'The directory {subdir} does not exist. Creating it.')
         else:
             print(f'Exiting:  Video data already exists at {data_dir} -- ' + \
                   f'use --clear-data next time.')
@@ -448,6 +471,13 @@ def main_command(vision_asset: str, tagslam_only: bool, bsdf_only: bool,
         if clear_data:
             print(f'Overwriting existing TagSLAM data at {tagslam_dir}.')
             os.system(f'rm -r {tagslam_dir}')
+        elif overwrite is not None:
+            subdir = os.path.join(tagslam_dir, overwrite)
+            if op.exists(subdir):
+                print(f'Overwriting existing video data at {subdir}.')
+                os.system(f'rm -r {subdir}')
+            else:
+                print(f'The directory {subdir} does not exist. Creating it.')
         else:
             print(f'Exiting:  TagSLAM data already exists at {tagslam_dir} ' + \
                 f' -- use --clear-data next time.')
@@ -455,7 +485,9 @@ def main_command(vision_asset: str, tagslam_only: bool, bsdf_only: bool,
 
     # Create the dataset.
     dataset_creator = DatasetCreator(vision_asset, tagslam_only, bsdf_only)
-    dataset_creator.create()
+    dataset_creator.create(overwrite=overwrite)
+    if overwrite is not None:
+        return
     dataset_creator._compute_table_offset()
 
 

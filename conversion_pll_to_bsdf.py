@@ -59,7 +59,8 @@ class GeometryConverterPLLToBundleSDF:
                  bundlesdf_geom_input_dir: str,
                  bundlesdf_pose_output_dir: str,
                  annotated_poses_dir: str,
-                 do_tagslam_to_bsdf_transform: bool):
+                 do_tagslam_to_bsdf_transform: bool,
+                 bsdf_offset_frames: int):
         # Do some checks on the input directories.
         assert op.basename(pll_geom_output_dir) == 'geom_for_bsdf', \
             f'Unexpected PLL geometry output folder {pll_geom_output_dir}--' + \
@@ -81,6 +82,7 @@ class GeometryConverterPLLToBundleSDF:
         self.end_toss = end_toss
         self.pll_id = pll_id
         self.cycle_iteration = cycle_iteration
+        self.bsdf_offset_frames = bsdf_offset_frames
 
         # If the BundleSDF pose directory and annotated poses directory are not
         # provided, then it is assumed that the PLL run used BundleSDF poses
@@ -197,6 +199,12 @@ class GeometryConverterPLLToBundleSDF:
 
         self.start_frames = math_utils.convert_relative_frames_to_absolute(
             relative_start_frames, bundlesdf_times, start_ros_times)
+
+        if self.bsdf_offset_frames > 1:
+            assert self.bsdf_offset_frames < self.start_frames[0], \
+              f'{self.bsdf_offset_frames=} is too large for ' \
+              f'{self.start_frames[0]=}.'
+            self.start_frames = self.start_frames - self.bsdf_offset_frames + 1
 
     def _convert_body_to_cam_frame(
             self, data_in_body: Tensor, pose_dir: str, camera_frame_i: int
@@ -324,8 +332,13 @@ class GeometryConverterPLLToBundleSDF:
               help="BundleSDF-PLL cycle iteration number that the PLL " + \
                 "geometry estimates come from (-1 means PLL used TagSLAM " + \
                 "poses, 0 is invalid).")
+@click.option('--offset-frames',
+                type=int,
+                default=1,
+                help="number of frames to offset the start of the BundleSDF " + \
+                    "video from the start of the full video.")
 
-def main_command(vision_asset: str, pll_id: str, cycle_iteration: int):
+def main_command(vision_asset: str, pll_id: str, cycle_iteration: int, offset_frames: int):
     # First decode the system and start/end tosses from the provided asset
     # directory.
     assert '_' in vision_asset, f'Invalid asset directory: {vision_asset}.'
@@ -388,7 +401,8 @@ def main_command(vision_asset: str, pll_id: str, cycle_iteration: int):
         bundlesdf_geom_input_dir=bundlesdf_geometry_input_dir,
         bundlesdf_pose_output_dir=bundlesdf_pose_output_dir,
         annotated_poses_dir=annotated_poses_dir,
-        do_tagslam_to_bsdf_transform=do_tagslam_to_bsdf_transform
+        do_tagslam_to_bsdf_transform=do_tagslam_to_bsdf_transform,
+        bsdf_offset_frames=offset_frames,
     )
 
     converter.process_and_save()

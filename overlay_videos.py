@@ -42,10 +42,12 @@ PREDICTION_COLOR = 0x800080
 class OverlayVideoGenerator:
     """Generate an overlay video to compare TagSLAM and BundleSDF poses to the
     observed RGB images."""
-    def __init__(self, vision_asset: str, tracking_bundlesdf_id: str,
-                 nerf_bundlesdf_id: str, cycle_iteration: int,
+    def __init__(self, vision_asset: str, cycle_iteration: int,
+                 tracking_bundlesdf_id: str = None,
+                 nerf_bundlesdf_id: str = None, 
+                 pll_id: str = None,
                  bsdf_only: bool = False, remote: bool = False, 
-                 gt_mesh: bool = False) -> None:
+                 gt_mesh: bool = False, bsdf_offset_frames: int = 1) -> None:
         # First decode the system and start/end tosses from the provided asset
         # directory.
         assert cycle_iteration >= 0, f'Invalid {cycle_iteration=}.'
@@ -58,13 +60,30 @@ class OverlayVideoGenerator:
         assert start_toss <= end_toss, f'Invalid toss range: {start_toss} ' + \
                 f'-{end_toss} inferred from {vision_asset=}.'
 
+        assert not (gt_mesh and pll_id is not None), \
+            f'Cannot use mesh from {pll_id=} and gt_mesh at the same time.'
+        
+        # If pll_id is provided, use pll geometry. Otherwise, use bsdf geometry.
+        if pll_id is not None:
+            if pll_id[:7] != 'pll_id_':
+                pll_id = f'pll_id_{pll_id}'
+            self.pll_id = pll_id
+        else:
+            self.pll_id = None
+        
         # Decode the BundleSDF run ID.
-        if tracking_bundlesdf_id[:13] != 'bundlesdf_id_':
-            tracking_bundlesdf_id = f'bundlesdf_id_{tracking_bundlesdf_id}'
-        if nerf_bundlesdf_id is None:
-            nerf_bundlesdf_id = tracking_bundlesdf_id
-        elif nerf_bundlesdf_id[:13] != 'bundlesdf_id_':
-            nerf_bundlesdf_id = f'bundlesdf_id_{nerf_bundlesdf_id}'
+        if tracking_bundlesdf_id is not None:
+            if tracking_bundlesdf_id[:13] != 'bundlesdf_id_':
+                tracking_bundlesdf_id = f'bundlesdf_id_{tracking_bundlesdf_id}'
+            if nerf_bundlesdf_id is None:
+                nerf_bundlesdf_id = tracking_bundlesdf_id
+            elif nerf_bundlesdf_id[:13] != 'bundlesdf_id_':
+                nerf_bundlesdf_id = f'bundlesdf_id_{nerf_bundlesdf_id}'
+            self.tracking_bundlesdf_id = tracking_bundlesdf_id
+            self.nerf_bundlesdf_id = nerf_bundlesdf_id
+        else:
+            self.tracking_bundlesdf_id = None
+            self.nerf_bundlesdf_id = None
 
         # Automatically detect if BundleSDF-only is necessary based on if the
         # object is a tagless one.
@@ -73,9 +92,13 @@ class OverlayVideoGenerator:
             bsdf_only = True
             print(f'Automatically setting {bsdf_only=} for tagless {object=}.')
         
+        if cycle_iteration == 0:
+            assert object not in file_utils.TAGLESS_OBJECTS, f'Cannot use ' + \
+                f'TagSLAM poses for tagless {object=}.'
+            # TODO: Debug this mode. 
+            print('The current implementation of tagslam pose visualization may be incorrect. ')
+
         self.vision_asset = vision_asset
-        self.tracking_bundlesdf_id = tracking_bundlesdf_id
-        self.nerf_bundlesdf_id = nerf_bundlesdf_id
         self.cycle_iteration = cycle_iteration
         self.remote = remote
         self.start_toss = start_toss
@@ -87,7 +110,9 @@ class OverlayVideoGenerator:
         # zero.  However for prediction videos which can feature images before
         # the first prediction/tracking, this offset can determine when the
         # tracking starts into the video.
-        self.start_frame_offset = 0
+        self.start_frame_offset = bsdf_offset_frames - 1
+        # bsdf_offset_frames indicates the first frame idx that a BundleSDF run starts at. 
+        # bsdf_offset_frames = 1 is the default because its index is 1-based. 
 
         # Get the camera intrinsics and extrinsics.
         self.fx, self.fy, self.cx, self.cy = file_utils.load_camera_intrinsics(
@@ -95,46 +120,62 @@ class OverlayVideoGenerator:
         self.cam_trans, self.cam_axis_vec = \
             file_utils.load_camera_extrinsics(object)
         
-        # Load the pose and image data.
+        self._get_rgb_images()
+
+        # Load the tracking
         self._get_bundletrack_poses_in_cam()
         self._get_tagslam_poses_in_world()
-        self._get_rgb_images()
-        assert self.rgb_images.shape[0] == \
-            self.bundlesdf_poses_in_cam.shape[0], f'Inconsistent data sizes' + \
-                f' {self.rgb_images.shape[0]=}, ' + \
-                f'{self.bundlesdf_poses_in_cam.shape[0]=},' + \
-                f'{self.tagslam_poses_in_world.shape[0]=}.'
+        if self.tracking_bundlesdf_id is not None:
+            assert self.rgb_images.shape[0] == \
+                self.bundlesdf_poses_in_cam.shape[0] + self.start_frame_offset, \
+                    f'Inconsistent data sizes' + \
+                    f' {self.rgb_images.shape[0]=}, ' + \
+                    f'{self.bundlesdf_poses_in_cam.shape[0]=},' + \
+                    f'{self.tagslam_poses_in_world.shape[0]=},' + \
+                    f'{self.start_frame_offset=}.'
+            
         if not self.bsdf_only:
             assert self.rgb_images.shape[0] == \
-                self.tagslam_poses_in_world.shape[0], f'Inconsistent data ' + \
+                self.tagslam_poses_in_world.shape[0] + self.start_frame_offset, \
+                    f'Inconsistent data ' + \
                     f'sizes {self.rgb_images.shape[0]=}, ' + \
-                    f'{self.tagslam_poses_in_world.shape[0]=}.'
+                    f'{self.tagslam_poses_in_world.shape[0]=},' + \
+                    f'{self.start_frame_offset=}.'
 
-        # Get the path to the mesh file generated by BundleSDF.
-        nerf_results_dir = file_utils.bundlesdf_nerf_results_dir(
-            dataset=vision_asset, cycle_iteration=cycle_iteration,
-            tracking_bundlesdf_id=tracking_bundlesdf_id,
-            nerf_bundlesdf_id=nerf_bundlesdf_id
-        )
+        # Load the mesh file.
         if gt_mesh:
             self.mesh_file = file_utils.aligned_true_geometry_filepath(
                 dataset=vision_asset, tracking_bundlesdf_id=tracking_bundlesdf_id,
                 nerf_bundlesdf_id=nerf_bundlesdf_id, cycle_iteration=cycle_iteration
             )
+        elif self.pll_id is not None:
+            urdf_results_dir = file_utils.get_pll_urdf_output_dir(
+                system=vision_asset, cycle_iteration=cycle_iteration,
+                run_name=self.pll_id
+            )
+            self.mesh_file = op.join(urdf_results_dir, 'body_vis.obj')
         else:
+            # Get the path to the mesh file generated by BundleSDF.
+            nerf_results_dir = file_utils.bundlesdf_nerf_results_dir(
+                dataset=vision_asset, cycle_iteration=cycle_iteration,
+                tracking_bundlesdf_id=tracking_bundlesdf_id,
+                nerf_bundlesdf_id=nerf_bundlesdf_id
+            )
             self.mesh_file = op.join(nerf_results_dir, 'textured_mesh.obj')
 
         # Plan to put the output video in a single directory for all overlay
         # videos.
         self.output_file = file_utils.inspection_overlay_video_filepath(
             dataset=vision_asset, tracking_bundlesdf_id=tracking_bundlesdf_id,
-            nerf_bundlesdf_id=nerf_bundlesdf_id,
+            nerf_bundlesdf_id=nerf_bundlesdf_id, pll_id=self.pll_id,
             cycle_iteration=cycle_iteration, gt_mesh=gt_mesh
         )
         if not op.exists(op.dirname(self.output_file)):
             os.makedirs(op.dirname(self.output_file))
 
     def _get_bundletrack_poses_in_cam(self) -> None:
+        if self.tracking_bundlesdf_id is None:
+            return
         ob_in_cam_dir = file_utils.bundlesdf_pose_dir(
             self.vision_asset, self.cycle_iteration, self.tracking_bundlesdf_id)
 
@@ -157,6 +198,9 @@ class OverlayVideoGenerator:
 
         # TagSLAM data stored as [t, x, y, z, qx, qy, qz, qw].
         tagslam_data = np.loadtxt(op.join(tagslam_dir, 'synced_tagslam.txt'))
+
+        # deal with bsdf_offset_frames
+        tagslam_data = tagslam_data[self.start_frame_offset:]
 
         # Return TagSLAM poses as 4x4 homogeneous transforms.
         tagslam_poses_in_world = tagslam_data[:, 1:]
@@ -278,6 +322,7 @@ class OverlayVideoGenerator:
             self.xvfb_process.wait()
             os.environ['DISPLAY'] = self.old_display
             print("Terminated Xvfb process")
+            print(f"Recovered {os.environ['DISPLAY']=}.")
 
     def _get_absolute_frames(self) -> None:
         """Determine the start and end frames of each PLL toss relative to the
@@ -342,15 +387,20 @@ class OverlayVideoGenerator:
         #     self.vis["tagslam_cube"].set_transform(self.T_MW @ T_WA)
         # if T_WA is not None:
         #     self.vis["tagslam_triad"].set_transform(self.T_MW @ T_WA)
-        if T_CB is not None:
-            self.vis["bundlesdf_triad"].set_transform(self.T_MC @ T_CB)
-            self.vis["bundlesdf_mesh"].set_transform(self.T_MC @ T_CB)
-
+        if self.cycle_iteration == 0:
+            # Use TagSLAM poses.
+            self.vis["bundlesdf_mesh"].set_transform(self.T_MW @ T_WA)
+            self.vis["bundlesdf_triad"].set_transform(self.T_MW @ T_WA)
         else:
-            out_of_view_tf = self.T_MC @ tf.translation_matrix([0, 0, -1])
+            if T_CB is not None:
+                self.vis["bundlesdf_triad"].set_transform(self.T_MC @ T_CB)
+                self.vis["bundlesdf_mesh"].set_transform(self.T_MC @ T_CB)
 
-            self.vis["bundlesdf_triad"].set_transform(out_of_view_tf)
-            self.vis["bundlesdf_mesh"].set_transform(out_of_view_tf)
+            else:
+                out_of_view_tf = self.T_MC @ tf.translation_matrix([0, 0, -1])
+
+                self.vis["bundlesdf_triad"].set_transform(out_of_view_tf)
+                self.vis["bundlesdf_mesh"].set_transform(out_of_view_tf)
 
     def _render_one_image(self, frame_i: int, T_WA: np.ndarray,
                           T_CB: np.ndarray) -> Image:
@@ -402,7 +452,8 @@ class OverlayVideoGenerator:
                     index = max(i - self.start_frame_offset, 0)
                     T_WA = None if not hasattr(self, 'tagslam_poses_in_world') \
                         else self.tagslam_poses_in_world[index]
-                    T_CB = self.bundlesdf_poses_in_cam[index]
+                    T_CB = None if not hasattr(self, 'bundlesdf_poses_in_cam') \
+                        else self.bundlesdf_poses_in_cam[index]
 
                 # If the video is longer than the BundleSDF tracking, still
                 # render the video but without annotated poses.
@@ -482,6 +533,11 @@ class OverlayVideoGenerator:
               default=None,
               help="directory of the asset folder e.g. cube_2; encodes " + \
                 "system and tosses.")
+@click.option('--cycle-iteration',
+              type=int,
+              default=1,
+              help="BundleSDF iteration number (can't choose 0 since that " + \
+                "means use TagSLAM poses).")
 @click.option('--bundlesdf-id',
               type=str,
               default=None,
@@ -490,11 +546,10 @@ class OverlayVideoGenerator:
               type=str,
               default=None,
               help="what BundleSDF run ID associated with NeRF outputs to use.")
-@click.option('--cycle-iteration',
-              type=int,
-              default=1,
-              help="BundleSDF iteration number (can't choose 0 since that " + \
-                "means use TagSLAM poses).")
+@click.option('--pll-id',
+              type=str,
+              default=None,
+              help="what PLL run ID associated with pose outputs to use.")
 @click.option('--bsdf-only',
               is_flag=True,
               help="whether to generate just BundleSDF-related data.")
@@ -508,13 +563,24 @@ class OverlayVideoGenerator:
 @click.option('--gt-mesh',
               is_flag=True,
               help="whether to use ground truth mesh for video.")
+@click.option('--bsdf-offset-frames',
+              type=int,
+              default=1,
+              help="the first frame index that BundleSDF run starts at.")
 
-def main_command(vision_asset: str, bundlesdf_id: str, nerf_bundlesdf_id: str,
-                 cycle_iteration: int, bsdf_only: bool, all: bool,
-                 remote: bool, gt_mesh: bool) -> None:
+def main_command(vision_asset: str, 
+                 cycle_iteration: int, 
+                 bundlesdf_id: str, nerf_bundlesdf_id: str,
+                 pll_id: str,bsdf_only: bool, all: bool,
+                 remote: bool, gt_mesh: bool,
+                 bsdf_offset_frames: int) -> None:
     overlay_video_generator = OverlayVideoGenerator(
-        vision_asset, bundlesdf_id, nerf_bundlesdf_id, cycle_iteration,
-        bsdf_only=bsdf_only, remote=remote, gt_mesh=gt_mesh
+        vision_asset, cycle_iteration, 
+        tracking_bundlesdf_id=bundlesdf_id, 
+        nerf_bundlesdf_id=nerf_bundlesdf_id, 
+        pll_id=pll_id,
+        bsdf_only=bsdf_only, remote=remote, gt_mesh=gt_mesh,
+        bsdf_offset_frames=bsdf_offset_frames
     )
 
     if all:
@@ -522,7 +588,8 @@ def main_command(vision_asset: str, bundlesdf_id: str, nerf_bundlesdf_id: str,
     else:
         print('Skipping generating overlay video.')
 
-    overlay_video_generator.make_optimized_keyframe_overlay_images()
+    if bundlesdf_id is not None:
+        overlay_video_generator.make_optimized_keyframe_overlay_images()
 
 
 if __name__ == '__main__':
