@@ -590,7 +590,11 @@
         <inertial>
             <origin rpy="0 0 0" xyz="0 0 -0.0048"/>
             <mass value="0.0779312"/>
-            <inertia ixx="0.0000193318083" iyy="0.0000193318083" izz="0.0000386636166" ixy="0" ixz="0" iyz="0"/>
+            <inertia
+                ixx="1.9930319916000003e-05"
+                iyy="1.9930319916000003e-05"
+                izz="3.866361660000001e-05"
+                ixy="0" ixz="0" iyz="0"/>
         </inertial>
         <!-- <collision>
             <origin rpy="0 0 0" xyz="0 0 -0.0048"/>
@@ -609,7 +613,11 @@
         <inertial>
             <origin rpy="0 0 0" xyz="0 0 -0.0508"/>
             <mass value="0.1340688"/>
-            <inertia ixx="0.000005405989188" iyy="0.000005405989188" izz="0.000010811978376" ixy="0" ixz="0" iyz="0"/>
+            <inertia
+                ixx="0.00012073375853199997"
+                iyy="0.00012073375853199997"
+                izz="1.0811978376e-05"
+                ixy="0" ixz="0" iyz="0"/>
         </inertial>
         <visual>
             <origin rpy="0 0 0" xyz="0 0 -0.0508"/>
@@ -627,23 +635,26 @@
         <inertial>
             <origin rpy="0 0 0" xyz="0 0 0.0"/>
             <mass value="0.057"/>
-            <inertia ixx="0.0" iyy="0.0" izz="0.0" ixy="0" ixz="0" iyz="0"/>
+            <inertia
+                ixx="8.669700000000001e-06"
+                iyy="8.669700000000001e-06"
+                izz="8.669700000000001e-06"
+                ixy="0" ixz="0" iyz="0"/>
         </inertial>
         <visual>
-            <origin rpy="0 0 0" xyz="0 0 0.0"/>
+            <origin rpy="0 0 0" xyz="0 0 0"/>
             <geometry>
                 <sphere radius="0.0195"/>
             </geometry>
             <material name="black"/>
         </visual>
         <collision>
-            <origin rpy="0 0 0" xyz="0 0 0.0"/>
+            <origin rpy="0 0 0" xyz="0 0 0"/>
             <geometry>
                 <sphere radius="0.0195"/>
             </geometry>
             <drake:proximity_properties>
-                <drake:mu_static value="1"/>
-                <drake:mu_dynamic value="1"/>
+                <drake:mu_static value="0.15"/>
             </drake:proximity_properties>
         </collision>
     </link>
