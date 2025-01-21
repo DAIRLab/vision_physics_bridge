@@ -358,8 +358,11 @@ def bundlesdf_video_mask_dir(dataset: str, check_exists: bool = True) -> str:
 
 
 """Asset filepaths."""
-def franka_filepath():
+def franka_filepath(with_collision_geometry: bool = False) -> str:
     """Path to the Franka URDF file."""
+    if with_collision_geometry:
+        return op.join(DATA_GEN_DIR, 'assets',
+                       'franka_with_ee_full_collisions.urdf')
     return op.join(DATA_GEN_DIR, 'assets', 'franka_with_ee.urdf')
 
 def pink_triad_obj_filepath():

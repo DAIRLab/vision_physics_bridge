@@ -4,6 +4,7 @@ import rosbag
 import rospy
 import pdb
 import imageio
+import yaml
 from cv_bridge import CvBridge
 import numpy as np
 from tqdm import tqdm
@@ -16,6 +17,9 @@ import file_utils, math_utils
 
 DEPTH_ROS_TOPIC = "/camera/aligned_depth_to_color/image_raw"
 JOINT_STATE_ROS_TOPIC = "/panda/joint_states"
+FRANKA_STATE_ROS_TOPIC = "/panda/franka_state_controller_custom/franka_states"
+EE_POSE_SETPOINT_CHANNEL = \
+    "/panda/hybrid_impedance_wrench_controller/pose_wrench_desired"
 RGB_ROS_TOPIC = "/camera/color/image_raw"
 ODOM_ROS_TOPIC = "/tagslam/odom/body_box"
 TAGSLAM_CAMERA_TOPICS = [
@@ -249,6 +253,195 @@ def extract_franka_joints(
     np.savetxt(op.join(franka_joint_states_output_dir, 'ee_positions.txt'),
                ee_positions)
     print('Wrote Franka end effector positions to file.')
+
+    robot_bag.close()
+
+"""Extract the Franka states from a robot bag file between start and end times.
+Called by robot_dynamics_predictions.py for generating dynamics predictions for
+robot interaction experiments."""
+def extract_franka_states(
+        start_time: rospy.rostime.Time, end_time: rospy.rostime.Time,
+        bag_file: str, franka_states_output_dir: str
+):
+    robot_bag = rosbag.Bag(bag_file, "r")
+
+    start_time = start_time.to_sec()
+    end_time = end_time.to_sec()
+    print(f"start_time: {start_time}, end_time: {end_time}")
+
+    # Extract the joint states, storing them exactly as reported in the bag.
+    joint_angles, joint_velocities, tau_J_d, times = [], [], [], []
+    origin_T_ee_poses = []
+    for (_topic, msg, _t) in tqdm(robot_bag.read_messages(
+        topics=[FRANKA_STATE_ROS_TOPIC])):
+        # Skip messages before the start time; stop past the end time.  Add
+        # extra buffer in case the first or last closest joint state pose
+        # message is a bit outside this range.  This will get resolved
+        # afterwards with a synchronization step.
+        if msg.header.stamp.to_sec() < start_time - TIME_EXCESS_BUFFER:
+            continue
+        if msg.header.stamp.to_sec() > end_time + TIME_EXCESS_BUFFER:
+            break
+
+        # Store the joint information from the message.
+        joint_angles.append(list(msg.q))
+        joint_velocities.append(list(msg.dq))
+        tau_J_d.append(list(msg.tau_J_d))
+        origin_T_ee_poses.append(np.array(list(msg.O_T_EE)).reshape(4, 4).T)
+        times.append(msg.header.stamp.to_sec())
+
+    print(f'Extracted {len(joint_angles)} Franka states from the robot bag.')
+
+    # Write the joint states and timestamps to file.
+    joint_times = np.array(times).reshape(-1, 1)
+    joint_angles = np.array(joint_angles).reshape(-1, 7)
+    joint_velocities = np.array(joint_velocities).reshape(-1, 7)
+    tau_J_ds = np.array(tau_J_d).reshape(-1, 7)
+    origin_T_ee_poses = np.array(origin_T_ee_poses).reshape(-1, 4, 4)
+
+    # Check if any joint positions, velocities, or efforts violate the limits.
+    check_franka_control_violation(joint_angles, joint_velocities, tau_J_ds)
+
+    np.savetxt(op.join(franka_states_output_dir, 'joint_times.txt'),
+               joint_times)
+    np.savetxt(op.join(franka_states_output_dir, 'joint_angles.txt'),
+               joint_angles)
+    np.savetxt(op.join(franka_states_output_dir, 'joint_velocities.txt'),
+               joint_velocities)
+    np.savetxt(op.join(franka_states_output_dir, 'tau_J_ds.txt'),
+               tau_J_ds)
+    # Can't save a 3D numpy array as txt, so store as .npy.
+    np.save(op.join(franka_states_output_dir, 'origin_T_ee_poses.npy'),
+            origin_T_ee_poses)
+    print(f'Wrote Franka states and times in {franka_states_output_dir}.')
+
+    robot_bag.close()
+
+"""Check if any joint positions, velocities, or efforts violate the limits
+specified in the franka_control_node.yaml file."""
+def check_franka_control_violation(
+        joint_positions: np.ndarray, joint_velocities: np.ndarray,
+        joint_efforts: np.ndarray):
+    """Args:
+        joint_positions (N, 7)
+        joint_velocities (N, 7)
+        joint_efforts (N, 7)
+    """
+    assert joint_positions.shape == joint_velocities.shape == \
+        joint_efforts.shape, 'Expected joint_positions, joint_velocities, ' + \
+        f'and joint_efforts to have the same shape, but got ' + \
+        f'{joint_positions.shape=}, {joint_velocities.shape=}, ' + \
+        f'and {joint_efforts.shape=}.'
+    assert joint_positions.shape[1] == 7, 'Expected joint_positions to have' + \
+        f' 7 columns, but got {joint_positions.shape[1]}.'
+
+    # TODO don't hardcode
+    FRANKA_CONTROL_PARAMETER_YAML_FILE = \
+        '/home/bibit/vision/bundlenets/cnets-data-generation/' + \
+        'robot_dynamics/franka_control_node.yaml'
+
+    with open(FRANKA_CONTROL_PARAMETER_YAML_FILE, 'r') as f:
+        franka_params = yaml.safe_load(f)
+
+    for joint_i in range(7):
+        joint_name = f'panda_joint{joint_i + 1}'
+        joint_min_limit = franka_params['joint_limits'][joint_name][
+            'min_position']
+        joint_max_limit = franka_params['joint_limits'][joint_name][
+            'max_position']
+        joint_velocity_max_limit = franka_params['joint_limits'][joint_name][
+            'max_velocity']
+        joint_effort_limit = franka_params['joint_limits'][joint_name][
+            'max_effort']
+
+        joint_position = joint_positions[:, joint_i]
+        joint_velocity = joint_velocities[:, joint_i]
+        joint_effort = joint_efforts[:, joint_i]
+
+        if np.any(joint_position < joint_min_limit):
+            print(f'Joint {joint_name} position below limit.')
+            breakpoint()
+        if np.any(joint_position > joint_max_limit):
+            print(f'Joint {joint_name} position above limit.')
+            breakpoint()
+        if np.any(joint_velocity > joint_velocity_max_limit):
+            print(f'Joint {joint_name} velocity above limit.')
+            breakpoint()
+        if np.any(np.abs(joint_effort) > joint_effort_limit):
+            print(f'Joint {joint_name} effort above limit.')
+            breakpoint()
+
+    print(f'All recorded joints, velocities, and efforts are within limits.')
+
+"""Extract the Franka states from a robot bag file between start and end times.
+Called by robot_dynamics_predictions.py for generating dynamics predictions for
+robot interaction experiments."""
+def extract_pose_commands(
+        start_time: rospy.rostime.Time, end_time: rospy.rostime.Time,
+        bag_file: str, ee_pose_command_output_dir: str
+):
+    robot_bag = rosbag.Bag(bag_file, "r")
+
+    start_time = start_time.to_sec()
+    end_time = end_time.to_sec()
+    print(f"start_time: {start_time}, end_time: {end_time}")
+
+    # Extract the joint states, storing them exactly as reported in the bag.
+    des_pos, des_quat_wxyz, des_force, des_torque, times = [], [], [], [], []
+    cartesian_stiffness, cartesian_damping, tau_filter_coeff = [], [], []
+    for (_topic, msg, _t) in tqdm(robot_bag.read_messages(
+        topics=[EE_POSE_SETPOINT_CHANNEL])):
+        # Skip messages before the start time; stop past the end time.  Add
+        # extra buffer in case the first or last closest joint state pose
+        # message is a bit outside this range.  This will get resolved
+        # afterwards with a synchronization step.
+        if msg.header.stamp.to_sec() < start_time - TIME_EXCESS_BUFFER:
+            continue
+        if msg.header.stamp.to_sec() > end_time + TIME_EXCESS_BUFFER:
+            break
+
+        # Store the joint information from the message.
+        des_pos.append([
+            msg.pose_d.position.x, msg.pose_d.position.y,
+            msg.pose_d.position.z])
+        des_quat_wxyz.append([
+            msg.pose_d.orientation.w, msg.pose_d.orientation.x,
+            msg.pose_d.orientation.y, msg.pose_d.orientation.z])
+        des_force.append([
+            msg.wrench_d.force.x, msg.wrench_d.force.y, msg.wrench_d.force.z])
+        des_torque.append([
+            msg.wrench_d.torque.x, msg.wrench_d.torque.y,
+            msg.wrench_d.torque.z])
+        cartesian_stiffness.append(list(msg.cartesian_stiffness))
+        cartesian_damping.append(list(msg.cartesian_damping))
+        times.append(msg.header.stamp.to_sec())
+
+    print(f'Extracted {len(des_pos)} pose commands from the robot bag.')
+
+    # Write the joint states and timestamps to file.
+    joint_times = np.array(times).reshape(-1, 1)
+    des_pos = np.array(des_pos).reshape(-1, 3)
+    des_quat_wxyz = np.array(des_quat_wxyz).reshape(-1, 4)
+    des_force = np.array(des_force).reshape(-1, 3)
+    des_torque = np.array(des_torque).reshape(-1, 3)
+    cartesian_stiffness = np.array(cartesian_stiffness).reshape(-1, 6)
+    cartesian_damping = np.array(cartesian_damping).reshape(-1, 6)
+
+    np.savetxt(op.join(ee_pose_command_output_dir, 'pose_command_times.txt'),
+               joint_times)
+    np.savetxt(op.join(ee_pose_command_output_dir, 'des_pos.txt'),
+               des_pos)
+    np.savetxt(op.join(ee_pose_command_output_dir, 'des_quat_wxyz.txt'),
+               des_quat_wxyz)
+    np.savetxt(op.join(ee_pose_command_output_dir, 'des_force.txt'),
+               des_force)
+    np.savetxt(op.join(ee_pose_command_output_dir, 'des_torque.txt'),
+               des_torque)
+    np.savetxt(op.join(ee_pose_command_output_dir, 'cartesian_stiffness.txt'),
+               cartesian_stiffness)
+    np.savetxt(op.join(ee_pose_command_output_dir, 'cartesian_damping.txt'),
+               cartesian_damping)
+    print(f'Wrote EE pose commands and times in {ee_pose_command_output_dir}.')
 
     robot_bag.close()
 
