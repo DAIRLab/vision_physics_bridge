@@ -365,6 +365,10 @@ def franka_filepath(with_collision_geometry: bool = False) -> str:
                        'franka_with_ee_full_collisions.urdf')
     return op.join(DATA_GEN_DIR, 'assets', 'franka_with_ee.urdf')
 
+def ee_urdf_filepath() -> str:
+    """Path to the URDF file containing just the end effector with peg."""
+    return op.join(DATA_GEN_DIR, 'assets', 'ee_tip_with_peg.urdf')
+
 def pink_triad_obj_filepath():
     """Path to the pink triad for official video overlays."""
     return op.join(DATA_GEN_DIR, 'assets', 'triad_pink.obj')

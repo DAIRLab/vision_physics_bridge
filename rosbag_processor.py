@@ -8,6 +8,7 @@ import yaml
 from cv_bridge import CvBridge
 import numpy as np
 from tqdm import tqdm
+from typing import List
 from scipy.spatial.transform import Rotation as R
 
 from pydrake.all import MultibodyPlant, Parser, DiagramBuilder, RigidTransform
@@ -388,7 +389,7 @@ def extract_pose_commands(
 
     # Extract the joint states, storing them exactly as reported in the bag.
     des_pos, des_quat_wxyz, des_force, des_torque, times = [], [], [], [], []
-    cartesian_stiffness, cartesian_damping, tau_filter_coeff = [], [], []
+    cartesian_stiffness, cartesian_damping = [], []
     for (_topic, msg, _t) in tqdm(robot_bag.read_messages(
         topics=[EE_POSE_SETPOINT_CHANNEL])):
         # Skip messages before the start time; stop past the end time.  Add
@@ -427,6 +428,20 @@ def extract_pose_commands(
     cartesian_stiffness = np.array(cartesian_stiffness).reshape(-1, 6)
     cartesian_damping = np.array(cartesian_damping).reshape(-1, 6)
 
+    # Check some of these are constant throughout the bag, storing just their
+    # constant value instead of value over time.
+    cartesian_stiffness, cartesian_damping, des_force, des_torque = \
+        check_teleop_constants_assumptions(
+            [cartesian_stiffness, cartesian_damping, des_force, des_torque])
+    print(f'Cartesian stiffness constant at: {cartesian_stiffness}')
+    print(f'Cartesian damping constant at: {cartesian_damping}')
+
+    # Check desired wrench is all zeros.
+    assert des_torque == des_force == np.zeros(3), f'Expected zero force ' + \
+        f'and torque, but got {des_force=} and {des_torque=}.'
+    print(f'Desired torque constant at: {des_torque}')
+    print(f'Desired force constant at: {des_force}')
+
     np.savetxt(op.join(ee_pose_command_output_dir, 'pose_command_times.txt'),
                joint_times)
     np.savetxt(op.join(ee_pose_command_output_dir, 'des_pos.txt'),
@@ -444,6 +459,17 @@ def extract_pose_commands(
     print(f'Wrote EE pose commands and times in {ee_pose_command_output_dir}.')
 
     robot_bag.close()
+
+"""Check the assumptions that any quantity in the teleop robot experiments is
+truly constant."""
+def check_teleop_constants_assumptions(list_of_arrays: List[np.ndarray]):
+    flattened_array_list = []
+    for array in list_of_arrays:
+        for col in range(array.shape[1]):
+            if not np.all(array[:, col] == array[0, col]):
+                print(f'Array column {col} is not constant.')
+        flattened_array_list.append(array[0])
+    return flattened_array_list
 
 """Convert Franka joint angles to the 3D world position of the end effector's
 center.  Assumes the Franka base is at the world origin, and uses the Franka and
