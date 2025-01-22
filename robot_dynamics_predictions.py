@@ -2,63 +2,12 @@
 recorded impedance controller commands stored in a rosbag.
 
     - raw_302.bag (oatly, 75 seconds)
-
-/diagnostics
-/hybrid_impedance_wrench_controller/pose_viz
-/msg
-/panda/franka_control/error_recovery/status
-/panda/franka_state_controller_custom/F_ext
-/panda/franka_state_controller_custom/franka_states
-/panda/franka_state_controller_custom/joint_states
-/panda/franka_state_controller_custom/joint_states_desired
-/panda/home_pose
-/panda/hybrid_impedance_wrench_controller/control_diagnostic
-/panda/hybrid_impedance_wrench_controller/pose_wrench_desired
-/panda/hybrid_impedance_wrench_controllerdynamic_reconfigure_torque_limits_node/
-    parameter_descriptions
-/panda/hybrid_impedance_wrench_controllerdynamic_reconfigure_torque_limits_node/
-    parameter_updates
-/panda/joint_states
-/panda/spacenav/joy
-/panda/spacenav/offset
-/panda/spacenav/rot_offset
-/panda/spacenav/twist
-/panda/virtual_wall_viz
-/rosout
-/tf
-
-Steps in the inverse dynamics impedance controller:
- - subscribe to pose_wrench_desired
- - set up publisher at control_diagnostic
- - configure nullspace stiffness
- - get a bunch of things from Franka HW, e.g. joint/state interfaces
- - create node for dynamic reconfigure torque limits
- - set a bunch of desired values and limits
-
-Update:  desired pose -> desired joint torques
-    - task-space PD
-    - nullspace stiffness
-    - coriolis
-    - feedforward wrench
-    - in sim, should add gravity compensation too (Franka does this
-      automatically in hardware)
-
-Other notes:
-    - franka_states contains mass matrix, coriolis, joint states, O_T_EE, etc.,
-      but might want to get these from Drake instead.
-    - task-space error is saturated, only for z translation
-    - torque rate is also saturated
-    - tau_filter_coeff shouldn't do anything
-    - can check control_diagnostic for ROS params, or check code for static
-        settings at fish_franka/config/franka_hw_controllers.yaml
-    - libfranka uses some parameters in fish_franka/config/
-      franka_control_node.yaml
-        - check the bag to see if any joint configuration/effort/velocity/
-          acceleration limits are hit, then might be hard to simulate.
 """
 
+import os.path as op
 import numpy as np
 import matplotlib.pyplot as plt
+import torch
 import yaml
 
 from pydrake.common.eigen_geometry import AngleAxis, Quaternion
@@ -72,7 +21,7 @@ from pydrake.systems.analysis import Simulator
 from pydrake.systems.drawing import plot_graphviz, plot_system_graphviz
 from pydrake.systems.framework import DiagramBuilder, LeafSystem
 from pydrake.systems.primitives import TrajectorySource
-from pydrake.trajectories import PiecewisePolynomial, \
+from pydrake.trajectories import PiecewisePolynomial, PiecewisePose, \
     PiecewiseQuaternionSlerp, StackedTrajectory
 from pydrake.visualization import AddFrameTriadIllustration
 
@@ -84,6 +33,14 @@ SIM_TIME_STEP = 5e-4
 CONTROLLER_TIME_STEP = 1e-3
 VIZ_TIME_STEP = 5e-3
 
+WORLD_TO_FRANKA_PLL_OFFSET = 0.0087
+
+OBJECT = 'robotocc_oatly'
+TEST_TOSS = 6
+VISION_ASSET = f'{OBJECT}_{TEST_TOSS}'
+BSDF_ITERATION = 1
+PLL_ID = 'pll_id_t02e300b20_occoatly_6'
+
 
 EXPORT_TEST_DATA = False
 DEBUG = False
@@ -91,9 +48,9 @@ DEBUG = False
 
 if EXPORT_TEST_DATA:
     start = file_utils.load_toss_time_from_yaml(
-        'robotocc_oatly', 1, 'start_time', as_ros_time=True)
+        OBJECT, TEST_TOSS, 'start_time', as_ros_time=True)
     end = file_utils.load_toss_time_from_yaml(
-        'robotocc_oatly', 1, 'end_time', as_ros_time=True)
+        OBJECT, TEST_TOSS, 'end_time', as_ros_time=True)
 
     rosbag_processor.extract_franka_states(
         start_time=start, end_time=end,
@@ -121,22 +78,6 @@ def visualize_drake_systems(plant=None, diagram=None):
 
 
 ### Inverse dynamics controller ###
-'''TODO:
-    [x] confirm all the recorded wrench_d.force and wrench_d.torque are zeros.
-        if not, will need to reset them in _update_desired_targets.
-    [x] confirm all the cartesian_stiffness and cartesian_damping are the same
-        throughout the whole bags.  if not, will need to reset them in
-        _update_desired_targets.
-    [x] see if I need to implement what's in torquelimitsParamCallback (no).
-    [x] confirm tau_J_d are joint efforts.
-    [x] seems like nullspace stiffness target never changes.
-    [x] torque_upper_limits, torque_lower_limits, cart_acc_upper_limits,
-        cart_acc_lower_limits are never used, so remove.
-
-Notes:
-    - removed exponential filtering on tau_d (so removed tau_filter_coeff and
-      tau_d_last).
-'''
 class InverseDynamicsController(LeafSystem):
     def __init__(self, plant: MultibodyPlant, controller_params: dict):
         LeafSystem.__init__(self)
@@ -229,7 +170,7 @@ class InverseDynamicsController(LeafSystem):
         # Ensure quaternion representation is consistent.
         last_orientation_d_target = self.orientation_d_target.wxyz()
         new_orientation_d_target = pose_command[:4]
-        assert np.linalg.norm(new_orientation_d_target) == 1.0, \
+        assert np.abs(np.linalg.norm(new_orientation_d_target) - 1) < 1e-3, \
             f'Expected normalized quaternion but got ' + \
             f'{np.linalg.norm(new_orientation_d_target)} from ' + \
             f'{new_orientation_d_target} -- is the pose command in the ' + \
@@ -372,6 +313,33 @@ command_ts -= init_t
 franka_joint_ts -= init_t
 
 
+### Load object-related data ###
+# # Get the table height.  Use the average if using multiple tosses.
+# table_heights = np.array([
+#     file_utils.load_table_z_height(OBJECT, toss) for toss in
+#     range(TEST_TOSS, TEST_TOSS+1)
+# ])
+# z_table = np.mean(table_heights)
+
+# Offset the commanded end effector poses from the table height.  The Franka
+# will also get offset by the same amount in the simulations.
+# des_pos[:, 2] -= z_table
+des_pos[:, 2] += WORLD_TO_FRANKA_PLL_OFFSET
+
+# Load the object poses.
+toss_dir = file_utils.contactnets_input_dir_bundlesdf(
+    VISION_ASSET, BSDF_ITERATION, 'bundlesdf_id_00', full=False,
+    create=False)
+toss_data_dict = torch.load(
+    op.join(toss_dir, f'{TEST_TOSS}.pt'), weights_only=False)
+object_states = np.array(toss_data_dict['object_state'])
+object_poses = object_states[:, :7]  # quat_wxyz, pos
+cnets_data_gen_dir = file_utils.cnets_data_gen_dataset_dir(
+    VISION_ASSET, check_exists=True)
+object_pose_ts = np.loadtxt(op.join(
+    cnets_data_gen_dir, 'bundlesdf_timestamps.txt')) - init_t
+
+
 ### Drake trajectory ###
 position_trajectory = PiecewisePolynomial.CubicWithContinuousSecondDerivatives(
     breaks=command_ts,
@@ -389,6 +357,23 @@ orientation_trajectory = PiecewiseQuaternionSlerp(
 commanded_quat_pos_traj = StackedTrajectory()
 commanded_quat_pos_traj.Append(orientation_trajectory)
 commanded_quat_pos_traj.Append(position_trajectory)
+
+# Build the object trajectory.
+recorded_object_quat_traj = PiecewiseQuaternionSlerp(
+    breaks=object_pose_ts,
+    quaternions=[Quaternion(q) for q in object_poses[:, :4]]
+)
+recorded_object_pos_traj = \
+    PiecewisePolynomial.CubicWithContinuousSecondDerivatives(
+        breaks=object_pose_ts,
+        samples=object_poses[:, 4:].T,
+        sample_dot_at_start=np.zeros(3),
+        sample_dot_at_end=np.zeros(3)
+    )
+recorded_object_quat_pos_traj = StackedTrajectory()
+recorded_object_quat_pos_traj.Append(recorded_object_quat_traj)
+recorded_object_quat_pos_traj.Append(recorded_object_pos_traj)
+
 
 # TODO would it be better to combine angles and velocities into one trajectory,
 # since technically the derivatives affect each other?  Maybe torques too?
@@ -420,12 +405,13 @@ sim_mbp_config = MultibodyPlantConfig(time_step=SIM_TIME_STEP)
 sim_plant, scene_graph = AddMultibodyPlant(sim_mbp_config, builder)
 sim_parser = Parser(sim_plant)
 sim_robot = sim_parser.AddModels(
-    file_utils.franka_filepath(with_collision_geometry=True))
+    file_utils.franka_filepath(with_collision_geometry=True))[0]
 sim_plant.WeldFrames(sim_plant.world_frame(),
                      sim_plant.GetFrameByName('panda_link0'),
-                     RigidTransform())
+                     RigidTransform(p=np.array([
+                        0, 0, WORLD_TO_FRANKA_PLL_OFFSET])))
 
-# Add the table (as a half space) to the simulation.
+# Add the table (as a half space) to the simulation, located at z=0.
 # TODO:  meshcat doesn't display halfspace geometries, so may want to use a box
 # instead.
 friction = CoulombFriction(1.0, 1.0)
@@ -435,23 +421,33 @@ sim_plant.RegisterCollisionGeometry(
 sim_plant.RegisterVisualGeometry(
     sim_plant.world_body(), RigidTransform(), HalfSpace(),
     'table', np.array([0.5, 0.5, 0.5, 1]))
+
+# Add the object to the simulation.
+sim_object = sim_parser.AddModels(op.join(
+    file_utils.get_pll_urdf_output_dir(VISION_ASSET, BSDF_ITERATION, PLL_ID),
+    'with_bundlesdf_mesh.urdf'))[0]
+
 sim_plant.Finalize()
 sim_plant.set_name('sim_plant')
-sim_plant.SetDefaultPositions(
-    gt_joint_angle_traj.value(commanded_quat_pos_traj.start_time()))
+sim_plant.SetDefaultPositions(np.vstack((
+    gt_joint_angle_traj.value(commanded_quat_pos_traj.start_time()),
+    recorded_object_quat_pos_traj.value(commanded_quat_pos_traj.start_time())
+)))
 if DEBUG:  visualize_drake_systems(plant=sim_plant)
 
 # Add a trajectory source for the desired end effector pose.
 traj_source = builder.AddSystem(TrajectorySource(commanded_quat_pos_traj))
 
-# Add the controller, which needs a separate plant for control.
+# Add the controller, which needs a separate plant for control with just the
+# robot.
 control_plant = MultibodyPlant(time_step=CONTROLLER_TIME_STEP)
 control_parser = Parser(control_plant)
 control_robot = control_parser.AddModels(
-    file_utils.franka_filepath(with_collision_geometry=True))
+    file_utils.franka_filepath(with_collision_geometry=True))[0]
 control_plant.WeldFrames(control_plant.world_frame(),
                          control_plant.GetFrameByName('panda_link0'),
-                         RigidTransform())
+                         RigidTransform(p=np.array([
+                            0, 0, WORLD_TO_FRANKA_PLL_OFFSET])))
 control_plant.Finalize()
 control_plant.set_name('control_plant')
 control_plant.SetDefaultPositions(
@@ -466,13 +462,13 @@ inv_dyn_controller.set_name('inv_dyn_controller')
 # Wire the diagram.
 builder.Connect(traj_source.get_output_port(),
                 inv_dyn_controller.get_ee_pose_command_input_port())
-builder.Connect(sim_plant.get_state_output_port(),
+builder.Connect(sim_plant.get_state_output_port(sim_robot),
                 inv_dyn_controller.get_robot_state_input_port())
 builder.Connect(inv_dyn_controller.get_joint_torque_output_port(),
                 sim_plant.get_actuation_input_port())
 
 diagram = builder.Build()
-if DEBUG:  visualize_drake_systems(diagram=diagram)
+if DEBUG:  visualize_drake_systems(diagram=diagram); breakpoint()
 simulator = Simulator(diagram)
 simulator.Initialize()
 simulator.set_target_realtime_rate(1)
@@ -489,13 +485,25 @@ viz_robot = viz_parser.AddModels(
     file_utils.franka_filepath(with_collision_geometry=True))
 viz_plant.WeldFrames(viz_plant.world_frame(),
                      viz_plant.GetFrameByName('panda_link0'),
-                     RigidTransform())
+                     RigidTransform(p=np.array([
+                        0, 0, WORLD_TO_FRANKA_PLL_OFFSET])))
 viz_commanded_ee = viz_parser.AddModels(file_utils.ee_urdf_filepath())
+viz_gt_object = viz_parser.AddModels(file_utils.get_urdf_with_bundlesdf_mesh(
+    f'vision_{OBJECT}', VISION_ASSET, BSDF_ITERATION, PLL_ID))[0]
+# TODO:  by default, both of these URDFs have the same model name, which means
+# they can't both be added to the plant unless one of the URDFs is edited.  It's
+# also useful to change the colors of each object to distinguish them and to
+# allow seeing their overlap via transparency.
+viz_object = viz_parser.AddModels(op.join(
+    file_utils.get_pll_urdf_output_dir(VISION_ASSET, BSDF_ITERATION, PLL_ID),
+    'with_bundlesdf_mesh.urdf'))[0]
 viz_plant.Finalize()
 viz_plant.set_name('viz_plant')
 viz_plant.SetDefaultPositions(np.vstack((
     gt_joint_angle_traj.value(commanded_quat_pos_traj.start_time()),
-    commanded_quat_pos_traj.value(commanded_quat_pos_traj.start_time())
+    commanded_quat_pos_traj.value(commanded_quat_pos_traj.start_time()),
+    recorded_object_quat_pos_traj.value(commanded_quat_pos_traj.start_time()),
+    recorded_object_quat_pos_traj.value(commanded_quat_pos_traj.start_time())
 )))
 AddFrameTriadIllustration(
     scene_graph=viz_scene_graph,
@@ -524,7 +532,9 @@ breakpoint()
 ### Simulate an experiment ###
 # Prepare to run a simulation.
 sim_plant_context = sim_plant.CreateDefaultContext()
-sim_plant.SetPositions(sim_plant_context, gt_joint_angle_traj.value(0))
+sim_plant.SetPositions(sim_plant_context, np.vstack((
+    gt_joint_angle_traj.value(0),
+    recorded_object_quat_pos_traj.value(0))))
 inv_dyn_controller.StartFrom(
     joint_angles=gt_joint_angle_traj.value(0),
     joint_velocities=gt_joint_vel_traj.value(0),
@@ -541,12 +551,17 @@ for t in np.arange(0, t_final, VIZ_TIME_STEP):
     # Get the current joint angles from the simulator.
     sim_context = simulator.get_context()
     sim_plant_context = sim_plant.GetMyContextFromRoot(sim_context)
-    franka_joint_angles = sim_plant.GetPositions(sim_plant_context)
+    sim_positions = sim_plant.GetPositions(sim_plant_context)
+
+    franka_joint_angles = sim_positions[:7]
+    object_quat_pos = sim_positions[7:]
 
     # Update the visualization.
     viz_states = np.vstack((
         franka_joint_angles.reshape(-1, 1),
-        commanded_quat_pos_traj.value(t)
+        commanded_quat_pos_traj.value(t),
+        recorded_object_quat_pos_traj.value(t),
+        object_quat_pos.reshape(-1, 1)
     ))
     viz_plant_context = viz_plant.GetMyMutableContextFromRoot(viz_context)
     viz_plant.SetPositions(viz_plant_context, viz_states)

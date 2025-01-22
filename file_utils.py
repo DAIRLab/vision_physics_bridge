@@ -402,6 +402,20 @@ def average_dynamics_urdf_filepath():
     return op.join(
         DATA_GEN_DIR, 'assets', 'true_urdfs', 'bsdf_mesh_average_dynamics.urdf')
 
+def get_urdf_with_bundlesdf_mesh(
+    system: str, vision_asset: str, cycle_iteration: int, pll_id: str) -> str:
+    """To use BundleSDF mesh as geometry for comparison, copy the mesh from the
+    BundleSDF outputs in the PLL assets directory to the PLL run directory along
+    with a URDF template that will reference the mesh.  Returns the path to the
+    created URDF file."""
+    tracker = f'bundlesdf_iteration_{cycle_iteration}'
+    pll_storage_name = op.join(system, vision_asset, tracker)
+
+    target_dir = pll_file_utils.run_dir(pll_storage_name, pll_id)
+    target_urdf_filepath = op.join(target_dir, 'with_bundlesdf_mesh.urdf')
+
+    return target_urdf_filepath
+
 
 """Manual inspection directories."""
 def inspection_dir() -> str:

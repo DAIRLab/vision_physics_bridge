@@ -437,8 +437,9 @@ def extract_pose_commands(
     print(f'Cartesian damping constant at: {cartesian_damping}')
 
     # Check desired wrench is all zeros.
-    assert des_torque == des_force == np.zeros(3), f'Expected zero force ' + \
-        f'and torque, but got {des_force=} and {des_torque=}.'
+    assert np.all(des_torque == des_force) and \
+        np.all(des_force == np.zeros(3)), f'Expected zero force and torque,' + \
+        f' but got {des_force=} and {des_torque=}.'
     print(f'Desired torque constant at: {des_torque}')
     print(f'Desired force constant at: {des_force}')
 
