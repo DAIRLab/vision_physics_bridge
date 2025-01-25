@@ -336,13 +336,7 @@ def check_franka_control_violation(
     assert joint_positions.shape[1] == 7, 'Expected joint_positions to have' + \
         f' 7 columns, but got {joint_positions.shape[1]}.'
 
-    # TODO don't hardcode
-    FRANKA_CONTROL_PARAMETER_YAML_FILE = \
-        '/home/bibit/vision/bundlenets/cnets-data-generation/' + \
-        'robot_dynamics/franka_control_node.yaml'
-
-    with open(FRANKA_CONTROL_PARAMETER_YAML_FILE, 'r') as f:
-        franka_params = yaml.safe_load(f)
+    franka_params = file_utils.load_franka_control_node_params()
 
     for joint_i in range(7):
         joint_name = f'panda_joint{joint_i + 1}'

@@ -1,0 +1,124 @@
+# If any of these limits are hit, Franka under-the-hood will do some clamping.
+# Documentation from Franka here:
+# https://wiki.ros.org/pr2_controller_manager/safety_limits
+
+joint_names:
+  - panda_joint1
+  - panda_joint2
+  - panda_joint3
+  - panda_joint4
+  - panda_joint5
+  - panda_joint6
+  - panda_joint7
+arm_id: panda
+# Configure the threshold angle for printing joint limit warnings.
+joint_limit_warning_threshold: 0.1 # [rad]
+# Activate rate limiter? [true|false]
+rate_limiting: true
+# Cutoff frequency of the low-pass filter. Set to >= 1000 to deactivate.
+cutoff_frequency: 100
+# Internal controller for motion generators [joint_impedance|cartesian_impedance]
+internal_controller: joint_impedance
+# Used to decide whether to enforce realtime mode [enforce|ignore]
+realtime_config: enforce
+# Configure the initial defaults for the collision behavior reflexes.
+# From https://frankaemika.github.io/libfranka/classfranka_1_1Robot.html#a168e1214ac36d74ac64f894332b84534
+# Set separate torque and force boundaries for acceleration/deceleration and constant velocity movement phases.
+# Forces or torques between lower and upper threshold are shown as contacts in the RobotState. 
+# Forces or torques above the upper threshold are registered as collision and cause the robot to stop moving.
+collision_config:
+  lower_torque_thresholds_acceleration: [20.0, 20.0, 18.0, 18.0, 16.0, 14.0, 12.0]  # [Nm]
+  upper_torque_thresholds_acceleration: [20.0, 20.0, 18.0, 18.0, 16.0, 14.0, 12.0]  # [Nm]
+  lower_torque_thresholds_nominal: [20.0, 20.0, 18.0, 18.0, 16.0, 14.0, 12.0]  # [Nm]
+  # upper_torque_thresholds_nominal: [20.0, 20.0, 18.0, 18.0, 16.0, 14.0, 12.0]  # [Nm]
+  upper_torque_thresholds_nominal: [80.0, 80.0, 80.0, 80.0, 20.0, 20.0, 20.0]  # [Nm]
+  lower_force_thresholds_acceleration: [20.0, 20.0, 20.0, 25.0, 25.0, 25.0]  # [N, N, N, Nm, Nm, Nm]
+  upper_force_thresholds_acceleration: [20.0, 20.0, 20.0, 25.0, 25.0, 25.0]  # [N, N, N, Nm, Nm, Nm]
+  lower_force_thresholds_nominal: [20.0, 20.0, 20.0, 25.0, 25.0, 25.0]  # [N, N, N, Nm, Nm, Nm]
+  # upper_force_thresholds_nominal: [20.0, 20.0, 20.0, 25.0, 25.0, 25.0]  # [N, N, N, Nm, Nm, Nm]
+  upper_force_thresholds_nominal: [100.0, 100.0, 100.0, 75.0, 75.0, 75.0]  # [N, N, N, Nm, Nm, Nm]
+joint_limits:
+  panda_joint1:
+    has_position_limits: true
+    min_position: -2.8973
+    max_position: 2.8973
+    has_velocity_limits: true
+    max_velocity: 2.1750 #0.5 #2.1750
+    has_acceleration_limits: true
+    max_acceleration: 15.0
+    has_jerk_limits: true
+    max_jerk: 7500.0
+    has_effort_limits: true
+    max_effort: 87.0 #5.0  #87.0
+  panda_joint2:
+    has_position_limits: true
+    min_position: -1.7628
+    max_position: 1.7628
+    has_velocity_limits: true
+    max_velocity: 2.1750 #0.5 #2.1750
+    has_acceleration_limits: true
+    max_acceleration: 7.5
+    has_jerk_limits: true
+    max_jerk: 3750.0
+    has_effort_limits: true
+    max_effort: 87.0 #10.0 #87.0
+  panda_joint3:
+    has_position_limits: true
+    min_position: -2.8973
+    max_position: 2.8973
+    has_velocity_limits: true
+    max_velocity: 2.1750 #0.5 #2.1750
+    has_acceleration_limits: true
+    max_acceleration: 10.0
+    has_jerk_limits: true
+    max_jerk: 5000.0
+    has_effort_limits: true
+    max_effort: 87.0 #10.0 #87.0
+  panda_joint4:
+    has_position_limits: true
+    min_position: -3.0718 #-3.0718 set this slightly higher to prevent trigger error
+    max_position: -0.0698
+    has_velocity_limits: true
+    max_velocity: 2.1750 #2.0 #0.3 #2.1750  
+    has_acceleration_limits: true
+    max_acceleration: 12.5
+    has_jerk_limits: true
+    max_jerk: 6250.0
+    has_effort_limits: true
+    max_effort: 87.0 #10.0 #87.0
+  panda_joint5:
+    has_position_limits: true
+    min_position: -2.8973
+    max_position: 2.8973
+    has_velocity_limits: true
+    max_velocity: 2.6100 #0.5 # 2.0# 2.6100
+    has_acceleration_limits: true
+    max_acceleration: 15.0
+    has_jerk_limits: true
+    max_jerk: 7500.0
+    has_effort_limits: true
+    max_effort: 12.0 #2.0 #12.0
+  panda_joint6:
+    has_position_limits: true
+    min_position: -0.0175
+    max_position: 3.7525
+    has_velocity_limits: true
+    max_velocity: 2.6100 #2.0 #0.5 #2.6100  
+    has_acceleration_limits: true
+    max_acceleration: 20.0 #0.1 
+    has_jerk_limits: true
+    max_jerk: 10000.0
+    has_effort_limits: true
+    max_effort: 12.0 #12.0
+  panda_joint7:
+    has_position_limits: true
+    min_position: -2.8973
+    max_position: 2.8973
+    has_velocity_limits: true
+    max_velocity: 2.6100 #0.5 # 2.6100
+    has_acceleration_limits: true
+    max_acceleration: 20.0
+    has_jerk_limits: true
+    max_jerk: 10000.0
+    has_effort_limits: true
+    max_effort: 12.0 #12.0

@@ -341,6 +341,22 @@ def table_height_calibration_dir() -> str:
     """Directory for the point cloud processing output plots."""
     return assure_created(op.join(DATA_GEN_DIR, 'table_calibration'))
 
+def robot_dynamics_dir() -> str:
+    """Directory for the robot dynamics predictions assets."""
+    return op.join(DATA_GEN_DIR, 'robot_dynamics')
+
+def robot_dynamics_subdir(dataset: str, overwrite: bool = False) -> str:
+    """Subdirectory for the robot dynamics predictions assets."""
+    subdir = op.join(robot_dynamics_dir(), dataset)
+    if op.exists(subdir):
+        if overwrite:
+            print(f'Overwriting robot dynamics subdirectory for {dataset}.')
+            shutil.rmtree(subdir)
+            os.makedirs(subdir)
+    else:
+        os.makedirs(subdir)
+    return subdir
+
 def bundlesdf_video_rgb_dir(dataset: str, check_exists: bool = True) -> str:
     """The BundleSDF input directory for RGB images for a particular dataset."""
     return bsdf_file_utils.video_rgb_dir(
@@ -415,6 +431,22 @@ def get_urdf_with_bundlesdf_mesh(
     target_urdf_filepath = op.join(target_dir, 'with_bundlesdf_mesh.urdf')
 
     return target_urdf_filepath
+
+def load_franka_control_params():
+    """Load the Franka control parameters."""
+    control_params_file = op.join(
+        robot_dynamics_dir(), 'franka_hw_controllers.yaml')
+    with open(control_params_file, 'r') as f:
+        control_params = yaml.safe_load(f)
+    return control_params
+
+def load_franka_control_node_params():
+    """Load the Franka control node parameters."""
+    franka_control_node_filepath = op.join(
+        robot_dynamics_dir(), 'franka_control_node.yaml')
+    with open(franka_control_node_filepath, 'r') as f:
+        franka_params = yaml.safe_load(f)
+    return franka_params
 
 
 """Manual inspection directories."""
@@ -794,8 +826,10 @@ def load_camera_extrinsics(object: str) -> Tuple[np.ndarray, np.ndarray]:
         camera_extrinsics_filename = 'realsense_pose_cube_hand_60_3.yaml'
     elif object in TAGLESS_OBJECTS:
         camera_extrinsics_filename = 'realsense_pose_tagless.yaml'
-    elif object.startswith('robot'):
+    elif object.startswith('robot_'):
         camera_extrinsics_filename = 'realsense_pose_robot.yaml'
+    elif object.startswith('robotocc'):
+        camera_extrinsics_filename = 'realsense_pose_robotocc.yaml'
     camera_extrinsics_file = op.join(DATA_GEN_DIR, 'assets',
                                      camera_extrinsics_filename)
 
@@ -821,8 +855,10 @@ def get_camera_intrinsics_filepath(object: str) -> str:
     filename = 'cam_K.txt'
     if object in TAGLESS_OBJECTS:
         filename = 'cam_K_tagless.txt'
-    elif object.startswith('robot'):
+    elif object.startswith('robot_'):
         filename = 'cam_K_robot.txt'
+    elif object.startswith('robotocc'):
+        filename = 'cam_K_robotocc.txt'
     return op.join(DATA_GEN_DIR, 'assets', filename)
 
 def load_camera_intrinsics(object: str, as_matrix: bool = False):

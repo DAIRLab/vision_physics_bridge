@@ -1,18 +1,33 @@
 """This script generates dynamics predictions for robot experiments based on
 recorded impedance controller commands stored in a rosbag.
 
-    - raw_302.bag (oatly, 75 seconds)
+To run on a specific vision asset and PLL ID, set the variables appropriately
+and copy over:
+    - PLL-format trajectories (dair_pll/assets/vision_{OBJ}/{VISION_ASSET})
+    - the dataset (cnets-data-generation/dataset/{VISION_ASSET})
+    - PLL results (dair_pll/results/vision_{OBJ}/{VISION_ASSET}/
+        bundlesdf_iteration_{ITERATION}/{PLL_ID})
+    - the rosbag (cnets-data-generation/rosbags/raw_{BAG_NUM}.bag)
+
+TODO:
+    [x] Export visualizations to video.
+    [x] Export predicted trajectories to files.
+    [x] Store the intermediate files somewhere per experiment.
+    [x] Be able to swap out what URDF to simulate (PLL, BSDF, Vysics).
+    [ ] Be able to simulate ground truth mesh.
+    [ ] Make file callable with vision asset / run IDs.
 """
 
+import os
 import os.path as op
 import numpy as np
 import matplotlib.pyplot as plt
 import torch
-import yaml
+import trimesh
 
 from pydrake.common.eigen_geometry import AngleAxis, Quaternion
 from pydrake.geometry import HalfSpace, MeshcatVisualizer, StartMeshcat
-from pydrake.math import RigidTransform
+from pydrake.math import RigidTransform, RollPitchYaw
 from pydrake.multibody.parsing import Parser
 from pydrake.multibody.plant import AddMultibodyPlant, CoulombFriction, \
     MultibodyPlant, MultibodyPlantConfig
@@ -21,9 +36,9 @@ from pydrake.systems.analysis import Simulator
 from pydrake.systems.drawing import plot_graphviz, plot_system_graphviz
 from pydrake.systems.framework import DiagramBuilder, LeafSystem
 from pydrake.systems.primitives import TrajectorySource
-from pydrake.trajectories import PiecewisePolynomial, PiecewisePose, \
+from pydrake.trajectories import PiecewisePolynomial, \
     PiecewiseQuaternionSlerp, StackedTrajectory
-from pydrake.visualization import AddFrameTriadIllustration
+from pydrake.visualization import AddFrameTriadIllustration, VideoWriter
 
 import file_utils
 import rosbag_processor
@@ -31,39 +46,117 @@ import rosbag_processor
 
 SIM_TIME_STEP = 5e-4
 CONTROLLER_TIME_STEP = 1e-3
-VIZ_TIME_STEP = 5e-3
+vis_TIME_STEP = 5e-3
+
+CAM_FOV = np.pi/6
+VIDEO_PIXELS = [480, 640]
+FPS = 30
+
+# Front video view.
+SENSOR_RPY_FRONT = np.array([-np.pi / 2, 0, np.pi / 2])
+SENSOR_POSITION_FRONT = np.array([2., 0., 0.2])
+SENSOR_POSE_FRONT_VIEW = RigidTransform(
+    RollPitchYaw(SENSOR_RPY_FRONT).ToQuaternion(), SENSOR_POSITION_FRONT)
+
+# Side video view -- match the RealSense camera's perspective.
+SENSOR_POSITION_CAMERA, cam_rot_axis_angle = file_utils.load_camera_extrinsics(
+    'robotocc')
+SENSOR_ANGLE_AXIS_CAMERA = AngleAxis(
+    angle=np.linalg.norm(cam_rot_axis_angle),
+    axis=cam_rot_axis_angle/np.linalg.norm(cam_rot_axis_angle))
+SENSOR_POSE_CAMERA_VIEW = RigidTransform(
+    theta_lambda=SENSOR_ANGLE_AXIS_CAMERA, p=SENSOR_POSITION_CAMERA)
+_fx, fy, _cx, _cy = file_utils.load_camera_intrinsics('robotocc')
+CAM_FOV_REALSENSE = 2*np.arctan(VIDEO_PIXELS[0]/(2*fy))
 
 WORLD_TO_FRANKA_PLL_OFFSET = 0.0087
 
-OBJECT = 'robotocc_oatly'
-TEST_TOSS = 6
-VISION_ASSET = f'{OBJECT}_{TEST_TOSS}'
+MODELS_TO_TEST = ['vysics', 'bsdf', 'pll']  # 'gt'
+TRACKING_BUNDLESDF_ID = 'bundlesdf_id_00'
 BSDF_ITERATION = 1
-PLL_ID = 'pll_id_t02e300b20_occoatly_6'
+
+FILES_TO_EXPORT = ['joint_times.txt', 'joint_angles.txt',
+                   'joint_velocities.txt', 'tau_J_ds.txt',
+                   'pose_command_times.txt', 'des_pos.txt', 'des_quat_wxyz.txt',
+                   'cartesian_stiffness.txt', 'cartesian_damping.txt']
+
+PLL_BSDF_NERF_IDS_FROM_VISION_ASSET = {
+    'robotocc_styrofoam_1':
+        ('pll_id_t09_robotocc_styrofoam_1',
+         'bundlesdf_id_00',
+         'bundlesdf_id_00-t09d'),
+    'robotocc_oatly_3':
+        ('pll_id_t09_robotocc_oatly_3',
+         'bundlesdf_id_00',
+         'bundlesdf_id_00-t09d'),
+    'robotocc_oatly_4':
+        ('pll_id_t02e300b20_occoatly_4',
+         'bundlesdf_id_00',
+         'bundlesdf_id_00-t02_3'),
+    'robotocc_oatly_5':
+        ('pll_id_t02e300b20_occoatly_5',
+         'bundlesdf_id_00',
+         'bundlesdf_id_00-t02_3'),
+    'robotocc_oatly_6':
+        ('pll_id_t02e300b20_occoatly_6',
+         'bundlesdf_id_00',
+         'bundlesdf_id_00-t02_3'),
+    'robotocc_milk_2':
+        ('pll_id_t02e300b20_occmilk_2',
+         'bundlesdf_id_00',
+         'bundlesdf_id_00-t02_3'),
+    'robotocc_toblerone_1':
+        ('pll_id_t02e300b20_occtoblerone_1',
+         'bundlesdf_id_00',
+         'bundlesdf_id_00-t02_3'),
+    'robotocc_bakingbox_3':
+        ('pll_id_t02_robotocc_bakingbox_3',
+         'bundlesdf_id_00',
+         'bundlesdf_id_00-t02_3'),
+    'robotocc_bottle_4':
+        ('pll_id_t02_robotocc_bottle_4',
+         'bundlesdf_id_00',
+         'bundlesdf_id_00-t02_3'),
+    'robotocc_bottle_5':
+        ('pll_id_t02_robotocc_bottle_5',
+         'bundlesdf_id_00',
+         'bundlesdf_id_00-t02_3'),
+    'robotocc_bottle_7':
+        ('pll_id_t02_robotocc_bottle_7',
+         'bundlesdf_id_00',
+         'bundlesdf_id_00-t02_3'),
+}
+VISION_ASSETS = PLL_BSDF_NERF_IDS_FROM_VISION_ASSET.keys()
 
 
-EXPORT_TEST_DATA = False
+OPEN_MESHCAT = True
+EXPORT_TEST_DATA = True
 DEBUG = False
 
 
-if EXPORT_TEST_DATA:
-    start = file_utils.load_toss_time_from_yaml(
-        OBJECT, TEST_TOSS, 'start_time', as_ros_time=True)
-    end = file_utils.load_toss_time_from_yaml(
-        OBJECT, TEST_TOSS, 'end_time', as_ros_time=True)
+def hex_to_rgba_format(hex: str, opacity: float):
+    r, g, b = tuple(int(hex[i:i+2], 16) for i in (1, 3, 5))
+    return f'{r/255} {g/255} {b/255} {opacity}'
 
-    rosbag_processor.extract_franka_states(
-        start_time=start, end_time=end,
-        bag_file='/home/bibit/vision/bundlenets/cnets-data-generation/rosbags/raw_302.bag',
-        franka_states_output_dir='robot_dynamics'
-    )
-    rosbag_processor.extract_pose_commands(
-        start_time=start, end_time=end,
-        bag_file='/home/bibit/vision/bundlenets/cnets-data-generation/rosbags/raw_302.bag',
-        ee_pose_command_output_dir='robot_dynamics'
-    )
-    breakpoint()
+PLL_MESH_HEX = '#70ad47'
+BSDF_MESH_HEX = '#4472c4'
+VYSICS_MESH_HEX = '#7030a0'
 
+PLL_MESH_RGBA = hex_to_rgba_format(PLL_MESH_HEX, 0.7)
+BSDF_MESH_RGBA = hex_to_rgba_format(BSDF_MESH_HEX, 0.7)
+VYSICS_MESH_RGBA = hex_to_rgba_format(VYSICS_MESH_HEX, 0.7)
+COMPARISON_MESH_RGBA = '0.6 0 0 0.7'
+
+
+def ids_from_vision_asset(vision_asset: str) -> str:
+    try:
+        pll_id, bsdf_id, bsdf_nerf_id = \
+            PLL_BSDF_NERF_IDS_FROM_VISION_ASSET[vision_asset]
+        return pll_id, bsdf_id, bsdf_nerf_id
+    except KeyError:
+        raise ValueError(f'Not prepared to analyze results for ' + \
+            f'{vision_asset=}, add to PLL_BSDF_NERF_IDS_FROM_VISION_ASSET ' + \
+            f'dictionary.')
 
 def visualize_drake_systems(plant=None, diagram=None):
     plt.figure()
@@ -75,6 +168,168 @@ def visualize_drake_systems(plant=None, diagram=None):
         raise ValueError('Need to provide either a plant or a diagram.')
     plt.plot(1)
     plt.show(block=False)
+
+def write_obj_file_with_normals(original_obj_path: str, new_obj_path: str):
+    original_obj = trimesh.load(original_obj_path, force='mesh')
+
+    print(f'Converting obj:  ', end='')
+
+    with open(new_obj_path, 'w') as f:
+        f.write(f'# Vertices\n')
+        for vertex in original_obj.vertices:
+            f.write(f'v {vertex[0]} {vertex[1]} {vertex[2]}\n')
+        print(f'wrote vertices, ', end='')
+
+        f.write(f'\n# Vertex normals\n')
+        for normal in original_obj.vertex_normals:
+            f.write(f'vn {normal[0]} {normal[1]} {normal[2]}\n')
+        print(f'normals, ', end='')
+
+        f.write(f'\n# Faces:  vertex index // vertex normal index\n')
+        for face in original_obj.faces:
+            # +1 because obj files use 1-indexing but trimesh uses 0.
+            # This is of format v_i//vn_i, which for us are always the same.
+            f.write(f'f {face[0]+1}//{face[0]+1} ' + \
+                    f'{face[1]+1}//{face[1]+1} {face[2]+1}//{face[2]+1}\n')
+        print(f'and faces.')
+
+def make_comparison_geometry_urdf(
+        vision_asset: str, bsdf_iteration: int, pll_id: str, nerf_bsdf_id: str,
+        save_dir: str) -> str:
+    # Start by exporting the BundleSDF URDF.
+    make_bsdf_geometry_urdf(vision_asset, bsdf_iteration, pll_id, nerf_bsdf_id,
+                            save_dir)
+
+    orig_urdf_path = op.join(save_dir, 'bsdf.urdf')
+    new_urdf_path = op.join(save_dir, 'comparison.urdf')
+
+    # Change the URDF body name and color.
+    with open(new_urdf_path, 'w') as write_file:
+        with open(orig_urdf_path, 'r') as read_file:
+            line = read_file.read(
+                ).replace('name="from_bundlesdf"',
+                          'name="comparison"'
+                ).replace(f'color rgba="{BSDF_MESH_RGBA}"',
+                          f'color rgba="{COMPARISON_MESH_RGBA}"'
+                ).replace('name="bsdf_body"', 'name="comparison_body"')
+            write_file.write(line)
+
+    print(f'Getting for comparison:\nURDF from {orig_urdf_path}\nOBJ from ' + \
+          f'{op.join(save_dir, "bundlesdf_mesh.obj")}\n')
+
+    return new_urdf_path
+
+def make_bsdf_geometry_urdf(
+        vision_asset: str, bsdf_iteration: int, pll_id: str, track_bsdf_id: str,
+        nerf_bsdf_id: str, save_dir: str) -> str:
+    # Start from the learned PLL URDF so the inertial parameters are fair.
+    orig_urdf_path = op.join(
+        file_utils.get_pll_urdf_output_dir(
+            vision_asset, bsdf_iteration, pll_id),
+        'with_bundlesdf_mesh.urdf'
+    )
+
+    nerf_results_dir = file_utils.bundlesdf_nerf_results_dir(
+        dataset=vision_asset, cycle_iteration=bsdf_iteration,
+        tracking_bundlesdf_id=track_bsdf_id, nerf_bundlesdf_id=nerf_bsdf_id
+    )
+    orig_obj_path = op.join(nerf_results_dir, 'textured_mesh.obj')
+
+    new_urdf_path = op.join(save_dir, 'bsdf.urdf')
+    new_obj_path = '/'.join(new_urdf_path.split('/')[:-1]) + \
+        '/bundlesdf_mesh.obj'
+
+    # Change the URDF body name and color.
+    with open(new_urdf_path, 'w') as write_file:
+        with open(orig_urdf_path, 'r') as read_file:
+            line = read_file.read(
+                ).replace('name="vision_object"',
+                          'name="from_bundlesdf"'
+                ).replace('color rgba="0.6 0 0 1.0"',
+                          f'color rgba="{BSDF_MESH_RGBA}"'
+                ).replace('name="body"', 'name="bsdf_body"'
+                ).replace('mesh filename="body_best.obj"',
+                          'mesh filename="bundlesdf_mesh.obj"')
+            write_file.write(line)
+
+    # Need to do something special for the obj file.  BundleSDF exports obj
+    # files without any normals.
+    write_obj_file_with_normals(orig_obj_path, new_obj_path)
+
+    print(f'Getting for BundleSDF:\nURDF from {orig_urdf_path}\nOBJ from ' + \
+          f'{orig_obj_path}\n')
+
+    return new_urdf_path
+
+def make_pll_geometry_urdf(vision_asset: str, bsdf_iteration: int, pll_id: str,
+                           save_dir: str) -> str:
+    orig_urdf_path = op.join(
+        file_utils.get_pll_urdf_output_dir(
+            vision_asset, bsdf_iteration, pll_id),
+        'with_bundlesdf_mesh.urdf'
+    )
+    orig_obj_path = '/'.join(orig_urdf_path.split('/')[:-1]) + '/body_best.obj'
+
+    new_urdf_path = op.join(save_dir, 'pll.urdf')
+    new_obj_path = '/'.join(new_urdf_path.split('/')[:-1]) + '/pll_mesh.obj'
+
+    # Change the URDF body name and color.
+    with open(new_urdf_path, 'w') as write_file:
+        with open(orig_urdf_path, 'r') as read_file:
+            line = read_file.read(
+                ).replace('name="vision_object"',
+                          'name="from_pll"'
+                ).replace('color rgba="0.6 0 0 1.0"',
+                          f'color rgba="{PLL_MESH_RGBA}"',
+                ).replace('name="body"', 'name="pll_body"'
+                ).replace('mesh filename="body_best.obj"',
+                          'mesh filename="pll_mesh.obj"')
+            write_file.write(line)
+    os.system(f'cp {orig_obj_path} {new_obj_path}')
+
+    print(f'Getting for PLL:\nURDF from {orig_urdf_path}\nOBJ from ' + \
+          f'{orig_obj_path}\n')
+
+    return new_urdf_path
+
+def make_vysics_geometry_urdf(
+        vision_asset: str, bsdf_iteration: int, pll_id: str, track_bsdf_id: str,
+        nerf_bsdf_id: str, save_dir: str) -> str:
+    orig_urdf_path = op.join(
+        file_utils.get_pll_urdf_output_dir(
+            vision_asset, bsdf_iteration, pll_id),
+        'with_bundlesdf_mesh.urdf'
+    )
+    nerf_results_dir = file_utils.bundlesdf_nerf_results_dir(
+        dataset=vision_asset, cycle_iteration=bsdf_iteration,
+        tracking_bundlesdf_id=track_bsdf_id, nerf_bundlesdf_id=nerf_bsdf_id
+    )
+    orig_obj_path = op.join(nerf_results_dir, 'textured_mesh.obj')
+
+    new_urdf_path = op.join(save_dir, 'vysics.urdf')
+    new_obj_path = '/'.join(new_urdf_path.split('/')[:-1]) + '/vysics_mesh.obj'
+
+    # Change the URDF body name and color.
+    with open(new_urdf_path, 'w') as write_file:
+        with open(orig_urdf_path, 'r') as read_file:
+            line = read_file.read(
+                ).replace('name="vision_object"',
+                          'name="from_vysics"'
+                ).replace('color rgba="0.6 0 0 1.0"',
+                          f'color rgba="{VYSICS_MESH_RGBA}"',
+                ).replace('name="body"', 'name="vysics_body"'
+                ).replace('mesh filename="body_best.obj"',
+                          'mesh filename="vysics_mesh.obj"')
+            write_file.write(line)
+
+    # Need to do something special for the obj file.  BundleSDF exports obj
+    # files without any normals.
+    write_obj_file_with_normals(orig_obj_path, new_obj_path)
+
+    print(f'Getting for Vysics:\nURDF from {orig_urdf_path}\nOBJ from ' + \
+          f'{orig_obj_path}\n')
+
+    return new_urdf_path
 
 
 ### Inverse dynamics controller ###
@@ -96,13 +351,13 @@ class InverseDynamicsController(LeafSystem):
         self.joint_torque_output_index = self.DeclareVectorOutputPort(
             'joint_torques', plant.num_actuators(), self.CalcControl
         ).get_index()
-        
+
     def get_ee_pose_command_input_port(self):
         return self.get_input_port(self.ee_pose_command_input_index)
-        
+
     def get_robot_state_input_port(self):
         return self.get_input_port(self.robot_state_input_index)
-        
+
     def get_joint_torque_output_port(self):
         return self.get_output_port(self.joint_torque_output_index)
 
@@ -261,7 +516,7 @@ class InverseDynamicsController(LeafSystem):
         jacobian_dyncost_pinv_transpose = delassus_inv @ jacobian @ M_inv
         tau_nullspace = (
             np.eye(7) - jacobian.T @ jacobian_dyncost_pinv_transpose) @ tau_q_pd
-        
+
         # Desired torque.
         tau_d = tau_task + tau_nullspace + coriolis - gravity  # + tau_wrench
         tau_d = self._saturate_torque_rate(tau_d)
@@ -281,7 +536,7 @@ class InverseDynamicsController(LeafSystem):
         self.position_d = self.filter_param * \
             self.position_d_target + (1 - self.filter_param) * \
             self.position_d
-        
+
         # Special case to handle the quaternion.
         wxyz_d = self.orientation_d.wxyz()
         wxyz_d_target = self.orientation_d_target.wxyz()
@@ -290,283 +545,506 @@ class InverseDynamicsController(LeafSystem):
         self.orientation_d = Quaternion(wxyz_d/np.linalg.norm(wxyz_d))
 
 
-### Load data ###
-command_ts = np.loadtxt('robot_dynamics/pose_command_times.txt') # (N,)
-des_pos = np.loadtxt('robot_dynamics/des_pos.txt') # (N, 3)
-des_quat_wxyz = np.loadtxt('robot_dynamics/des_quat_wxyz.txt') # (N, 4)
+class RobotDynamicsPredictor():
+    """Generate dynamics predictions for robot experiments based on recorded
+    end effector pose commands stored in a ROS bag, emulating the impedance
+    controller used for hardware experiments in simulation.  Generate videos and
+    trajectories of the results."""
+    def __init__(self, vision_asset: str, pll_id: str, bundlesdf_id: str,
+                 nerf_bundlesdf_id: str, bsdf_iteration: str,
+                 debug: bool = False, open_meshcat: bool = True):
+        self.vision_asset = vision_asset
+        self.pll_id = pll_id
+        self.bundlesdf_id = bundlesdf_id
+        self.nerf_bundlesdf_id = nerf_bundlesdf_id
+        self.bsdf_iteration = bsdf_iteration
+        self.debug = debug
+        self.open_meshcat = open_meshcat
 
-des_quats = []
-for quat_wxyz in des_quat_wxyz:
-    des_quats.append(Quaternion(quat_wxyz))
+        self._export_test_data()
+        self._load_data()
+        self._create_drake_trajectories()
 
-franka_joint_ts = np.loadtxt('robot_dynamics/joint_times.txt')  # (M,)
-joint_angles = np.loadtxt('robot_dynamics/joint_angles.txt')  # (M, 7)
-joint_velocities = np.loadtxt('robot_dynamics/joint_velocities.txt')  # (M, 7)
-joint_torques = np.loadtxt('robot_dynamics/tau_J_ds.txt')  # (M, 7)
+    def run_simulation(self, model_to_test: str):
+        if model_to_test == 'pll':
+            self.learned_urdf_path = make_pll_geometry_urdf(
+                self.vision_asset, self.bsdf_iteration, self.pll_id,
+                save_dir=self.save_dir)
+        elif model_to_test == 'vysics':
+            self.learned_urdf_path = make_vysics_geometry_urdf(
+                self.vision_asset, self.bsdf_iteration, self.pll_id,
+                self.bundlesdf_id, self.nerf_bundlesdf_id,
+                save_dir=self.save_dir)
+        elif model_to_test == 'bsdf':
+            self.learned_urdf_path = make_bsdf_geometry_urdf(
+                self.vision_asset, self.bsdf_iteration, self.pll_id,
+                self.bundlesdf_id, self.bundlesdf_id, save_dir=self.save_dir)
+        else:
+            raise NotImplementedError(
+                f'Not prepared to simulate {model_to_test=}')
 
-cartesian_stiffness = np.loadtxt('robot_dynamics/cartesian_stiffness.txt') #(6,)
-cartesian_damping = np.loadtxt('robot_dynamics/cartesian_damping.txt')  # (6,)
+        self.comparison_urdf_path = make_comparison_geometry_urdf(
+            self.vision_asset, self.bsdf_iteration, self.pll_id,
+            self.bundlesdf_id, save_dir=self.save_dir
+        )
 
-# Zero out the trajectories.  TODO may need to keep track of this.
-init_t = min(command_ts[0], franka_joint_ts[0])
-command_ts -= init_t
-franka_joint_ts -= init_t
+        print(f'Simulating {model_to_test} model...')
+
+        self._build_control_drake_plant()
+        self._build_sim_drake_diagram()
+        self._build_vis_drake_diagram(model_to_test=model_to_test)
+
+        # Prepare to run a simulation.
+        t0 = self.object_pose_ts[0]
+        sim_plant_context = self.sim_plant.CreateDefaultContext()
+        self.sim_plant.SetPositions(sim_plant_context, np.vstack((
+            self.gt_joint_angle_traj.value(t0),
+            self.recorded_object_quat_pos_traj.value(t0))))
+        self.inv_dyn_controller.StartFrom(
+            joint_angles=self.gt_joint_angle_traj.value(t0),
+            joint_velocities=self.gt_joint_vel_traj.value(t0),
+            joint_torques=self.gt_joint_torque_traj.value(t0),
+            cartesian_stiffness=self.cartesian_stiffness,
+            cartesian_damping=self.cartesian_damping
+        )
+
+        # Prepare to store results from the simulation.
+        N = len(self.object_pose_ts)
+        pred_object_states = np.zeros((N, 13))
+        pred_franka_states = np.zeros((N, 14))
+
+        for i, t in enumerate(self.object_pose_ts):
+            # Run the simulation.
+            self.simulator.AdvanceTo(t)
+
+            # Get the current states from the simulator.
+            sim_context = self.simulator.get_context()
+            sim_plant_context = self.sim_plant.GetMyContextFromRoot(sim_context)
+            sim_positions = self.sim_plant.GetPositions(sim_plant_context)
+            sim_velocities = self.sim_plant.GetVelocities(sim_plant_context)
+
+            franka_joint_angles = sim_positions[:7]
+            franka_joint_velocity = sim_velocities[:7]
+            object_quat_pos = sim_positions[7:]
+            object_velocity = sim_velocities[7:]
+
+            # Store the results.
+            pred_object_states[i] = np.hstack((
+                object_quat_pos, object_velocity
+            ))
+            pred_franka_states[i] = np.hstack((
+                franka_joint_angles, franka_joint_velocity
+            ))
+
+            # Update the visualization.
+            vis_states = np.vstack((
+                franka_joint_angles.reshape(-1, 1),
+                self.commanded_quat_pos_traj.value(t),
+                self.recorded_object_quat_pos_traj.value(t),
+                object_quat_pos.reshape(-1, 1)
+            ))
+            vis_context = self.vis_simulator.get_context()
+            vis_plant_context = self.vis_plant.GetMyMutableContextFromRoot(
+                vis_context)
+            self.vis_plant.SetPositions(vis_plant_context, vis_states)
+            self.vis_diagram.ForcedPublish(vis_context)
+
+            vw_context_front = self.video_writer_front.GetMyContextFromRoot(
+                vis_context)
+            self.video_writer_front._publish(vw_context_front)
+
+            vw_context_camera = self.video_writer_camera.GetMyContextFromRoot(
+                vis_context)
+            self.video_writer_camera._publish(vw_context_camera)
+
+        self.video_writer_front.Save()
+        self.video_writer_camera.Save()
+
+        np.savetxt(
+            op.join(self.save_dir, f'pred_object_states_{model_to_test}.txt'),
+            pred_object_states)
+        np.savetxt(
+            op.join(self.save_dir, f'pred_franka_states_{model_to_test}.txt'),
+            pred_franka_states)
+
+    def _export_test_data(self):
+        self.save_dir = file_utils.robot_dynamics_subdir(
+            self.vision_asset, overwrite=False)
+
+        object = '_'.join(self.vision_asset.split('_')[:-1])
+        toss_num = int(self.vision_asset.split('_')[-1])
+
+        self.object = object
+        self.toss_num = toss_num
+
+        did_extract = False
+        for file in FILES_TO_EXPORT:
+            if not op.exists(op.join(self.save_dir, file)):
+                self._extract_data_from_rosbag(object, toss_num)
+                did_extract = True
+                break
+        if not did_extract:
+            print(f'All files already extracted for {object} toss {toss_num}.')
+
+    def _extract_data_from_rosbag(self):
+        print(f'Extracting data from ROS bag...')
+        start = file_utils.load_toss_time_from_yaml(
+            self.object, self.toss_num, 'start_time', as_ros_time=True)
+        end = file_utils.load_toss_time_from_yaml(
+            self.object, self.toss_num, 'end_time', as_ros_time=True)
+        bag_number = file_utils.load_rosbag_number_from_yaml(
+            self.object, self.toss_num)
+        bag_file = file_utils.get_robot_bag_filename(bag_number)
+
+        rosbag_processor.extract_franka_states(
+            start_time=start, end_time=end, bag_file=bag_file,
+            franka_states_output_dir=self.save_dir
+        )
+        rosbag_processor.extract_pose_commands(
+            start_time=start, end_time=end, bag_file=bag_file,
+            ee_pose_command_output_dir=self.save_dir
+        )
+
+    def _load_data(self):
+        """Loads the following into class variables:
+            - command_ts (N,)
+            - des_pos (N, 3)
+            - des_quat_wxyz (N, 4)
+            - des_quats (N,) list of Quaternions
+            - franka_joint_ts (M,)
+            - joint_angles (M, 7)
+            - joint_velocities (M, 7)
+            - joint_torques (M, 7)
+            - cartesian_stiffness (6,)
+            - cartesian_damping (6,)
+            - object_poses (L, 7)
+            - object_pose_ts (L,)
+        """
+        save_dir = self.save_dir
+
+        command_ts = np.loadtxt(op.join(save_dir, 'pose_command_times.txt'))
+        des_pos = np.loadtxt(op.join(save_dir, 'des_pos.txt'))
+        des_quat_wxyz = np.loadtxt(op.join(save_dir, 'des_quat_wxyz.txt'))
+
+        des_quats = []
+        for quat_wxyz in des_quat_wxyz:
+            des_quats.append(Quaternion(quat_wxyz))
+
+        franka_joint_ts = np.loadtxt(op.join(save_dir, 'joint_times.txt'))
+        joint_angles = np.loadtxt(op.join(save_dir, 'joint_angles.txt'))
+        joint_velocities = np.loadtxt(op.join(save_dir, 'joint_velocities.txt'))
+        joint_torques = np.loadtxt(op.join(save_dir, 'tau_J_ds.txt'))
+
+        cartesian_stiffness = np.loadtxt(op.join(
+            save_dir, 'cartesian_stiffness.txt'))
+        cartesian_damping = np.loadtxt(op.join(
+            save_dir, 'cartesian_damping.txt'))
+
+        # Zero out the trajectories.
+        init_t = min(command_ts[0], franka_joint_ts[0])
+        command_ts -= init_t
+        franka_joint_ts -= init_t
+
+        ### Load object-related data ###
+        # Offset the commanded end effector poses from the table height.  The
+        # Franka will also get offset by the same amount in the simulations.
+        des_pos[:, 2] += WORLD_TO_FRANKA_PLL_OFFSET
+
+        # Load the object poses.
+        pll_traj_dir = file_utils.contactnets_input_dir_bundlesdf(
+            self.vision_asset, self.bsdf_iteration, self.bundlesdf_id,
+            full=False, create=False)
+        toss_data_dict = torch.load(
+            op.join(pll_traj_dir, f'{self.toss_num}.pt'), weights_only=False)
+        object_states = np.array(toss_data_dict['object_state'])
+        object_poses = object_states[:, :7]  # quat_wxyz, pos
+        cnets_data_gen_dir = file_utils.cnets_data_gen_dataset_dir(
+            self.vision_asset, check_exists=True)
+        object_pose_ts = np.loadtxt(op.join(
+            cnets_data_gen_dir, 'bundlesdf_timestamps.txt')) - init_t
+        assert np.abs(object_pose_ts[0]) < 1e-1, f'Files may not be ' + \
+            f'compatible, since {object_pose_ts[0]=}'
+
+        self.command_ts = command_ts
+        self.des_pos = des_pos
+        self.des_quat_wxyz = des_quat_wxyz
+        self.des_quats = des_quats
+        self.franka_joint_ts = franka_joint_ts
+        self.joint_angles = joint_angles
+        self.joint_velocities = joint_velocities
+        self.joint_torques = joint_torques
+        self.cartesian_stiffness = cartesian_stiffness
+        self.cartesian_damping = cartesian_damping
+        self.object_poses = object_poses
+        self.object_pose_ts = object_pose_ts
+
+    def _create_drake_trajectories(self):
+        """Creates the following into class variables of Drake trajectories:
+            - commanded_quat_pos_traj
+            - recorded_object_quat_pos_traj
+            - gt_joint_angle_traj
+            - gt_joint_vel_traj
+            - gt_joint_torque_traj
+        """
+        position_trajectory = \
+            PiecewisePolynomial.CubicWithContinuousSecondDerivatives(
+                breaks=self.command_ts,
+                samples=self.des_pos.T,
+                sample_dot_at_start=np.zeros(3),
+                sample_dot_at_end=np.zeros(3)
+            )
+        orientation_trajectory = PiecewiseQuaternionSlerp(
+            breaks=self.command_ts,
+            quaternions=self.des_quats
+        )
+        # Sadly the more fool-proof PiecewisePose outputs 4x4 homogeneous
+        # transform matrices, but TrajectorySource needs a column vector.  Use
+        # StackedTrajectory instead, and use caution when interpreting the
+        # output ordering.
+        commanded_quat_pos_traj = StackedTrajectory()
+        commanded_quat_pos_traj.Append(orientation_trajectory)
+        commanded_quat_pos_traj.Append(position_trajectory)
+        self.commanded_quat_pos_traj = commanded_quat_pos_traj
+
+        # Build the object trajectory.
+        recorded_object_quat_traj = PiecewiseQuaternionSlerp(
+            breaks=self.object_pose_ts,
+            quaternions=[Quaternion(q) for q in self.object_poses[:, :4]]
+        )
+        recorded_object_pos_traj = \
+            PiecewisePolynomial.CubicWithContinuousSecondDerivatives(
+                breaks=self.object_pose_ts,
+                samples=self.object_poses[:, 4:].T,
+                sample_dot_at_start=np.zeros(3),
+                sample_dot_at_end=np.zeros(3)
+            )
+        recorded_object_quat_pos_traj = StackedTrajectory()
+        recorded_object_quat_pos_traj.Append(recorded_object_quat_traj)
+        recorded_object_quat_pos_traj.Append(recorded_object_pos_traj)
+        self.recorded_object_quat_pos_traj = recorded_object_quat_pos_traj
+
+        # TODO would it be better to combine angles and velocities into one
+        # trajectory, since technically the derivatives affect each other?
+        # Maybe torques too?
+        self.gt_joint_angle_traj = \
+            PiecewisePolynomial.CubicWithContinuousSecondDerivatives(
+                breaks=self.franka_joint_ts,
+                samples=self.joint_angles.T,
+                sample_dot_at_start=np.zeros(7),
+                sample_dot_at_end=np.zeros(7)
+            )
+        self.gt_joint_vel_traj = \
+            PiecewisePolynomial.CubicWithContinuousSecondDerivatives(
+                breaks=self.franka_joint_ts,
+                samples=self.joint_velocities.T,
+                sample_dot_at_start=np.zeros(7),
+                sample_dot_at_end=np.zeros(7)
+            )
+        self.gt_joint_torque_traj = \
+            PiecewisePolynomial.CubicWithContinuousSecondDerivatives(
+                breaks=self.franka_joint_ts,
+                samples=self.joint_torques.T,
+                sample_dot_at_start=np.zeros(7),
+                sample_dot_at_end=np.zeros(7)
+            )
+
+    def _build_control_drake_plant(self):
+        """Defines control_plant class variable."""
+        # Add the controller, which needs a separate plant for control with just
+        # the robot.
+        control_plant = MultibodyPlant(time_step=CONTROLLER_TIME_STEP)
+        control_parser = Parser(control_plant)
+        control_robot = control_parser.AddModels(
+            file_utils.franka_filepath(with_collision_geometry=True))[0]
+        control_plant.WeldFrames(control_plant.world_frame(),
+                                control_plant.GetFrameByName('panda_link0'),
+                                RigidTransform(p=np.array([
+                                    0, 0, WORLD_TO_FRANKA_PLL_OFFSET])))
+        control_plant.Finalize()
+        control_plant.set_name('control_plant')
+        control_plant.SetDefaultPositions(
+            self.gt_joint_angle_traj.value(
+                self.commanded_quat_pos_traj.start_time()))
+
+        self.control_plant = control_plant
+
+    def _build_sim_drake_diagram(self):
+        ### Simulation Drake diagram ###
+        builder = DiagramBuilder()
+
+        # Add the robot to a simulation.
+        sim_mbp_config = MultibodyPlantConfig(time_step=SIM_TIME_STEP)
+        sim_plant, scene_graph = AddMultibodyPlant(sim_mbp_config, builder)
+        sim_parser = Parser(sim_plant)
+        sim_robot = sim_parser.AddModels(
+            file_utils.franka_filepath(with_collision_geometry=True))[0]
+        sim_plant.WeldFrames(sim_plant.world_frame(),
+                            sim_plant.GetFrameByName('panda_link0'),
+                            RigidTransform(p=np.array([
+                                0, 0, WORLD_TO_FRANKA_PLL_OFFSET])))
+
+        # Add the table (as a half space) to the simulation, located at z=0.
+        # TODO:  meshcat doesn't display halfspace geometries, so may want to
+        # use a box instead.
+        friction = CoulombFriction(1.0, 1.0)
+        sim_plant.RegisterCollisionGeometry(
+            sim_plant.world_body(), RigidTransform(), HalfSpace(),
+            'table', friction)
+        sim_plant.RegisterVisualGeometry(
+            sim_plant.world_body(), RigidTransform(), HalfSpace(),
+            'table', np.array([0.5, 0.5, 0.5, 1]))
+
+        # Add the object to the simulation.
+        sim_object = sim_parser.AddModels(self.learned_urdf_path)[0]
+
+        sim_plant.Finalize()
+        sim_plant.set_name('sim_plant')
+        sim_plant.SetDefaultPositions(np.vstack((
+            self.gt_joint_angle_traj.value(
+                self.commanded_quat_pos_traj.start_time()),
+            self.recorded_object_quat_pos_traj.value(
+                self.commanded_quat_pos_traj.start_time())
+        )))
+        if self.debug:  visualize_drake_systems(plant=sim_plant)
+
+        # Add a trajectory source for the desired end effector pose.
+        traj_source = builder.AddSystem(TrajectorySource(
+            self.commanded_quat_pos_traj))
+
+        # Add the controller, which needs the control plant.
+        control_params = file_utils.load_franka_control_params()
+        inv_dyn_controller = builder.AddSystem(
+            InverseDynamicsController(self.control_plant, control_params))
+        inv_dyn_controller.set_name('inv_dyn_controller')
+
+        # Wire the diagram.
+        builder.Connect(traj_source.get_output_port(),
+                        inv_dyn_controller.get_ee_pose_command_input_port())
+        builder.Connect(sim_plant.get_state_output_port(sim_robot),
+                        inv_dyn_controller.get_robot_state_input_port())
+        builder.Connect(inv_dyn_controller.get_joint_torque_output_port(),
+                        sim_plant.get_actuation_input_port())
+
+        diagram = builder.Build()
+        if self.debug:  visualize_drake_systems(diagram=diagram); breakpoint()
+        simulator = Simulator(diagram)
+        simulator.Initialize()
+        simulator.set_target_realtime_rate(1)
+
+        self.sim_plant = sim_plant
+        self.inv_dyn_controller = inv_dyn_controller
+        self.simulator = simulator
+
+    def _build_vis_drake_diagram(self, model_to_test: str):
+        ### Visualization Drake diagram ###
+        vis_builder = DiagramBuilder()
+
+        # Add the robot and a floating end effector to the plant.
+        vis_mbp_config = MultibodyPlantConfig(time_step=vis_TIME_STEP)
+        vis_plant, vis_scene_graph = AddMultibodyPlant(
+            vis_mbp_config, vis_builder)
+        vis_parser = Parser(vis_plant)
+        vis_robot = vis_parser.AddModels(
+            file_utils.franka_filepath(with_collision_geometry=True))
+        vis_plant.WeldFrames(vis_plant.world_frame(),
+                            vis_plant.GetFrameByName('panda_link0'),
+                            RigidTransform(p=np.array([
+                                0, 0, WORLD_TO_FRANKA_PLL_OFFSET])))
+        vis_commanded_ee = vis_parser.AddModels(file_utils.ee_urdf_filepath())
+        vis_comp_object = vis_parser.AddModels(self.comparison_urdf_path)[0]
+        vis_object = vis_parser.AddModels(self.learned_urdf_path)[0]
+        vis_plant.RegisterVisualGeometry(
+            vis_plant.world_body(), RigidTransform(), HalfSpace(),
+            'table', np.array([0.5, 0.5, 0.5, 0.5]))
+        vis_plant.Finalize()
+        vis_plant.set_name('vis_plant')
+        vis_plant.SetDefaultPositions(np.vstack((
+            self.gt_joint_angle_traj.value(
+                self.commanded_quat_pos_traj.start_time()),
+            self.commanded_quat_pos_traj.value(
+                self.commanded_quat_pos_traj.start_time()),
+            self.recorded_object_quat_pos_traj.value(
+                self.commanded_quat_pos_traj.start_time()),
+            self.recorded_object_quat_pos_traj.value(
+                self.commanded_quat_pos_traj.start_time())
+        )))
+        AddFrameTriadIllustration(
+            scene_graph=vis_scene_graph,
+            body=vis_plant.GetBodyByName('floating_end_effector_tip'),
+            length=0.05, radius=0.008, opacity=0.5
+        )
+        AddFrameTriadIllustration(
+            scene_graph=vis_scene_graph,
+            body=vis_plant.GetBodyByName('end_effector_tip'),
+            length=0.1, radius=0.005, opacity=0.8
+        )
+        AddFrameTriadIllustration(
+            scene_graph=vis_scene_graph,
+            body=vis_plant.GetBodyByName(f'comparison_body'),
+            length=0.15, radius=0.01, opacity=0.5
+        )
+        AddFrameTriadIllustration(
+            scene_graph=vis_scene_graph,
+            body=vis_plant.GetBodyByName(f'{model_to_test}_body'),
+            length=0.2, radius=0.008, opacity=0.8
+        )
+
+        # Add a meshcat visualizer.
+        if self.open_meshcat:
+            if hasattr(self, 'meshcat'):
+                self.meshcat.Delete()
+            else:
+                self.meshcat = StartMeshcat()
+            MeshcatVisualizer.AddToBuilder(
+                vis_builder, vis_scene_graph, self.meshcat)
+
+        video_writer_front = VideoWriter.AddToBuilder(
+            filename=op.join(self.save_dir,
+                             f'{self.vision_asset}_{model_to_test}_front.mp4'),
+            builder=vis_builder,
+            sensor_pose=SENSOR_POSE_FRONT_VIEW,
+            fps=FPS,
+            backend="cv2",
+            width=VIDEO_PIXELS[1],
+            height=VIDEO_PIXELS[0],
+            fov_y=CAM_FOV
+        )
+        video_writer_camera = VideoWriter.AddToBuilder(
+            filename=op.join(self.save_dir,
+                             f'{self.vision_asset}_{model_to_test}_cam.mp4'),
+            builder=vis_builder,
+            sensor_pose=SENSOR_POSE_CAMERA_VIEW,
+            fps=FPS,
+            backend="cv2",
+            width=VIDEO_PIXELS[1],
+            height=VIDEO_PIXELS[0],
+            fov_y=CAM_FOV_REALSENSE
+        )
+
+        # Build the diagram.
+        vis_diagram = vis_builder.Build()
+        if self.debug:  visualize_drake_systems(diagram=vis_diagram)
+        vis_simulator = Simulator(vis_diagram)
+        vis_context = vis_simulator.get_context()
+        vis_diagram.ForcedPublish(vis_context)
+
+        self.vis_plant = vis_plant
+        self.video_writer_front = video_writer_front
+        self.video_writer_camera = video_writer_camera
+        self.vis_simulator = vis_simulator
+        self.vis_diagram = vis_diagram
 
 
-### Load object-related data ###
-# # Get the table height.  Use the average if using multiple tosses.
-# table_heights = np.array([
-#     file_utils.load_table_z_height(OBJECT, toss) for toss in
-#     range(TEST_TOSS, TEST_TOSS+1)
-# ])
-# z_table = np.mean(table_heights)
+# Do the thing.
+for vision_asset in VISION_ASSETS:
+    pll_id, bsdf_id, nerf_bsdf_id = ids_from_vision_asset(vision_asset)
+    robot_dynamics_predictor = RobotDynamicsPredictor(
+        vision_asset, pll_id, bsdf_id, nerf_bsdf_id, BSDF_ITERATION)
 
-# Offset the commanded end effector poses from the table height.  The Franka
-# will also get offset by the same amount in the simulations.
-# des_pos[:, 2] -= z_table
-des_pos[:, 2] += WORLD_TO_FRANKA_PLL_OFFSET
-
-# Load the object poses.
-toss_dir = file_utils.contactnets_input_dir_bundlesdf(
-    VISION_ASSET, BSDF_ITERATION, 'bundlesdf_id_00', full=False,
-    create=False)
-toss_data_dict = torch.load(
-    op.join(toss_dir, f'{TEST_TOSS}.pt'), weights_only=False)
-object_states = np.array(toss_data_dict['object_state'])
-object_poses = object_states[:, :7]  # quat_wxyz, pos
-cnets_data_gen_dir = file_utils.cnets_data_gen_dataset_dir(
-    VISION_ASSET, check_exists=True)
-object_pose_ts = np.loadtxt(op.join(
-    cnets_data_gen_dir, 'bundlesdf_timestamps.txt')) - init_t
-
-
-### Drake trajectory ###
-position_trajectory = PiecewisePolynomial.CubicWithContinuousSecondDerivatives(
-    breaks=command_ts,
-    samples=des_pos.T,
-    sample_dot_at_start=np.zeros(3),
-    sample_dot_at_end=np.zeros(3)
-)
-orientation_trajectory = PiecewiseQuaternionSlerp(
-    breaks=command_ts,
-    quaternions=des_quats
-)
-# Sadly the more fool-proof PiecewisePose outputs 4x4 homogeneous transform
-# matrices, but TrajectorySource needs a column vector.  Use StackedTrajectory
-# instead, and use caution when interpreting the output ordering.
-commanded_quat_pos_traj = StackedTrajectory()
-commanded_quat_pos_traj.Append(orientation_trajectory)
-commanded_quat_pos_traj.Append(position_trajectory)
-
-# Build the object trajectory.
-recorded_object_quat_traj = PiecewiseQuaternionSlerp(
-    breaks=object_pose_ts,
-    quaternions=[Quaternion(q) for q in object_poses[:, :4]]
-)
-recorded_object_pos_traj = \
-    PiecewisePolynomial.CubicWithContinuousSecondDerivatives(
-        breaks=object_pose_ts,
-        samples=object_poses[:, 4:].T,
-        sample_dot_at_start=np.zeros(3),
-        sample_dot_at_end=np.zeros(3)
-    )
-recorded_object_quat_pos_traj = StackedTrajectory()
-recorded_object_quat_pos_traj.Append(recorded_object_quat_traj)
-recorded_object_quat_pos_traj.Append(recorded_object_pos_traj)
-
-
-# TODO would it be better to combine angles and velocities into one trajectory,
-# since technically the derivatives affect each other?  Maybe torques too?
-gt_joint_angle_traj = PiecewisePolynomial.CubicWithContinuousSecondDerivatives(
-    breaks=franka_joint_ts,
-    samples=joint_angles.T,
-    sample_dot_at_start=np.zeros(7),
-    sample_dot_at_end=np.zeros(7)
-)
-gt_joint_vel_traj = PiecewisePolynomial.CubicWithContinuousSecondDerivatives(
-    breaks=franka_joint_ts,
-    samples=joint_velocities.T,
-    sample_dot_at_start=np.zeros(7),
-    sample_dot_at_end=np.zeros(7)
-)
-gt_joint_torque_traj = PiecewisePolynomial.CubicWithContinuousSecondDerivatives(
-    breaks=franka_joint_ts,
-    samples=joint_torques.T,
-    sample_dot_at_start=np.zeros(7),
-    sample_dot_at_end=np.zeros(7)
-)
-
-
-### Simulation Drake diagram ###
-builder = DiagramBuilder()
-
-# Add the robot to a simulation.
-sim_mbp_config = MultibodyPlantConfig(time_step=SIM_TIME_STEP)
-sim_plant, scene_graph = AddMultibodyPlant(sim_mbp_config, builder)
-sim_parser = Parser(sim_plant)
-sim_robot = sim_parser.AddModels(
-    file_utils.franka_filepath(with_collision_geometry=True))[0]
-sim_plant.WeldFrames(sim_plant.world_frame(),
-                     sim_plant.GetFrameByName('panda_link0'),
-                     RigidTransform(p=np.array([
-                        0, 0, WORLD_TO_FRANKA_PLL_OFFSET])))
-
-# Add the table (as a half space) to the simulation, located at z=0.
-# TODO:  meshcat doesn't display halfspace geometries, so may want to use a box
-# instead.
-friction = CoulombFriction(1.0, 1.0)
-sim_plant.RegisterCollisionGeometry(
-    sim_plant.world_body(), RigidTransform(), HalfSpace(),
-    'table', friction)
-sim_plant.RegisterVisualGeometry(
-    sim_plant.world_body(), RigidTransform(), HalfSpace(),
-    'table', np.array([0.5, 0.5, 0.5, 1]))
-
-# Add the object to the simulation.
-sim_object = sim_parser.AddModels(op.join(
-    file_utils.get_pll_urdf_output_dir(VISION_ASSET, BSDF_ITERATION, PLL_ID),
-    'with_bundlesdf_mesh.urdf'))[0]
-
-sim_plant.Finalize()
-sim_plant.set_name('sim_plant')
-sim_plant.SetDefaultPositions(np.vstack((
-    gt_joint_angle_traj.value(commanded_quat_pos_traj.start_time()),
-    recorded_object_quat_pos_traj.value(commanded_quat_pos_traj.start_time())
-)))
-if DEBUG:  visualize_drake_systems(plant=sim_plant)
-
-# Add a trajectory source for the desired end effector pose.
-traj_source = builder.AddSystem(TrajectorySource(commanded_quat_pos_traj))
-
-# Add the controller, which needs a separate plant for control with just the
-# robot.
-control_plant = MultibodyPlant(time_step=CONTROLLER_TIME_STEP)
-control_parser = Parser(control_plant)
-control_robot = control_parser.AddModels(
-    file_utils.franka_filepath(with_collision_geometry=True))[0]
-control_plant.WeldFrames(control_plant.world_frame(),
-                         control_plant.GetFrameByName('panda_link0'),
-                         RigidTransform(p=np.array([
-                            0, 0, WORLD_TO_FRANKA_PLL_OFFSET])))
-control_plant.Finalize()
-control_plant.set_name('control_plant')
-control_plant.SetDefaultPositions(
-    gt_joint_angle_traj.value(commanded_quat_pos_traj.start_time()))
-control_params_file = 'robot_dynamics/franka_hw_controllers.yaml'
-with open(control_params_file, 'r') as f:
-    control_params = yaml.safe_load(f)
-inv_dyn_controller = builder.AddSystem(
-    InverseDynamicsController(control_plant, control_params))
-inv_dyn_controller.set_name('inv_dyn_controller')
-
-# Wire the diagram.
-builder.Connect(traj_source.get_output_port(),
-                inv_dyn_controller.get_ee_pose_command_input_port())
-builder.Connect(sim_plant.get_state_output_port(sim_robot),
-                inv_dyn_controller.get_robot_state_input_port())
-builder.Connect(inv_dyn_controller.get_joint_torque_output_port(),
-                sim_plant.get_actuation_input_port())
-
-diagram = builder.Build()
-if DEBUG:  visualize_drake_systems(diagram=diagram); breakpoint()
-simulator = Simulator(diagram)
-simulator.Initialize()
-simulator.set_target_realtime_rate(1)
-
-
-### Visualization Drake diagram ###
-viz_builder = DiagramBuilder()
-
-# Add the robot and a floating end effector to the plant.
-viz_mbp_config = MultibodyPlantConfig(time_step=VIZ_TIME_STEP)
-viz_plant, viz_scene_graph = AddMultibodyPlant(viz_mbp_config, viz_builder)
-viz_parser = Parser(viz_plant)
-viz_robot = viz_parser.AddModels(
-    file_utils.franka_filepath(with_collision_geometry=True))
-viz_plant.WeldFrames(viz_plant.world_frame(),
-                     viz_plant.GetFrameByName('panda_link0'),
-                     RigidTransform(p=np.array([
-                        0, 0, WORLD_TO_FRANKA_PLL_OFFSET])))
-viz_commanded_ee = viz_parser.AddModels(file_utils.ee_urdf_filepath())
-viz_gt_object = viz_parser.AddModels(file_utils.get_urdf_with_bundlesdf_mesh(
-    f'vision_{OBJECT}', VISION_ASSET, BSDF_ITERATION, PLL_ID))[0]
-# TODO:  by default, both of these URDFs have the same model name, which means
-# they can't both be added to the plant unless one of the URDFs is edited.  It's
-# also useful to change the colors of each object to distinguish them and to
-# allow seeing their overlap via transparency.
-viz_object = viz_parser.AddModels(op.join(
-    file_utils.get_pll_urdf_output_dir(VISION_ASSET, BSDF_ITERATION, PLL_ID),
-    'with_bundlesdf_mesh.urdf'))[0]
-viz_plant.Finalize()
-viz_plant.set_name('viz_plant')
-viz_plant.SetDefaultPositions(np.vstack((
-    gt_joint_angle_traj.value(commanded_quat_pos_traj.start_time()),
-    commanded_quat_pos_traj.value(commanded_quat_pos_traj.start_time()),
-    recorded_object_quat_pos_traj.value(commanded_quat_pos_traj.start_time()),
-    recorded_object_quat_pos_traj.value(commanded_quat_pos_traj.start_time())
-)))
-AddFrameTriadIllustration(
-    scene_graph=viz_scene_graph,
-    body=viz_plant.GetBodyByName('floating_end_effector_tip'),
-    length=0.05, radius=0.008, opacity=0.5
-)
-AddFrameTriadIllustration(
-    scene_graph=viz_scene_graph,
-    body=viz_plant.GetBodyByName('end_effector_tip'),
-    length=0.1, radius=0.005, opacity=0.8
-)
-
-# Add a meshcat visualizer.
-meshcat = StartMeshcat()
-MeshcatVisualizer.AddToBuilder(viz_builder, viz_scene_graph, meshcat)
-
-# Build the diagram.
-viz_diagram = viz_builder.Build()
-if DEBUG:  visualize_drake_systems(diagram=viz_diagram)
-viz_simulator = Simulator(viz_diagram)
-viz_context = viz_simulator.get_context()
-viz_diagram.ForcedPublish(viz_context)
+    for model_to_test in MODELS_TO_TEST:
+        print(f'Running simulation for {vision_asset} with {model_to_test}...')
+        robot_dynamics_predictor.run_simulation(model_to_test)
 
 breakpoint()
 
-### Simulate an experiment ###
-# Prepare to run a simulation.
-sim_plant_context = sim_plant.CreateDefaultContext()
-sim_plant.SetPositions(sim_plant_context, np.vstack((
-    gt_joint_angle_traj.value(0),
-    recorded_object_quat_pos_traj.value(0))))
-inv_dyn_controller.StartFrom(
-    joint_angles=gt_joint_angle_traj.value(0),
-    joint_velocities=gt_joint_vel_traj.value(0),
-    joint_torques=gt_joint_torque_traj.value(0),
-    cartesian_stiffness=cartesian_stiffness,
-    cartesian_damping=cartesian_damping
-)
 
-t_final = min(10.0, commanded_quat_pos_traj.end_time())
-for t in np.arange(0, t_final, VIZ_TIME_STEP):
-    # Run the simulation.
-    simulator.AdvanceTo(t)
-
-    # Get the current joint angles from the simulator.
-    sim_context = simulator.get_context()
-    sim_plant_context = sim_plant.GetMyContextFromRoot(sim_context)
-    sim_positions = sim_plant.GetPositions(sim_plant_context)
-
-    franka_joint_angles = sim_positions[:7]
-    object_quat_pos = sim_positions[7:]
-
-    # Update the visualization.
-    viz_states = np.vstack((
-        franka_joint_angles.reshape(-1, 1),
-        commanded_quat_pos_traj.value(t),
-        recorded_object_quat_pos_traj.value(t),
-        object_quat_pos.reshape(-1, 1)
-    ))
-    viz_plant_context = viz_plant.GetMyMutableContextFromRoot(viz_context)
-    viz_plant.SetPositions(viz_plant_context, viz_states)
-    viz_context = viz_simulator.get_context()
-    viz_diagram.ForcedPublish(viz_context)
-
-
-breakpoint()

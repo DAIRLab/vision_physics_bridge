@@ -586,6 +586,9 @@
     <material name="black">
         <color rgba="0.3 0.3 0.3 1"/>
     </material>
+    <material name="light_grey">
+        <color rgba="0.8 0.8 0.8 1"/>
+    </material>
     <link name="end_effector_base">
         <inertial>
             <origin rpy="0 0 0" xyz="0 0 -0.0048"/>
@@ -607,6 +610,7 @@
             <geometry>
                 <cylinder radius="0.0315" length="0.0096"/>
             </geometry>
+            <material name="light_grey"/>
         </visual>
     </link>
     <link name="end_effector_link">
@@ -624,6 +628,7 @@
             <geometry>
                 <cylinder radius="0.0127" length="0.1016"/>
             </geometry>
+            <material name="light_grey"/>
         </visual>
     </link>
     <joint name="fix_link_base" type="fixed">

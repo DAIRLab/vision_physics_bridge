@@ -1,0 +1,41 @@
+# Contains ROS parameters referenced by the controller during runtime.
+
+franka_state_controller_custom:
+  type: franka_control/FrankaStateControllerCustom
+  publish_rate: 1000 #30  # [Hz]
+  arm_id: $(arg arm_id)
+  joint_names:
+    - $(arg arm_id)_joint1
+    - $(arg arm_id)_joint2
+    - $(arg arm_id)_joint3
+    - $(arg arm_id)_joint4
+    - $(arg arm_id)_joint5
+    - $(arg arm_id)_joint6
+    - $(arg arm_id)_joint7
+
+model_example_controller:
+  type: franka_example_controllers/ModelExampleController
+  arm_id: $(arg arm_id)
+
+hybrid_impedance_wrench_controller:
+  type: franka_controllers/InvdynHybridImpedanceWrenchController
+  arm_id: $(arg arm_id)
+  joint_names:
+    - $(arg arm_id)_joint1
+    - $(arg arm_id)_joint2
+    - $(arg arm_id)_joint3
+    - $(arg arm_id)_joint4
+    - $(arg arm_id)_joint5
+    - $(arg arm_id)_joint6
+    - $(arg arm_id)_joint7
+  publish_diagnostic: true
+  # nullspace_stiffness: [50.0, 50.0, 50.0, 50.0, 300.0, 50.0, 50.0]
+  nullspace_stiffness: [1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+  # nullspace_stiffness: [50.0, 300.0, 50.0, 50.0, 300.0, 50.0, 50.0]
+  # q_d_nullspace: [0, -pi/4, 0, -3*pi/4, 0, pi/2, pi/4] # pi seemingly doesnt work...
+  q_d_nullspace: [0, 0, 0, -2.356, 0, 1.571, 0.785]
+  pinv_lambda: .001
+  # 10.0 roughly equates to max 30 N in sim
+  # 2.5 equates to 15N in real, 5 = 30 7.5=50 10=65  
+  cartesian_trans_acc_norm_limit: 12.5  
+  cartesian_rot_acc_norm_limit: 100.0 # keep this high to avoid instability

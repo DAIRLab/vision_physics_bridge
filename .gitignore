@@ -23,4 +23,7 @@
 evaluation*
 *.sh
 
+robot_dynamics/*/*
+robot_dynamics/*.txt
+
 !evaluation/empty_experiment_results.yaml
