@@ -17,6 +17,7 @@ TODO:
     [ ] Be able to simulate ground truth mesh.
     [x] Make file callable with vision asset.
     [ ] Make file callable with run IDs.
+    [ ] Use some other inertia for BSDF.
 """
 
 import click
@@ -143,6 +144,13 @@ BSDF_MESH_RGBA = hex_to_rgba_format(BSDF_MESH_HEX, 0.6)
 VYSICS_MESH_RGBA = hex_to_rgba_format(VYSICS_MESH_HEX, 0.6)
 COMPARISON_MESH_RGBA = '0.6 0 0 0.6'
 
+DEFAULT_COM_STRING = '<inertial>\n            <origin xyz="0 0 0"'
+
+
+def obj_file_to_com_string(obj_path: str) -> str:
+    obj = trimesh.load(obj_path, force='mesh')
+    com = obj.center_mass
+    return DEFAULT_COM_STRING.replace('0 0 0', f'{com[0]} {com[1]} {com[2]}')
 
 def ids_from_vision_asset(vision_asset: str) -> str:
     try:
@@ -219,19 +227,43 @@ def make_comparison_geometry_urdf(
 
 def make_bsdf_geometry_urdf(
         vision_asset: str, bsdf_iteration: int, pll_id: str, track_bsdf_id: str,
-        save_dir: str, verbose: bool = False) -> str:
-    # Start from the learned PLL URDF so the inertial parameters are fair.
-    orig_urdf_path = op.join(
-        file_utils.get_pll_urdf_output_dir(
-            vision_asset, bsdf_iteration, pll_id),
-        'with_bundlesdf_mesh.urdf'
-    )
+        save_dir: str, verbose: bool = False,
+        inertia_from: str = 'geometry') -> str:
 
     nerf_results_dir = file_utils.bundlesdf_nerf_results_dir(
         dataset=vision_asset, cycle_iteration=bsdf_iteration,
         tracking_bundlesdf_id=track_bsdf_id, nerf_bundlesdf_id=track_bsdf_id
     )
     orig_obj_path = op.join(nerf_results_dir, 'textured_mesh.obj')
+
+    new_com_string = DEFAULT_COM_STRING
+
+    # Determine where to get the original URDF, based on which inertial
+    # parameters to use.
+    if inertia_from == 'learned':
+        orig_urdf_path = op.join(
+            file_utils.get_pll_urdf_output_dir(
+                vision_asset, bsdf_iteration, pll_id),
+            'with_bundlesdf_mesh.urdf'
+        )
+        # The new CoM is the same as the PLL URDF, which is not the same as the
+        # default, so no need to overwrite new_com_string.
+    elif inertia_from == 'tracking':
+        orig_urdf_path = op.join(
+            file_utils.contactnets_output_dir(
+                vision_asset, bsdf_iteration, pll_id),
+            'with_bundlesdf_mesh.urdf'
+        )
+    elif inertia_from == 'geometry':
+        orig_urdf_path = op.join(
+            file_utils.contactnets_output_dir(
+                vision_asset, bsdf_iteration, pll_id),
+            'with_bundlesdf_mesh.urdf'
+        )
+        new_com_string = obj_file_to_com_string(orig_obj_path)
+    else:
+        raise NotImplementedError(
+            f'Not prepared to get URDF inertia from {inertia_from=}')
 
     new_urdf_path = op.join(save_dir, 'bsdf.urdf')
     new_obj_path = '/'.join(new_urdf_path.split('/')[:-1]) + \
@@ -247,7 +279,8 @@ def make_bsdf_geometry_urdf(
                           f'color rgba="{BSDF_MESH_RGBA}"'
                 ).replace('name="body"', 'name="bsdf_body"'
                 ).replace('mesh filename="body_best.obj"',
-                          'mesh filename="bundlesdf_mesh.obj"')
+                          'mesh filename="bundlesdf_mesh.obj"'
+                ).replace(DEFAULT_COM_STRING, new_com_string)
             write_file.write(line)
 
     # Need to do something special for the obj file.  BundleSDF exports obj
@@ -636,7 +669,7 @@ class RobotDynamicsPredictor():
         pred_object_states = np.zeros((N, 13))
         pred_franka_states = np.zeros((N, 14))
 
-        for i, t in enumerate(self.object_pose_ts[:15]):
+        for i, t in enumerate(self.object_pose_ts):
             # Run the simulation.
             self.simulator.AdvanceTo(t)
 

@@ -87,7 +87,8 @@ def get_pll_urdf_output_dir(system: str, cycle_iteration: int,
     data_asset = f'vision_{obj_name}'
     pose_source = pose_source = 'tagslam' if cycle_iteration == 0 else \
         f'bundlesdf_iteration_{cycle_iteration}'
-    storage_name = op.join(pll_file_utils.RESULTS_DIR, data_asset, system, pose_source)
+    storage_name = op.join(
+        pll_file_utils.RESULTS_DIR, data_asset, system, pose_source)
 
     # Get the geometry output directory from the PLL storage.
     pll_urdf_output_dir = pll_file_utils.get_learned_urdf_dir(
