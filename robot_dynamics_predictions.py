@@ -98,9 +98,9 @@ PLL_BSDF_NERF_IDS_FROM_VISION_ASSET = {
          'bundlesdf_id_00',
          'bundlesdf_id_00-t02_3'),
     'robotocc_oatly_5':
-        ('pll_id_t02e300b20_occoatly_5',
+        ('pll_id_t09d_robotocc_oatly_5',
          'bundlesdf_id_00',
-         'bundlesdf_id_00-t02_3'),
+         'bundlesdf_id_00-t09d'),
     'robotocc_oatly_6':
         ('pll_id_t02e300b20_occoatly_6',
          'bundlesdf_id_00',
@@ -129,6 +129,58 @@ PLL_BSDF_NERF_IDS_FROM_VISION_ASSET = {
         ('pll_id_t02_robotocc_bottle_7',
          'bundlesdf_id_00',
          'bundlesdf_id_00-t02_3'),
+    'robotocc_milk_5':
+        ('pll_id_t09d_robotocc_milk_5',
+         'bundlesdf_id_00',
+         'bundlesdf_id_00-t09d'),
+    'robotocc_styrofoam_3':
+        ('pll_id_t09d_robotocc_styrofoam_3',
+         'bundlesdf_id_00',
+         'bundlesdf_id_00-t09d'),
+    'robotocc_styrofoam_5':
+        ('pll_id_t09d_robotocc_styrofoam_5',
+         'bundlesdf_id_00',
+         'bundlesdf_id_00-t09d'),
+    'robotocc_styrofoam_6':
+        ('pll_id_t09d_robotocc_styrofoam_6',
+         'bundlesdf_id_00',
+         'bundlesdf_id_00-t09d'),
+    'robotocc_toblerone_2':
+        ('pll_id_t09d_robotocc_toblerone_2',
+         'bundlesdf_id_00',
+         'bundlesdf_id_00-t09d'),
+    'robotocc_toblerone_5':
+        ('pll_id_t09d_robotocc_toblerone_5',
+         'bundlesdf_id_00',
+         'bundlesdf_id_00-t09d'),
+    'robotocc_eggs_1':
+        ('pll_id_t09d_robotocc_eggs_1',
+         'bundlesdf_id_00',
+         'bundlesdf_id_00-t09d'),
+    'robotocc_bakingbox_1':
+        ('pll_id_t09d_robotocc_bakingbox_1',
+         'bundlesdf_id_00',
+         'bundlesdf_id_00-t09d'),
+    'robotocc_bakingbox_5':
+        ('pll_id_t09d_robotocc_bakingbox_5',
+         'bundlesdf_id_00',
+         'bundlesdf_id_00-t09d'),
+    'robotocc_bakingbox_7':
+        ('pll_id_t09d_robotocc_bakingbox_7',
+         'bundlesdf_id_00',
+         'bundlesdf_id_00-t09d'),
+    'robotocc_bakingbox_8':
+        ('pll_id_t09d_robotocc_bakingbox_8',
+         'bundlesdf_id_00',
+         'bundlesdf_id_00-t09d'),
+    'robotocc_bottle_1':
+        ('pll_id_t09d_robotocc_bottle_1',
+         'bundlesdf_id_00',
+         'bundlesdf_id_00-t09d'),
+    'robotocc_bottle_6':
+        ('pll_id_t09d_robotocc_bottle_6',
+         'bundlesdf_id_00',
+         'bundlesdf_id_00-t09d'),
 }
 
 def hex_to_rgba_format(hex: str, opacity: float):
