@@ -15,15 +15,18 @@ TODO:
     [x] Store the intermediate files somewhere per experiment.
     [x] Be able to swap out what URDF to simulate (PLL, BSDF, Vysics).
     [ ] Be able to simulate ground truth mesh.
-    [ ] Make file callable with vision asset / run IDs.
+    [x] Make file callable with vision asset.
+    [ ] Make file callable with run IDs.
 """
 
+import click
 import os
 import os.path as op
 import numpy as np
 import matplotlib.pyplot as plt
 import torch
 import trimesh
+from typing import Tuple
 
 from pydrake.common.eigen_geometry import AngleAxis, Quaternion
 from pydrake.geometry import HalfSpace, MeshcatVisualizer, StartMeshcat
@@ -82,11 +85,11 @@ FILES_TO_EXPORT = ['joint_times.txt', 'joint_angles.txt',
 
 PLL_BSDF_NERF_IDS_FROM_VISION_ASSET = {
     'robotocc_styrofoam_1':
-        ('pll_id_t09_robotocc_styrofoam_1',
+        ('pll_id_t09d_robotocc_styrofoam_1',
          'bundlesdf_id_00',
          'bundlesdf_id_00-t09d'),
     'robotocc_oatly_3':
-        ('pll_id_t09_robotocc_oatly_3',
+        ('pll_id_t09d_robotocc_oatly_3',
          'bundlesdf_id_00',
          'bundlesdf_id_00-t09d'),
     'robotocc_oatly_4':
@@ -126,13 +129,6 @@ PLL_BSDF_NERF_IDS_FROM_VISION_ASSET = {
          'bundlesdf_id_00',
          'bundlesdf_id_00-t02_3'),
 }
-VISION_ASSETS = PLL_BSDF_NERF_IDS_FROM_VISION_ASSET.keys()
-
-
-OPEN_MESHCAT = True
-EXPORT_TEST_DATA = True
-DEBUG = False
-
 
 def hex_to_rgba_format(hex: str, opacity: float):
     r, g, b = tuple(int(hex[i:i+2], 16) for i in (1, 3, 5))
@@ -142,10 +138,10 @@ PLL_MESH_HEX = '#70ad47'
 BSDF_MESH_HEX = '#4472c4'
 VYSICS_MESH_HEX = '#7030a0'
 
-PLL_MESH_RGBA = hex_to_rgba_format(PLL_MESH_HEX, 0.7)
-BSDF_MESH_RGBA = hex_to_rgba_format(BSDF_MESH_HEX, 0.7)
-VYSICS_MESH_RGBA = hex_to_rgba_format(VYSICS_MESH_HEX, 0.7)
-COMPARISON_MESH_RGBA = '0.6 0 0 0.7'
+PLL_MESH_RGBA = hex_to_rgba_format(PLL_MESH_HEX, 0.6)
+BSDF_MESH_RGBA = hex_to_rgba_format(BSDF_MESH_HEX, 0.6)
+VYSICS_MESH_RGBA = hex_to_rgba_format(VYSICS_MESH_HEX, 0.6)
+COMPARISON_MESH_RGBA = '0.6 0 0 0.6'
 
 
 def ids_from_vision_asset(vision_asset: str) -> str:
@@ -169,21 +165,22 @@ def visualize_drake_systems(plant=None, diagram=None):
     plt.plot(1)
     plt.show(block=False)
 
-def write_obj_file_with_normals(original_obj_path: str, new_obj_path: str):
+def write_obj_file_with_normals(original_obj_path: str, new_obj_path: str,
+                                verbose: bool = False):
     original_obj = trimesh.load(original_obj_path, force='mesh')
 
-    print(f'Converting obj:  ', end='')
+    if verbose:  print(f'Converting obj:  ', end='')
 
     with open(new_obj_path, 'w') as f:
         f.write(f'# Vertices\n')
         for vertex in original_obj.vertices:
             f.write(f'v {vertex[0]} {vertex[1]} {vertex[2]}\n')
-        print(f'wrote vertices, ', end='')
+        if verbose:  print(f'wrote vertices, ', end='')
 
         f.write(f'\n# Vertex normals\n')
         for normal in original_obj.vertex_normals:
             f.write(f'vn {normal[0]} {normal[1]} {normal[2]}\n')
-        print(f'normals, ', end='')
+        if verbose:  print(f'normals, ', end='')
 
         f.write(f'\n# Faces:  vertex index // vertex normal index\n')
         for face in original_obj.faces:
@@ -191,14 +188,14 @@ def write_obj_file_with_normals(original_obj_path: str, new_obj_path: str):
             # This is of format v_i//vn_i, which for us are always the same.
             f.write(f'f {face[0]+1}//{face[0]+1} ' + \
                     f'{face[1]+1}//{face[1]+1} {face[2]+1}//{face[2]+1}\n')
-        print(f'and faces.')
+        if verbose:  print(f'and faces.')
 
 def make_comparison_geometry_urdf(
-        vision_asset: str, bsdf_iteration: int, pll_id: str, nerf_bsdf_id: str,
-        save_dir: str) -> str:
+        vision_asset: str, bsdf_iteration: int, pll_id: str, track_bsdf_id: str,
+        nerf_bsdf_id: str, save_dir: str, verbose: bool = False) -> str:
     # Start by exporting the BundleSDF URDF.
-    make_bsdf_geometry_urdf(vision_asset, bsdf_iteration, pll_id, nerf_bsdf_id,
-                            save_dir)
+    make_bsdf_geometry_urdf(vision_asset, bsdf_iteration, pll_id, track_bsdf_id,
+                            save_dir, verbose=verbose)
 
     orig_urdf_path = op.join(save_dir, 'bsdf.urdf')
     new_urdf_path = op.join(save_dir, 'comparison.urdf')
@@ -214,14 +211,15 @@ def make_comparison_geometry_urdf(
                 ).replace('name="bsdf_body"', 'name="comparison_body"')
             write_file.write(line)
 
-    print(f'Getting for comparison:\nURDF from {orig_urdf_path}\nOBJ from ' + \
-          f'{op.join(save_dir, "bundlesdf_mesh.obj")}\n')
+    if verbose:
+        print(f'Getting for comparison:\nURDF from {orig_urdf_path}\nOBJ ' + \
+              f'from {op.join(save_dir, "bundlesdf_mesh.obj")}\n')
 
     return new_urdf_path
 
 def make_bsdf_geometry_urdf(
         vision_asset: str, bsdf_iteration: int, pll_id: str, track_bsdf_id: str,
-        nerf_bsdf_id: str, save_dir: str) -> str:
+        save_dir: str, verbose: bool = False) -> str:
     # Start from the learned PLL URDF so the inertial parameters are fair.
     orig_urdf_path = op.join(
         file_utils.get_pll_urdf_output_dir(
@@ -231,7 +229,7 @@ def make_bsdf_geometry_urdf(
 
     nerf_results_dir = file_utils.bundlesdf_nerf_results_dir(
         dataset=vision_asset, cycle_iteration=bsdf_iteration,
-        tracking_bundlesdf_id=track_bsdf_id, nerf_bundlesdf_id=nerf_bsdf_id
+        tracking_bundlesdf_id=track_bsdf_id, nerf_bundlesdf_id=track_bsdf_id
     )
     orig_obj_path = op.join(nerf_results_dir, 'textured_mesh.obj')
 
@@ -254,15 +252,16 @@ def make_bsdf_geometry_urdf(
 
     # Need to do something special for the obj file.  BundleSDF exports obj
     # files without any normals.
-    write_obj_file_with_normals(orig_obj_path, new_obj_path)
+    write_obj_file_with_normals(orig_obj_path, new_obj_path, verbose=verbose)
 
-    print(f'Getting for BundleSDF:\nURDF from {orig_urdf_path}\nOBJ from ' + \
-          f'{orig_obj_path}\n')
+    if verbose:
+        print(f'Getting for BundleSDF:\nURDF from {orig_urdf_path}\nOBJ ' + \
+              f'from {orig_obj_path}\n')
 
     return new_urdf_path
 
 def make_pll_geometry_urdf(vision_asset: str, bsdf_iteration: int, pll_id: str,
-                           save_dir: str) -> str:
+                           save_dir: str, verbose: bool = False) -> str:
     orig_urdf_path = op.join(
         file_utils.get_pll_urdf_output_dir(
             vision_asset, bsdf_iteration, pll_id),
@@ -287,14 +286,15 @@ def make_pll_geometry_urdf(vision_asset: str, bsdf_iteration: int, pll_id: str,
             write_file.write(line)
     os.system(f'cp {orig_obj_path} {new_obj_path}')
 
-    print(f'Getting for PLL:\nURDF from {orig_urdf_path}\nOBJ from ' + \
-          f'{orig_obj_path}\n')
+    if verbose:
+        print(f'Getting for PLL:\nURDF from {orig_urdf_path}\nOBJ from ' + \
+              f'{orig_obj_path}\n')
 
     return new_urdf_path
 
 def make_vysics_geometry_urdf(
         vision_asset: str, bsdf_iteration: int, pll_id: str, track_bsdf_id: str,
-        nerf_bsdf_id: str, save_dir: str) -> str:
+        nerf_bsdf_id: str, save_dir: str, verbose: bool = False) -> str:
     orig_urdf_path = op.join(
         file_utils.get_pll_urdf_output_dir(
             vision_asset, bsdf_iteration, pll_id),
@@ -324,10 +324,11 @@ def make_vysics_geometry_urdf(
 
     # Need to do something special for the obj file.  BundleSDF exports obj
     # files without any normals.
-    write_obj_file_with_normals(orig_obj_path, new_obj_path)
+    write_obj_file_with_normals(orig_obj_path, new_obj_path, verbose=verbose)
 
-    print(f'Getting for Vysics:\nURDF from {orig_urdf_path}\nOBJ from ' + \
-          f'{orig_obj_path}\n')
+    if verbose:
+        print(f'Getting for Vysics:\nURDF from {orig_urdf_path}\nOBJ from ' + \
+              f'{orig_obj_path}\n')
 
     return new_urdf_path
 
@@ -568,27 +569,49 @@ class RobotDynamicsPredictor():
     def run_simulation(self, model_to_test: str):
         if model_to_test == 'pll':
             self.learned_urdf_path = make_pll_geometry_urdf(
-                self.vision_asset, self.bsdf_iteration, self.pll_id,
-                save_dir=self.save_dir)
+                vision_asset=self.vision_asset,
+                bsdf_iteration=self.bsdf_iteration,
+                pll_id=self.pll_id,
+                save_dir=self.save_dir,
+                verbose=self.debug
+            )
         elif model_to_test == 'vysics':
             self.learned_urdf_path = make_vysics_geometry_urdf(
-                self.vision_asset, self.bsdf_iteration, self.pll_id,
-                self.bundlesdf_id, self.nerf_bundlesdf_id,
-                save_dir=self.save_dir)
+                vision_asset=self.vision_asset,
+                bsdf_iteration=self.bsdf_iteration,
+                pll_id=self.pll_id,
+                track_bsdf_id=self.bundlesdf_id,
+                nerf_bsdf_id=self.nerf_bundlesdf_id,
+                save_dir=self.save_dir,
+                verbose=self.debug
+            )
         elif model_to_test == 'bsdf':
             self.learned_urdf_path = make_bsdf_geometry_urdf(
-                self.vision_asset, self.bsdf_iteration, self.pll_id,
-                self.bundlesdf_id, self.bundlesdf_id, save_dir=self.save_dir)
+                vision_asset=self.vision_asset,
+                bsdf_iteration=self.bsdf_iteration,
+                pll_id=self.pll_id,
+                track_bsdf_id=self.bundlesdf_id,
+                save_dir=self.save_dir,
+                verbose=self.debug
+            )
         else:
             raise NotImplementedError(
                 f'Not prepared to simulate {model_to_test=}')
 
         self.comparison_urdf_path = make_comparison_geometry_urdf(
-            self.vision_asset, self.bsdf_iteration, self.pll_id,
-            self.bundlesdf_id, save_dir=self.save_dir
+            vision_asset=self.vision_asset,
+            bsdf_iteration=self.bsdf_iteration,
+            pll_id=self.pll_id,
+            track_bsdf_id=self.bundlesdf_id,
+            nerf_bsdf_id=self.nerf_bundlesdf_id,
+            save_dir=self.save_dir,
+            verbose=self.debug
         )
 
         print(f'Simulating {model_to_test} model...')
+        if self.debug:
+            print(f'Comparison URDF: {self.comparison_urdf_path}')
+            print(f'Learned URDF: {self.learned_urdf_path}')
 
         self._build_control_drake_plant()
         self._build_sim_drake_diagram()
@@ -613,7 +636,7 @@ class RobotDynamicsPredictor():
         pred_object_states = np.zeros((N, 13))
         pred_franka_states = np.zeros((N, 14))
 
-        for i, t in enumerate(self.object_pose_ts):
+        for i, t in enumerate(self.object_pose_ts[:15]):
             # Run the simulation.
             self.simulator.AdvanceTo(t)
 
@@ -680,7 +703,7 @@ class RobotDynamicsPredictor():
         did_extract = False
         for file in FILES_TO_EXPORT:
             if not op.exists(op.join(self.save_dir, file)):
-                self._extract_data_from_rosbag(object, toss_num)
+                self._extract_data_from_rosbag()
                 did_extract = True
                 break
         if not did_extract:
@@ -905,7 +928,7 @@ class RobotDynamicsPredictor():
             self.recorded_object_quat_pos_traj.value(
                 self.commanded_quat_pos_traj.start_time())
         )))
-        if self.debug:  visualize_drake_systems(plant=sim_plant)
+        # if self.debug:  visualize_drake_systems(plant=sim_plant)
 
         # Add a trajectory source for the desired end effector pose.
         traj_source = builder.AddSystem(TrajectorySource(
@@ -926,7 +949,7 @@ class RobotDynamicsPredictor():
                         sim_plant.get_actuation_input_port())
 
         diagram = builder.Build()
-        if self.debug:  visualize_drake_systems(diagram=diagram); breakpoint()
+        # if self.debug:  visualize_drake_systems(diagram=diagram); breakpoint()
         simulator = Simulator(diagram)
         simulator.Initialize()
         simulator.set_target_realtime_rate(1)
@@ -1023,7 +1046,7 @@ class RobotDynamicsPredictor():
 
         # Build the diagram.
         vis_diagram = vis_builder.Build()
-        if self.debug:  visualize_drake_systems(diagram=vis_diagram)
+        #if self.debug:  visualize_drake_systems(diagram=vis_diagram)
         vis_simulator = Simulator(vis_diagram)
         vis_context = vis_simulator.get_context()
         vis_diagram.ForcedPublish(vis_context)
@@ -1035,16 +1058,30 @@ class RobotDynamicsPredictor():
         self.vis_diagram = vis_diagram
 
 
-# Do the thing.
-for vision_asset in VISION_ASSETS:
+@click.command()
+@click.argument('vision-asset', type=str, required=True)
+@click.argument('models-to-test', type=str, nargs=-1, required=True)
+@click.option('--debug', is_flag=True,
+              help='add extra debugging printouts')
+@click.option('--meshcat', is_flag=True,
+              help='show the simulated visualizations in meshcat')
+def main_command(vision_asset: str, models_to_test: Tuple[str], debug: bool,
+                 meshcat: bool):
+    assert vision_asset in PLL_BSDF_NERF_IDS_FROM_VISION_ASSET.keys()
+    for model_to_test in models_to_test:
+        assert model_to_test in MODELS_TO_TEST
+
     pll_id, bsdf_id, nerf_bsdf_id = ids_from_vision_asset(vision_asset)
     robot_dynamics_predictor = RobotDynamicsPredictor(
-        vision_asset, pll_id, bsdf_id, nerf_bsdf_id, BSDF_ITERATION)
+        vision_asset, pll_id, bsdf_id, nerf_bsdf_id, BSDF_ITERATION,
+        open_meshcat=meshcat, debug=debug)
 
-    for model_to_test in MODELS_TO_TEST:
+    for model_to_test in models_to_test:
         print(f'Running simulation for {vision_asset} with {model_to_test}...')
         robot_dynamics_predictor.run_simulation(model_to_test)
 
-breakpoint()
+
+if __name__ == '__main__':
+    main_command()  # pylint: disable=no-value-for-parameter
 
 
