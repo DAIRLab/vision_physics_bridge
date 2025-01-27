@@ -14,10 +14,12 @@ TODO:
     [x] Export predicted trajectories to files.
     [x] Store the intermediate files somewhere per experiment.
     [x] Be able to swap out what URDF to simulate (PLL, BSDF, Vysics).
-    [ ] Be able to simulate ground truth mesh.
+    [x] Be able to simulate ground truth mesh.
     [x] Make file callable with vision asset.
     [ ] Make file callable with run IDs.
-    [ ] Use some other inertia for BSDF.
+    [x] Use more reasonable other inertia for BSDF and GT (use geometric mean).
+    [ ] Be able to generate videos from existing computed trajectories.
+    [ ] Be able to use existing URDFs.
 """
 
 import click
@@ -75,7 +77,7 @@ CAM_FOV_REALSENSE = 2*np.arctan(VIDEO_PIXELS[0]/(2*fy))
 
 WORLD_TO_FRANKA_PLL_OFFSET = 0.0087
 
-MODELS_TO_TEST = ['vysics', 'bsdf', 'pll']  # 'gt'
+MODELS_TO_TEST = ['vysics', 'bsdf', 'pll', 'gt']
 TRACKING_BUNDLESDF_ID = 'bundlesdf_id_00'
 BSDF_ITERATION = 1
 
@@ -194,7 +196,8 @@ VYSICS_MESH_HEX = '#7030a0'
 PLL_MESH_RGBA = hex_to_rgba_format(PLL_MESH_HEX, 0.6)
 BSDF_MESH_RGBA = hex_to_rgba_format(BSDF_MESH_HEX, 0.6)
 VYSICS_MESH_RGBA = hex_to_rgba_format(VYSICS_MESH_HEX, 0.6)
-COMPARISON_MESH_RGBA = '0.6 0 0 0.6'
+GT_MESH_RGBA = '0.6 0 0 0.6'
+COMPARISON_MESH_RGBA = '0.6 0.6 0.6 0.6'
 
 DEFAULT_COM_STRING = '<inertial>\n            <origin xyz="0 0 0"'
 
@@ -250,30 +253,60 @@ def write_obj_file_with_normals(original_obj_path: str, new_obj_path: str,
                     f'{face[1]+1}//{face[1]+1} {face[2]+1}//{face[2]+1}\n')
         if verbose:  print(f'and faces.')
 
-def make_comparison_geometry_urdf(
+def make_gt_geometry_urdf(
         vision_asset: str, bsdf_iteration: int, pll_id: str, track_bsdf_id: str,
-        nerf_bsdf_id: str, save_dir: str, verbose: bool = False) -> str:
-    # Start by exporting the BundleSDF URDF.
-    make_bsdf_geometry_urdf(vision_asset, bsdf_iteration, pll_id, track_bsdf_id,
-                            save_dir, verbose=verbose)
+        nerf_bsdf_id: str, save_dir: str, verbose: bool = False,
+        from_eval_folder: bool = False, for_comparison: bool = True) -> str:
+    name = 'comparison' if for_comparison else 'gt'
+    color_rgba = COMPARISON_MESH_RGBA if for_comparison else GT_MESH_RGBA
 
-    orig_urdf_path = op.join(save_dir, 'bsdf.urdf')
-    new_urdf_path = op.join(save_dir, 'comparison.urdf')
+    # Get the GT-aligned mesh from the NeRF results directory.
+    orig_urdf_path = op.join(
+        file_utils.contactnets_output_dir(
+            vision_asset, bsdf_iteration, pll_id),
+        'with_bundlesdf_mesh.urdf'
+    )
+    new_urdf_path = op.join(save_dir, f'{name}.urdf')
+
+    if from_eval_folder:
+        evaluation_results_dir = file_utils.evaluation_subdir(
+            dataset=vision_asset, cycle_iteration=bsdf_iteration,
+            tracking_bundlesdf_id=track_bsdf_id, nerf_bundlesdf_id=nerf_bsdf_id
+        )
+        orig_obj_path = op.join(
+            evaluation_results_dir, 'true_geom_aligned_assist.obj')
+    else:
+        nerf_results_dir = file_utils.bundlesdf_nerf_results_dir(
+            dataset=vision_asset, cycle_iteration=bsdf_iteration,
+            tracking_bundlesdf_id=track_bsdf_id, nerf_bundlesdf_id=nerf_bsdf_id
+        )
+        orig_obj_path = op.join(
+            nerf_results_dir, 'true_geom_aligned_meshlab.obj')
+
+    new_com_string = obj_file_to_com_string(orig_obj_path)
+    new_obj_path = '/'.join(new_urdf_path.split('/')[:-1]) + '/gt_mesh.obj'
 
     # Change the URDF body name and color.
     with open(new_urdf_path, 'w') as write_file:
         with open(orig_urdf_path, 'r') as read_file:
             line = read_file.read(
-                ).replace('name="from_bundlesdf"',
-                          'name="comparison"'
-                ).replace(f'color rgba="{BSDF_MESH_RGBA}"',
-                          f'color rgba="{COMPARISON_MESH_RGBA}"'
-                ).replace('name="bsdf_body"', 'name="comparison_body"')
+                ).replace('name="vision_object"',
+                          f'name="{name}"'
+                ).replace('color rgba="0.6 0 0 1.0"',
+                          f'color rgba="{color_rgba}"'
+                ).replace('name="body"', f'name="{name}_body"'
+                ).replace('mesh filename="bundlesdf_mesh.obj"',
+                          'mesh filename="gt_mesh.obj"'
+                ).replace(DEFAULT_COM_STRING, new_com_string)
             write_file.write(line)
+
+    # Need to do something special for the obj file.  BundleSDF exports obj
+    # files without any normals.
+    write_obj_file_with_normals(orig_obj_path, new_obj_path, verbose=verbose)
 
     if verbose:
         print(f'Getting for comparison:\nURDF from {orig_urdf_path}\nOBJ ' + \
-              f'from {op.join(save_dir, "bundlesdf_mesh.obj")}\n')
+              f'from {orig_obj_path}\n')
 
     return new_urdf_path
 
@@ -679,18 +712,30 @@ class RobotDynamicsPredictor():
                 save_dir=self.save_dir,
                 verbose=self.debug
             )
+        elif model_to_test == 'gt':
+            self.learned_urdf_path = make_gt_geometry_urdf(
+                vision_asset=self.vision_asset,
+                bsdf_iteration=self.bsdf_iteration,
+                pll_id=self.pll_id,
+                track_bsdf_id=self.bundlesdf_id,
+                nerf_bsdf_id=self.nerf_bundlesdf_id,
+                save_dir=self.save_dir,
+                verbose=self.debug,
+                for_comparison=False
+            )
         else:
             raise NotImplementedError(
                 f'Not prepared to simulate {model_to_test=}')
 
-        self.comparison_urdf_path = make_comparison_geometry_urdf(
+        self.comparison_urdf_path = make_gt_geometry_urdf(
             vision_asset=self.vision_asset,
             bsdf_iteration=self.bsdf_iteration,
             pll_id=self.pll_id,
             track_bsdf_id=self.bundlesdf_id,
             nerf_bsdf_id=self.nerf_bundlesdf_id,
             save_dir=self.save_dir,
-            verbose=self.debug
+            verbose=self.debug,
+            for_comparison=True
         )
 
         print(f'Simulating {model_to_test} model...')
