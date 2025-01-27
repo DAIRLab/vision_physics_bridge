@@ -18,7 +18,7 @@ TODO:
     [x] Make file callable with vision asset.
     [ ] Make file callable with run IDs.
     [x] Use more reasonable other inertia for BSDF and GT (use geometric mean).
-    [ ] Be able to generate videos from existing computed trajectories.
+    [x] Be able to generate videos from existing computed trajectories.
     [ ] Be able to use existing URDFs.
 """
 
@@ -684,7 +684,7 @@ class RobotDynamicsPredictor():
         self._load_data()
         self._create_drake_trajectories()
 
-    def run_simulation(self, model_to_test: str):
+    def run_simulation(self, model_to_test: str, overwrite: bool = False):
         if model_to_test == 'pll':
             self.learned_urdf_path = make_pll_geometry_urdf(
                 vision_asset=self.vision_asset,
@@ -738,56 +738,89 @@ class RobotDynamicsPredictor():
             for_comparison=True
         )
 
-        print(f'Simulating {model_to_test} model...')
+        pred_object_states_filename = op.join(
+            self.save_dir, f'pred_object_states_{model_to_test}.txt')
+        pred_franka_states_filename = op.join(
+            self.save_dir, f'pred_franka_states_{model_to_test}.txt')
+
+        do_simulation = False if op.exists(pred_object_states_filename) and \
+            op.exists(pred_franka_states_filename) else True
+        if not do_simulation:
+            pred_object_states = np.loadtxt(pred_object_states_filename)
+            pred_franka_states = np.loadtxt(pred_franka_states_filename)
+
+            if overwrite:
+                print(f'Overwriting existing predictions: ', end=' ')
+                do_simulation = True
+            elif pred_object_states.shape[0] != self.object_pose_ts.shape[0]:
+                print(f'Stored predictions do not match recorded data ' + \
+                      f'length ({pred_object_states.shape[0]=} versus ' + \
+                      f'{self.object_pose_ts.shape[0]=}) -- will simulate.')
+                do_simulation = True
+
+        if do_simulation:
+            print(f'Simulating {model_to_test} model...')
+            self._build_control_drake_plant()
+            self._build_sim_drake_diagram()
+        else:
+            print(f'Found existing predictions; just generating video ' + \
+                  f'for {model_to_test}...')
+
         if self.debug:
             print(f'Comparison URDF: {self.comparison_urdf_path}')
             print(f'Learned URDF: {self.learned_urdf_path}')
 
-        self._build_control_drake_plant()
-        self._build_sim_drake_diagram()
+        # Generate a visualization Drake diagram whether simulating or not.
         self._build_vis_drake_diagram(model_to_test=model_to_test)
 
         # Prepare to run a simulation.
-        t0 = self.object_pose_ts[0]
-        sim_plant_context = self.sim_plant.CreateDefaultContext()
-        self.sim_plant.SetPositions(sim_plant_context, np.vstack((
-            self.gt_joint_angle_traj.value(t0),
-            self.recorded_object_quat_pos_traj.value(t0))))
-        self.inv_dyn_controller.StartFrom(
-            joint_angles=self.gt_joint_angle_traj.value(t0),
-            joint_velocities=self.gt_joint_vel_traj.value(t0),
-            joint_torques=self.gt_joint_torque_traj.value(t0),
-            cartesian_stiffness=self.cartesian_stiffness,
-            cartesian_damping=self.cartesian_damping
-        )
+        if do_simulation:
+            t0 = self.object_pose_ts[0]
+            sim_plant_context = self.sim_plant.CreateDefaultContext()
+            self.sim_plant.SetPositions(sim_plant_context, np.vstack((
+                self.gt_joint_angle_traj.value(t0),
+                self.recorded_object_quat_pos_traj.value(t0))))
+            self.inv_dyn_controller.StartFrom(
+                joint_angles=self.gt_joint_angle_traj.value(t0),
+                joint_velocities=self.gt_joint_vel_traj.value(t0),
+                joint_torques=self.gt_joint_torque_traj.value(t0),
+                cartesian_stiffness=self.cartesian_stiffness,
+                cartesian_damping=self.cartesian_damping
+            )
 
-        # Prepare to store results from the simulation.
-        N = len(self.object_pose_ts)
-        pred_object_states = np.zeros((N, 13))
-        pred_franka_states = np.zeros((N, 14))
+            # Prepare to store results from the simulation.
+            N = len(self.object_pose_ts)
+            pred_object_states = np.zeros((N, 13))
+            pred_franka_states = np.zeros((N, 14))
 
         for i, t in enumerate(self.object_pose_ts):
-            # Run the simulation.
-            self.simulator.AdvanceTo(t)
+            if do_simulation:
+                # Run the simulation.
+                self.simulator.AdvanceTo(t)
 
-            # Get the current states from the simulator.
-            sim_context = self.simulator.get_context()
-            sim_plant_context = self.sim_plant.GetMyContextFromRoot(sim_context)
-            sim_positions = self.sim_plant.GetPositions(sim_plant_context)
-            sim_velocities = self.sim_plant.GetVelocities(sim_plant_context)
+                # Get the current states from the simulator.
+                sim_context = self.simulator.get_context()
+                sim_plant_context = self.sim_plant.GetMyContextFromRoot(
+                    sim_context)
+                sim_positions = self.sim_plant.GetPositions(sim_plant_context)
+                sim_velocities = self.sim_plant.GetVelocities(sim_plant_context)
 
-            franka_joint_angles = sim_positions[:7]
-            franka_joint_velocity = sim_velocities[:7]
-            object_quat_pos = sim_positions[7:]
-            object_velocity = sim_velocities[7:]
+                franka_joint_angles = sim_positions[:7]
+                franka_joint_velocity = sim_velocities[:7]
+                object_quat_pos = sim_positions[7:]
+                object_velocity = sim_velocities[7:]
 
-            # Store the results.
-            pred_object_states[i] = np.hstack((
-                object_quat_pos, object_velocity
-            ))
-            pred_franka_states[i] = np.hstack((
-                franka_joint_angles, franka_joint_velocity
-            ))
+                # Store the results.
+                pred_object_states[i] = np.hstack((
+                    object_quat_pos, object_velocity
+                ))
+                pred_franka_states[i] = np.hstack((
+                    franka_joint_angles, franka_joint_velocity
+                ))
+
+            else:
+                object_quat_pos = pred_object_states[i, :7]
+                franka_joint_angles = pred_franka_states[i, :7]
 
             # Update the visualization.
             vis_states = np.vstack((
@@ -813,12 +846,9 @@ class RobotDynamicsPredictor():
         self.video_writer_front.Save()
         self.video_writer_camera.Save()
 
-        np.savetxt(
-            op.join(self.save_dir, f'pred_object_states_{model_to_test}.txt'),
-            pred_object_states)
-        np.savetxt(
-            op.join(self.save_dir, f'pred_franka_states_{model_to_test}.txt'),
-            pred_franka_states)
+        if do_simulation:
+            np.savetxt(pred_object_states_filename, pred_object_states)
+            np.savetxt(pred_franka_states_filename, pred_franka_states)
 
     def _export_test_data(self):
         self.save_dir = file_utils.robot_dynamics_subdir(
@@ -1195,8 +1225,10 @@ class RobotDynamicsPredictor():
               help='add extra debugging printouts')
 @click.option('--meshcat', is_flag=True,
               help='show the simulated visualizations in meshcat')
+@click.option('--overwrite', is_flag=True,
+              help='overwrite any existing files')
 def main_command(vision_asset: str, models_to_test: Tuple[str], debug: bool,
-                 meshcat: bool):
+                 meshcat: bool, overwrite: bool):
     assert vision_asset in PLL_BSDF_NERF_IDS_FROM_VISION_ASSET.keys()
     for model_to_test in models_to_test:
         assert model_to_test in MODELS_TO_TEST
@@ -1208,7 +1240,8 @@ def main_command(vision_asset: str, models_to_test: Tuple[str], debug: bool,
 
     for model_to_test in models_to_test:
         print(f'Running simulation for {vision_asset} with {model_to_test}...')
-        robot_dynamics_predictor.run_simulation(model_to_test)
+        robot_dynamics_predictor.run_simulation(
+            model_to_test, overwrite=overwrite)
 
 
 if __name__ == '__main__':
