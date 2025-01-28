@@ -1024,7 +1024,7 @@ class GeometryConverterBundleSDFToPLL:
     """
     def __init__(self, tracking_bundlesdf_id: str, nerf_bundlesdf_id: str,
                  start_toss: int, end_toss: int, object: str,
-                 cycle_iteration: int, plot: bool):
+                 cycle_iteration: int, plot: bool, gt_shape: bool = False):
         # Get the BundleSDF results directory where we can find the meshes.
         vision_asset = f'{object}_{start_toss}'
         vision_asset += f'-{end_toss}' if start_toss != end_toss else ''
@@ -1037,10 +1037,39 @@ class GeometryConverterBundleSDFToPLL:
         # Load the BundleSDF results' mesh and compute its convex hull.  This
         # mesh is already represented in world units about the BundleSDF
         # tracking origin.
-        self.mesh_bsdf = trimesh.load(
-            op.join(self.nerf_results_dir, 'textured_mesh.obj'), force='mesh')
-        self.mesh_bsdf_hull = self.mesh_bsdf.convex_hull
+        self.gt_shape = gt_shape
+        if gt_shape:
+            # self.mesh_bsdf = trimesh.load(
+            #     op.join(self.eval_dir, 'true_geom_aligned_assist.obj'), force='mesh')
+            mesh_file = file_utils.aligned_true_geometry_filepath(
+                dataset=vision_asset, tracking_bundlesdf_id=tracking_bundlesdf_id,
+                nerf_bundlesdf_id=nerf_bundlesdf_id, cycle_iteration=cycle_iteration
+            )
+            self.mesh_bsdf = trimesh.load(mesh_file, force='mesh')
+            self.mesh_bsdf_hull = self.mesh_bsdf.convex_hull
+        else:
+            self.mesh_bsdf = trimesh.load(
+                op.join(self.nerf_results_dir, 'textured_mesh.obj'), force='mesh')
+            if os.path.exists(op.join(self.nerf_results_dir, 'mesh_hull_world.obj')):
+                self.mesh_bsdf_hull = trimesh.load(
+                    op.join(self.nerf_results_dir, 'mesh_hull_world.obj'), force='mesh')
+            else:
+                self.mesh_bsdf_hull = self.mesh_bsdf.convex_hull
+                print('Convex hull from bsdf not found. Convert it now.')
         self.plot = plot
+        
+        if not gt_shape:
+            if os.path.exists(op.join(self.nerf_results_dir, 'mesh_hull_visible_mask.txt')):
+                self.mesh_bsdf_hull_visibility_mask = np.loadtxt(
+                    op.join(self.nerf_results_dir, 'mesh_hull_visible_mask.txt')).astype(bool)
+                assert os.path.exists(op.join(self.nerf_results_dir, 'mesh_hull_invis_triangle_indices.txt'))
+                self.mesh_bsdf_hull_invis_triangle_indices = np.loadtxt(
+                    op.join(self.nerf_results_dir, 'mesh_hull_invis_triangle_indices.txt')).astype(int)
+            else:
+                self.mesh_bsdf_hull_visibility_mask = np.ones(
+                    (self.mesh_bsdf_hull.vertices.shape[0],), dtype=bool)
+                self.mesh_bsdf_hull_invis_triangle_indices = np.arange(0)
+                print('Visibility mask from bsdf not found. Assume all are visible.')
 
         self.vision_asset = vision_asset
         self.tracking_bundlesdf_id = tracking_bundlesdf_id
@@ -1063,6 +1092,14 @@ class GeometryConverterBundleSDFToPLL:
         self.geometry_for_pll_dir = file_utils.contactnets_input_geometry_dir(
             vision_asset, cycle_iteration, nerf_bundlesdf_id)
 
+        ### For visualizing the object in the camera frame.
+        # self.bundlesdf_pose_dir = file_utils.bundlesdf_pose_dir(
+        #     vision_asset, cycle_iteration=cycle_iteration,
+        #     bundlesdf_id=tracking_bundlesdf_id)
+        # frame_id = 1
+        # pose = np.loadtxt(op.join(self.bundlesdf_pose_dir, "%04i.txt" % frame_id))
+        # self.bundlesdf_poses_in_cam_init = pose
+
     def plot_mesh_and_hull_points(self):
         mesh = self.mesh_bsdf
         hull = self.mesh_bsdf_hull
@@ -1084,12 +1121,27 @@ class GeometryConverterBundleSDFToPLL:
         plt.legend()
         plt.show()
 
-    def plot_support_directions_and_points(self, pts, dirs):
+    def plot_support_directions_and_points(self, pts, dirs, pts_sample):
         mesh = self.mesh_bsdf
         hull = self.mesh_bsdf_hull
 
-        mesh_verts = mesh.vertices
-        hull_verts = hull.vertices
+        mesh_verts = mesh.vertices.copy()
+        # sample max 10000 points
+        if mesh_verts.shape[0] > 10000:
+            mesh_verts = mesh_verts[np.random.choice(mesh_verts.shape[0], 10000, replace=False)]
+            print('Sampled 10000 points from the mesh for visualization.')
+        hull_verts = hull.vertices.copy()
+
+        # ### Convert all points and directions to camera frame's orientation
+        # ### Maybe this helps understand the orientation of the object?
+        # # Get the camera frame's orientation.
+        # pose = self.bundlesdf_poses_in_cam_init # (4, 4)
+        # R_CB = pose[:3, :3]
+        # mesh_verts = np.dot(mesh_verts, R_CB.T) + pose[:3, 3]
+        # hull_verts = np.dot(hull_verts, R_CB.T) + pose[:3, 3]
+        # pts = np.dot(pts, R_CB.T) + pose[:3, 3]
+        # dirs = np.dot(dirs, R_CB.T)
+        # pts_sample = np.dot(pts_sample, R_CB.T) + pose[:3, 3]
 
         fig = plt.figure()
         ax = fig.add_subplot(111, projection='3d')
@@ -1099,13 +1151,37 @@ class GeometryConverterBundleSDFToPLL:
                    color='r', label='Convex hull vertices')
         ax.scatter(pts[:, 0], pts[:, 1], pts[:, 2], s=12,
                    color='orange', label='Support points')
+        ax.scatter(pts_sample[:, 0], pts_sample[:, 1], pts_sample[:, 2], s=5,
+                   color='green', label='Sampled face points')
 
         prefix = [''] + ['_']*(len(pts)-1)
         for i in range(len(pts)):
             ax.quiver(*pts[i], *dirs[i]/25, color='orange',
                       label=prefix[i]+'Support directions', zorder=1.5)
+            
+        # Set the aspect ratio of the plot to be equal.
+        ax.set_box_aspect([np.ptp(mesh_verts[:, 0]), np.ptp(mesh_verts[:, 1]), np.ptp(mesh_verts[:, 2])])
+        ax.set_xlabel('X')
+        ax.set_ylabel('Y')
+        ax.set_zlabel('Z')
+
         plt.legend()
         plt.show()
+
+    def sample_points_on_visible_triangles(self):
+        hull = self.mesh_bsdf_hull
+        hull_faces = hull.faces
+        
+        weights = hull.area_faces.copy()
+        weights[self.mesh_bsdf_hull_invis_triangle_indices] = 0
+
+        # Sample points on the visible triangles.
+        num_points = 1000
+        points, face_idx = trimesh.sample.sample_surface(hull, num_points, face_weight=weights)
+
+        # Convert to torch tensors
+        points = torch.tensor(points, dtype=torch.float32)
+        return points
 
     def query_support_directions_to_get_points(self):
         # Use the convex hull.
@@ -1119,12 +1195,23 @@ class GeometryConverterBundleSDFToPLL:
         # the convex hull vertices.
         support_points = torch.zeros_like(support_directions)
         support_scalars = torch.zeros((support_directions.shape[0],))
+        support_point_idxs = np.zeros((support_directions.shape[0],), dtype=int)
 
         for i in range(support_directions.shape[0]):
             dir = support_directions[i].reshape(1, 3)
             dots = torch.sum(dir * hull_points, dim=1)
-            support_points[i, :] = torch.Tensor(hull_points[torch.argmax(dots)])
-            support_scalars[i] = torch.max(dots)
+            scalar, idx = torch.max(dots, dim=0)
+            support_point_idxs[i] = idx
+            support_points[i, :] = torch.Tensor(hull_points[idx])
+            support_scalars[i] = scalar
+
+        # Filter out the support points that are not visible.
+        if not self.gt_shape:
+            mask = self.mesh_bsdf_hull_visibility_mask[support_point_idxs]
+            mask = torch.tensor(mask)
+            support_points = support_points[mask]
+            support_scalars = support_scalars[mask]
+            support_directions = support_directions[mask]
 
         return support_points, support_scalars, support_directions
 
@@ -1152,7 +1239,8 @@ class GeometryConverterBundleSDFToPLL:
         print(f'Copied mesh from BundleSDF to {new_mesh_path}.\n')
 
         # Write the custom convex hull mesh file for PLL later.
-        new_filepath = op.join(self.geometry_for_pll_dir, 'mesh.obj')
+        mesh_name = 'mesh_gt.obj' if self.gt_shape else 'mesh.obj'
+        new_filepath = op.join(self.geometry_for_pll_dir, mesh_name)
         with open(new_filepath, 'w') as f:
             f.write(f'# Vertices\n')
             for vertex in self.mesh_bsdf_hull.vertices:
@@ -1175,20 +1263,28 @@ class GeometryConverterBundleSDFToPLL:
         # Query different directions and get the support points.
         support_points, support_scalars, support_directions = \
             self.query_support_directions_to_get_points()
+        sampled_points = self.sample_points_on_visible_triangles()
         if self.plot:
             self.plot_support_directions_and_points(
-                support_points, support_directions)
+                support_points, support_directions, sampled_points)
 
         # Write these as tensors to PLL's input geometry folder.
+        support_points_name = 'support_points_gt.pt' if self.gt_shape else 'support_points.pt'
+        support_scalars_name = 'support_scalars_gt.pt' if self.gt_shape else 'support_scalars.pt'
+        support_directions_name = 'support_directions_gt.pt' if self.gt_shape else 'support_directions.pt'
+        sampled_points_name = 'sampled_points_gt.pt' if self.gt_shape else 'sampled_points.pt'
         torch.save(
             support_points,
-            op.join(self.geometry_for_pll_dir, 'support_points.pt'))
+            op.join(self.geometry_for_pll_dir, support_points_name))
         torch.save(
             support_scalars,
-            op.join(self.geometry_for_pll_dir, 'support_scalars.pt'))
+            op.join(self.geometry_for_pll_dir, support_scalars_name))
         torch.save(
             support_directions,
-            op.join(self.geometry_for_pll_dir, 'support_directions.pt'))
+            op.join(self.geometry_for_pll_dir, support_directions_name))
+        torch.save(
+            sampled_points,
+            op.join(self.geometry_for_pll_dir, sampled_points_name))
 
         print(f'Saved {support_points.shape=} and {support_directions.shape=}.')
 
@@ -1235,10 +1331,13 @@ class GeometryConverterBundleSDFToPLL:
               type=int,
               default=1,
               help="how many frames to offset the BundleSDF poses by.")
+@click.option('--gt-shape',
+              is_flag=True,
+              help="whether to use the ground truth shape.")
 
 def main_command(vision_asset: str, bundlesdf_id: str, nerf_bundlesdf_id: str,
                  cycle_iteration: int, bsdf_only: bool, make_videos: bool,
-                 remote: bool, show: bool, offset_frames: int):
+                 remote: bool, show: bool, offset_frames: int, gt_shape: bool):
     # First decode the system and start/end tosses from the provided asset
     # directory.
     assert cycle_iteration > 0, f'Invalid cycle iteration: {cycle_iteration}.'
@@ -1301,9 +1400,25 @@ def main_command(vision_asset: str, bundlesdf_id: str, nerf_bundlesdf_id: str,
     geom_converter = GeometryConverterBundleSDFToPLL(
         tracking_bundlesdf_id=bundlesdf_id, nerf_bundlesdf_id=nerf_bundlesdf_id,
         start_toss=start_toss, end_toss=end_toss, object=object,
-        cycle_iteration=cycle_iteration, plot=show
+        cycle_iteration=cycle_iteration, plot=show, gt_shape=gt_shape
     )
     geom_converter.process_and_save()
+
+    # Create an overlay video.
+    if make_videos:
+        overlay_generator = OverlayVideoGenerator(
+            vision_asset=vision_asset, tracking_bundlesdf_id=bundlesdf_id,
+            nerf_bundlesdf_id=nerf_bundlesdf_id, bsdf_only=bsdf_only,
+            cycle_iteration=cycle_iteration, remote=remote,
+            bsdf_offset_frames=offset_frames, gt_mesh=gt_shape,
+        )
+        overlay_generator.make_overlay_video(to_pll_input_dir=True)
+        overlay_generator.make_optimized_keyframe_overlay_images()
+    else:
+        print('Skipping overlay video creation.')
+
+    if gt_shape:
+        return
 
     # Do the trajectory conversion.
     traj_converter = TrajectoryConverterBundleSDFToPLL(
@@ -1322,19 +1437,6 @@ def main_command(vision_asset: str, bundlesdf_id: str, nerf_bundlesdf_id: str,
     traj_converter.plot_trajectory(full_trajectory=False)
     save_tagslam = not bsdf_only and offset_frames == 1
     traj_converter.save_data(save_tagslam=save_tagslam, save_bundlesdf=True)
-
-    # Create an overlay video.
-    if make_videos:
-        overlay_generator = OverlayVideoGenerator(
-            vision_asset=vision_asset, tracking_bundlesdf_id=bundlesdf_id,
-            nerf_bundlesdf_id=nerf_bundlesdf_id, bsdf_only=bsdf_only,
-            cycle_iteration=cycle_iteration, remote=remote,
-            bsdf_offset_frames=offset_frames,
-        )
-        overlay_generator.make_overlay_video()
-        overlay_generator.make_optimized_keyframe_overlay_images()
-    else:
-        print('Skipping overlay video creation.')
 
     # Generate the SDF slice images.
     if make_videos:

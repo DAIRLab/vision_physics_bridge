@@ -172,6 +172,11 @@ class OverlayVideoGenerator:
         )
         if not op.exists(op.dirname(self.output_file)):
             os.makedirs(op.dirname(self.output_file))
+        # Put the output video in the same directory as the pll inputs though 
+        # pll does not need the videos. It is for easier visualization. 
+        self.output_file_to_pll_input_dir = file_utils.contactnets_input_bsdf_overlay_video_path(
+            vision_asset, cycle_iteration, tracking_bundlesdf_id,
+            nerf_bundlesdf_id, gt_mesh=gt_mesh)
 
     def _get_bundletrack_poses_in_cam(self) -> None:
         if self.tracking_bundlesdf_id is None:
@@ -255,7 +260,8 @@ class OverlayVideoGenerator:
 
         ### Need x server to run. Either run locally or run remotely with x
         # forward configured.
-        if self.remote:
+        self.change_display = False
+        if self.remote and os.environ.get('DISPLAY') != ':99':
             # Run Xvfb to create a virtual display.
             print("Running Xvfb (virtual display) for rendering.")
             import subprocess
@@ -265,6 +271,7 @@ class OverlayVideoGenerator:
                   f"{os.environ['DISPLAY']} variable to :99")
             self.old_display = os.environ['DISPLAY']
             os.environ['DISPLAY'] = ':99'
+            self.change_display = True
 
         options = webdriver.ChromeOptions()
         options.add_argument('--headless')
@@ -316,7 +323,7 @@ class OverlayVideoGenerator:
         # If not exited properly, orphan chrome processes will remain active.
         self.driver.quit()
         print(f'Done with keyframe overlay images.')
-        if self.remote:
+        if self.remote and self.change_display:
             # If not exited properly, orphan Xvfb processes will remain active.
             self.xvfb_process.terminate()
             self.xvfb_process.wait()
@@ -437,7 +444,7 @@ class OverlayVideoGenerator:
 
         return im
 
-    def make_overlay_video(self) -> None:
+    def make_overlay_video(self, to_pll_input_dir=False) -> None:
         print(f'Starting overlay video generation (could take minutes).')
         self._set_up_meshcat()
 
@@ -471,8 +478,12 @@ class OverlayVideoGenerator:
             # -vcodec libx264 specifies the codec as libx264.
             # -preset slow TODO not sure what this does
             # -crf 18 TODO check: specifies the quality, 0 lossless, 51 worst.
+            # -pix_fmt yuv420p to ensure compatibility with most players.
+            # (e.g., Windows Media Player)
+            output_file = self.output_file if not to_pll_input_dir else \
+                self.output_file_to_pll_input_dir
             os.system(f'ffmpeg -y -r 30 -i {tmpdir}/%07d.png -vcodec ' + \
-                      f'libx264 -preset slow -crf 18 {self.output_file}')
+                      f'libx264 -pix_fmt yuv420p -preset slow -crf 18 {output_file}')
 
         self._clean_up_meshcat()
 
