@@ -19,8 +19,9 @@ import meshcat
 import meshcat.geometry as g
 import meshcat.transformations as tf
 
-import math_utils
 import file_utils
+import math_utils
+import rosbag_processor
 
 
 
@@ -28,7 +29,14 @@ import file_utils
 TAGSLAM_COLOR = 0xff0000
 BUNDLESDF_COLOR = 0x00ff00
 PREDICTION_COLOR = 0x800080
-ROBOT_COLOR = 0x70ad47
+ROBOT_COLOR = 0xf1c232
+
+ROBOT_OPACITY = 0.8
+
+PANDA_JOINT_NAMES = ['panda_panda_joint1_q', 'panda_panda_joint2_q',
+                     'panda_panda_joint3_q', 'panda_panda_joint4_q',
+                     'panda_panda_joint5_q', 'panda_panda_joint6_q',
+                     'panda_panda_joint7_q']
 
 ########################
 # Frames
@@ -128,7 +136,7 @@ class OverlayVideoGenerator:
 
         self._get_rgb_images()
         if show_robot:
-            self._get_ee_locations()
+            self._get_ee_poses()
 
         # Load the tracking
         self._get_bundletrack_poses_in_cam()
@@ -239,11 +247,14 @@ class OverlayVideoGenerator:
         self.image_width = self.rgb_images.shape[2]
         self.image_height = self.rgb_images.shape[1]
 
-    def _get_ee_locations(self) -> None:
+    def _get_ee_poses(self) -> None:
         self.cnets_data_gen_dir = file_utils.cnets_data_gen_dataset_dir(
             self.vision_asset, check_exists=True)
-        self.ee_positions = np.loadtxt(
-            op.join(self.cnets_data_gen_dir, 'synced_ee_positions.txt'))
+        joints = np.loadtxt(
+            op.join(self.cnets_data_gen_dir, 'synced_joint_angles.txt'))
+        self.T_WEs = rosbag_processor.convert_franka_joints_to_ee_positions(
+            joints, PANDA_JOINT_NAMES,
+            as_homogeneous_transform_with_rotation=True)
 
     def _add_meshcat_objects(self, vis: meshcat.Visualizer) -> None:
         # # Only render the cube in the TagSLAM trajectory if cube asset.
@@ -269,8 +280,26 @@ class OverlayVideoGenerator:
                 g.Sphere(radius=0.0195),
                 g.MeshLambertMaterial(
                     color=ROBOT_COLOR, reflectivity=0.0, transparent=0,
-                    opacity=.4)
+                    opacity=ROBOT_OPACITY)
             )
+            vis["ee"]["peg"].set_object(
+                g.Cylinder(height=0.1169, radius=0.0127),
+                g.MeshLambertMaterial(
+                    color=ROBOT_COLOR, reflectivity=0.0, transparent=0,
+                    opacity=ROBOT_OPACITY)
+            )
+            # Note:  meshcat cylinders default to being oriented along y-axis.
+            vis["ee"]["peg"].set_transform(
+                tf.translation_matrix([0, 0, 0.1169/2]).dot(
+                tf.rotation_matrix(np.pi/2, [1, 0, 0])))
+            vis["ee"]["peg"]["flange"].set_object(
+                g.Cylinder(height=0.0096, radius=0.0315),
+                g.MeshLambertMaterial(
+                    color=ROBOT_COLOR, reflectivity=0.0, transparent=0,
+                    opacity=ROBOT_OPACITY)
+            )
+            vis["ee"]["peg"]["flange"].set_transform(
+                tf.translation_matrix([0, 0.1169/2 + 0.0096/2, 0]))
 
     def _set_up_meshcat(self) -> None:
         # Can specify zmq_url="tcp://127.0.0.1:6000" argument after the first
@@ -436,9 +465,7 @@ class OverlayVideoGenerator:
                 self.vis["bundlesdf_mesh"].set_transform(out_of_view_tf)
 
         if self.show_robot:
-            ee_position = self.ee_positions[frame_i]
-            T_WE = tf.translation_matrix(ee_position)
-            self.vis["ee"].set_transform(self.T_MW @ T_WE)
+            self.vis["ee"].set_transform(self.T_MW @ self.T_WEs[frame_i])
 
     def _render_one_image(self, frame_i: int, T_WA: np.ndarray,
                           T_CB: np.ndarray) -> Image:

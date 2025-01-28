@@ -472,7 +472,8 @@ end effector geometry defined in assets/franka_with_ee.urdf.  This uses Drake to
 build a plant with the Franka, set the plant's joint angles, then query the
 position of the end effector tip's origin."""
 def convert_franka_joints_to_ee_positions(
-        joint_angles: np.ndarray, joint_names: list):
+        joint_angles: np.ndarray, joint_names: list,
+        as_homogeneous_transform_with_rotation: bool = False):
     # Build a Drake plant with the Franka at the world origin.
     builder = DiagramBuilder()
     plant = MultibodyPlant(time_step=0.0)
@@ -498,16 +499,28 @@ def convert_franka_joints_to_ee_positions(
     assert np.all(sim_joint_indices >= 0), 'Failed to find all joint ' + \
         f'indices: {sim_joint_names=} vs. {joint_names=}.'
 
-    # Prepare to store the end effector positions.
-    ee_positions = np.zeros((joint_angles.shape[0], 3))
+    # Prepare to store the end effector positions (or homogeneous
+    # transformation).
+    if as_homogeneous_transform_with_rotation:
+        T_WEs = np.eye(4).reshape(1, 4, 4).repeat(joint_angles.shape[0], axis=0)
+        to_return = T_WEs
+    else:
+        ee_positions = np.zeros((joint_angles.shape[0], 3))
+        to_return = ee_positions
 
     # Iterate over all the joint angles and read the corresponding EE position.
     for i, joint_angle in enumerate(joint_angles):
         plant.SetPositions(context, joint_angle[sim_joint_indices])
-        ee_positions[i] = plant.EvalBodyPoseInWorld(
-            context, plant.GetBodyByName("end_effector_tip")).translation()
+        ee_pose = plant.EvalBodyPoseInWorld(
+            context, plant.GetBodyByName("end_effector_tip"))
 
-    return ee_positions
+        if as_homogeneous_transform_with_rotation:
+            T_WEs[i, :3, :3] = ee_pose.rotation().matrix()
+            T_WEs[i, :3, 3] = ee_pose.translation()
+        else:
+            ee_positions[i] = ee_pose.translation()
+
+    return to_return
 
 """Write the initial TagSLAM origin pose, as reported by TagSLAM, expressed in
 camera frame.  This gets stored as a 4x4 transformation matrix titled 0000.txt
