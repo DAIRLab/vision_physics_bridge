@@ -26,7 +26,7 @@ import math_utils
 DATA_GEN_DIR = op.dirname(op.realpath(__file__))
 REPO_DIR = op.dirname(DATA_GEN_DIR)
 PLL_DIR = op.join(REPO_DIR, 'dair_pll')
-# PLL_DIR = op.join(REPO_DIR, 'dair_pll_robot') 
+# PLL_DIR = op.join(REPO_DIR, 'dair_pll_robot')
 # # when debugging, use a different repo name before replacing the original one
 
 if PLL_DIR not in sys.path:
@@ -76,7 +76,7 @@ def get_pll_geometry_output_dir(system: str, cycle_iteration: int,
         storage_name, run_name)
     assert os.listdir(pll_geom_output_dir), \
         f'No output found at {pll_geom_output_dir}'
-    
+
     return pll_geom_output_dir
 
 def get_pll_urdf_output_dir(system: str, cycle_iteration: int,
@@ -95,7 +95,7 @@ def get_pll_urdf_output_dir(system: str, cycle_iteration: int,
         storage_name, run_name)
     assert os.listdir(pll_urdf_output_dir), \
         f'No output found at {pll_urdf_output_dir}'
-    
+
     return pll_urdf_output_dir
 
 """Directories."""
@@ -309,6 +309,22 @@ def contactnets_input_geometry_dir(
         return assure_created(geom_for_pll_dir)
     return geom_for_pll_dir
 
+def contactnets_input_bsdf_overlay_video_path(
+        dataset: str, iteration: int, bundlesdf_id: str, nerf_bundlesdf_id: str,
+        gt_mesh: bool = False, with_robot: bool = False,
+        create: bool = True) -> str:
+    object = dataset.split('_')[:-1]
+    object = '_'.join(object)
+    pll_asset_subdirs = op.join(f'vision_{object}', dataset)
+    bsdf_overlay_video_path = pll_file_utils.bsdf_track_overlay_video_path(
+        pll_asset_subdirs, bundlesdf_id.lstrip('bundlesdf_id_'),
+        nerf_bundlesdf_id.lstrip('bundlesdf_id_'), iteration,
+        gt_mesh, with_robot, check_exists=False)
+    bsdf_overlay_video_dir = op.dirname(bsdf_overlay_video_path)
+    if create:
+        assure_created(bsdf_overlay_video_dir)
+    return bsdf_overlay_video_path
+
 def contactnets_output_dir(dataset: str, cycle_iteration: int, pll_id: str
                            ) -> str:
     """PLL's geometry output directory for a particular experiment."""
@@ -464,8 +480,9 @@ def inspection_input_video_filepath(vision_asset: str) -> str:
     return op.join(input_video_dir, f'{vision_asset}.mp4')
 
 def inspection_overlay_video_filepath(
-        dataset: str, tracking_bundlesdf_id: str, nerf_bundlesdf_id: str, 
-        pll_id: str, cycle_iteration: int, gt_mesh: bool = False) -> str:
+        dataset: str, tracking_bundlesdf_id: str, nerf_bundlesdf_id: str,
+        pll_id: str, cycle_iteration: int, gt_mesh: bool = False,
+        with_robot: bool = False) -> str:
     """The directory for all overlay videos."""
     overlay_video_dir = op.join(inspection_dir(), 'overlay_videos')
 
@@ -495,6 +512,8 @@ def inspection_overlay_video_filepath(
         mesh_id = f'nerf_{nerf_bundlesdf_id}'
 
     filename = f'{date_str}_{dataset}_{tracking_id}_{mesh_id}_{cycle_iteration}.mp4'
+    if with_robot:
+        filename = filename.replace('.mp4', '_robot.mp4')
 
     return op.join(overlay_video_dir, filename)
 
@@ -843,12 +862,12 @@ def load_camera_extrinsics(object: str) -> Tuple[np.ndarray, np.ndarray]:
     cam_trans = np.array(
         [cam_pos_dict['x'], cam_pos_dict['y'], cam_pos_dict['z']]
     ).reshape(-1, 1)
-    
+
     cam_rot_dict = data_loaded[REALSENSE_CAMERA_NAME]['pose']['rotation']
     cam_rot_axis_angle = np.array(
         [cam_rot_dict['x'], cam_rot_dict['y'], cam_rot_dict['z']]
     ).reshape(-1, 1)
-    
+
     return cam_trans, cam_rot_axis_angle
 
 def get_camera_intrinsics_filepath(object: str) -> str:
@@ -1307,14 +1326,14 @@ def removed_files(num):
 
 def replace_comma_with_space(file_path):
     """Replace every comma with a space in the specified file."""
-    
+
     # Read the content of the file
     with open(file_path, 'r') as f:
         content = f.read()
-    
+
     # Replace comma with space
     modified_content = content.replace(',', ' ')
-    
+
     # Write the modified content back to the file
     with open(file_path, 'w') as f:
         f.write(modified_content)
@@ -1323,7 +1342,7 @@ def replace_comma_with_space(file_path):
 
 def process_directory(directory_path):
     """Apply the replace_comma_with_space function to all .txt files in the specified directory."""
-    
+
     for root, dirs, files in os.walk(directory_path):
         for file_name in files:
             if file_name.endswith('.txt'):
@@ -1363,7 +1382,7 @@ def formulate_dataset(dataset):
                 shutil.copy2(source_file_path, target_file_path)
                 # print(source_file_path, target_file_path)
                 current_counter += 1
-    
+
 def main():
     # process_directory('/home/cnets-vision/mengti_ws/BundleSDF/results/ob_in_cam_projected_icp_transformed')
     formulate_dataset()
