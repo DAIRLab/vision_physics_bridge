@@ -14,10 +14,12 @@ TODO:
     [x] Export predicted trajectories to files.
     [x] Store the intermediate files somewhere per experiment.
     [x] Be able to swap out what URDF to simulate (PLL, BSDF, Vysics).
-    [ ] Be able to simulate ground truth mesh.
+    [x] Be able to simulate ground truth mesh.
     [x] Make file callable with vision asset.
     [ ] Make file callable with run IDs.
-    [ ] Use some other inertia for BSDF.
+    [x] Use more reasonable other inertia for BSDF and GT (use geometric mean).
+    [x] Be able to generate videos from existing computed trajectories.
+    [ ] Be able to use existing URDFs.
 """
 
 import click
@@ -75,7 +77,7 @@ CAM_FOV_REALSENSE = 2*np.arctan(VIDEO_PIXELS[0]/(2*fy))
 
 WORLD_TO_FRANKA_PLL_OFFSET = 0.0087
 
-MODELS_TO_TEST = ['vysics', 'bsdf', 'pll']  # 'gt'
+MODELS_TO_TEST = ['vysics', 'bsdf', 'pll', 'gt']
 TRACKING_BUNDLESDF_ID = 'bundlesdf_id_00'
 BSDF_ITERATION = 1
 
@@ -194,7 +196,8 @@ VYSICS_MESH_HEX = '#7030a0'
 PLL_MESH_RGBA = hex_to_rgba_format(PLL_MESH_HEX, 0.6)
 BSDF_MESH_RGBA = hex_to_rgba_format(BSDF_MESH_HEX, 0.6)
 VYSICS_MESH_RGBA = hex_to_rgba_format(VYSICS_MESH_HEX, 0.6)
-COMPARISON_MESH_RGBA = '0.6 0 0 0.6'
+GT_MESH_RGBA = '0.6 0 0 0.6'
+COMPARISON_MESH_RGBA = '0.6 0.6 0.6 0.6'
 
 DEFAULT_COM_STRING = '<inertial>\n            <origin xyz="0 0 0"'
 
@@ -250,30 +253,60 @@ def write_obj_file_with_normals(original_obj_path: str, new_obj_path: str,
                     f'{face[1]+1}//{face[1]+1} {face[2]+1}//{face[2]+1}\n')
         if verbose:  print(f'and faces.')
 
-def make_comparison_geometry_urdf(
+def make_gt_geometry_urdf(
         vision_asset: str, bsdf_iteration: int, pll_id: str, track_bsdf_id: str,
-        nerf_bsdf_id: str, save_dir: str, verbose: bool = False) -> str:
-    # Start by exporting the BundleSDF URDF.
-    make_bsdf_geometry_urdf(vision_asset, bsdf_iteration, pll_id, track_bsdf_id,
-                            save_dir, verbose=verbose)
+        nerf_bsdf_id: str, save_dir: str, verbose: bool = False,
+        from_eval_folder: bool = False, for_comparison: bool = True) -> str:
+    name = 'comparison' if for_comparison else 'gt'
+    color_rgba = COMPARISON_MESH_RGBA if for_comparison else GT_MESH_RGBA
 
-    orig_urdf_path = op.join(save_dir, 'bsdf.urdf')
-    new_urdf_path = op.join(save_dir, 'comparison.urdf')
+    # Get the GT-aligned mesh from the NeRF results directory.
+    orig_urdf_path = op.join(
+        file_utils.contactnets_output_dir(
+            vision_asset, bsdf_iteration, pll_id),
+        'with_bundlesdf_mesh.urdf'
+    )
+    new_urdf_path = op.join(save_dir, f'{name}.urdf')
+
+    if from_eval_folder:
+        evaluation_results_dir = file_utils.evaluation_subdir(
+            dataset=vision_asset, cycle_iteration=bsdf_iteration,
+            tracking_bundlesdf_id=track_bsdf_id, nerf_bundlesdf_id=nerf_bsdf_id
+        )
+        orig_obj_path = op.join(
+            evaluation_results_dir, 'true_geom_aligned_assist.obj')
+    else:
+        nerf_results_dir = file_utils.bundlesdf_nerf_results_dir(
+            dataset=vision_asset, cycle_iteration=bsdf_iteration,
+            tracking_bundlesdf_id=track_bsdf_id, nerf_bundlesdf_id=nerf_bsdf_id
+        )
+        orig_obj_path = op.join(
+            nerf_results_dir, 'true_geom_aligned_meshlab.obj')
+
+    new_com_string = obj_file_to_com_string(orig_obj_path)
+    new_obj_path = '/'.join(new_urdf_path.split('/')[:-1]) + '/gt_mesh.obj'
 
     # Change the URDF body name and color.
     with open(new_urdf_path, 'w') as write_file:
         with open(orig_urdf_path, 'r') as read_file:
             line = read_file.read(
-                ).replace('name="from_bundlesdf"',
-                          'name="comparison"'
-                ).replace(f'color rgba="{BSDF_MESH_RGBA}"',
-                          f'color rgba="{COMPARISON_MESH_RGBA}"'
-                ).replace('name="bsdf_body"', 'name="comparison_body"')
+                ).replace('name="vision_object"',
+                          f'name="{name}"'
+                ).replace('color rgba="0.6 0 0 1.0"',
+                          f'color rgba="{color_rgba}"'
+                ).replace('name="body"', f'name="{name}_body"'
+                ).replace('mesh filename="bundlesdf_mesh.obj"',
+                          'mesh filename="gt_mesh.obj"'
+                ).replace(DEFAULT_COM_STRING, new_com_string)
             write_file.write(line)
+
+    # Need to do something special for the obj file.  BundleSDF exports obj
+    # files without any normals.
+    write_obj_file_with_normals(orig_obj_path, new_obj_path, verbose=verbose)
 
     if verbose:
         print(f'Getting for comparison:\nURDF from {orig_urdf_path}\nOBJ ' + \
-              f'from {op.join(save_dir, "bundlesdf_mesh.obj")}\n')
+              f'from {orig_obj_path}\n')
 
     return new_urdf_path
 
@@ -651,7 +684,7 @@ class RobotDynamicsPredictor():
         self._load_data()
         self._create_drake_trajectories()
 
-    def run_simulation(self, model_to_test: str):
+    def run_simulation(self, model_to_test: str, overwrite: bool = False):
         if model_to_test == 'pll':
             self.learned_urdf_path = make_pll_geometry_urdf(
                 vision_asset=self.vision_asset,
@@ -679,70 +712,115 @@ class RobotDynamicsPredictor():
                 save_dir=self.save_dir,
                 verbose=self.debug
             )
+        elif model_to_test == 'gt':
+            self.learned_urdf_path = make_gt_geometry_urdf(
+                vision_asset=self.vision_asset,
+                bsdf_iteration=self.bsdf_iteration,
+                pll_id=self.pll_id,
+                track_bsdf_id=self.bundlesdf_id,
+                nerf_bsdf_id=self.nerf_bundlesdf_id,
+                save_dir=self.save_dir,
+                verbose=self.debug,
+                for_comparison=False
+            )
         else:
             raise NotImplementedError(
                 f'Not prepared to simulate {model_to_test=}')
 
-        self.comparison_urdf_path = make_comparison_geometry_urdf(
+        self.comparison_urdf_path = make_gt_geometry_urdf(
             vision_asset=self.vision_asset,
             bsdf_iteration=self.bsdf_iteration,
             pll_id=self.pll_id,
             track_bsdf_id=self.bundlesdf_id,
             nerf_bsdf_id=self.nerf_bundlesdf_id,
             save_dir=self.save_dir,
-            verbose=self.debug
+            verbose=self.debug,
+            for_comparison=True
         )
 
-        print(f'Simulating {model_to_test} model...')
+        pred_object_states_filename = op.join(
+            self.save_dir, f'pred_object_states_{model_to_test}.txt')
+        pred_franka_states_filename = op.join(
+            self.save_dir, f'pred_franka_states_{model_to_test}.txt')
+
+        do_simulation = False if op.exists(pred_object_states_filename) and \
+            op.exists(pred_franka_states_filename) else True
+        if not do_simulation:
+            pred_object_states = np.loadtxt(pred_object_states_filename)
+            pred_franka_states = np.loadtxt(pred_franka_states_filename)
+
+            if overwrite:
+                print(f'Overwriting existing predictions: ', end=' ')
+                do_simulation = True
+            elif pred_object_states.shape[0] != self.object_pose_ts.shape[0]:
+                print(f'Stored predictions do not match recorded data ' + \
+                      f'length ({pred_object_states.shape[0]=} versus ' + \
+                      f'{self.object_pose_ts.shape[0]=}) -- will simulate.')
+                do_simulation = True
+
+        if do_simulation:
+            print(f'Simulating {model_to_test} model...')
+            self._build_control_drake_plant()
+            self._build_sim_drake_diagram()
+        else:
+            print(f'Found existing predictions; just generating video ' + \
+                  f'for {model_to_test}...')
+
         if self.debug:
             print(f'Comparison URDF: {self.comparison_urdf_path}')
             print(f'Learned URDF: {self.learned_urdf_path}')
 
-        self._build_control_drake_plant()
-        self._build_sim_drake_diagram()
+        # Generate a visualization Drake diagram whether simulating or not.
         self._build_vis_drake_diagram(model_to_test=model_to_test)
 
         # Prepare to run a simulation.
-        t0 = self.object_pose_ts[0]
-        sim_plant_context = self.sim_plant.CreateDefaultContext()
-        self.sim_plant.SetPositions(sim_plant_context, np.vstack((
-            self.gt_joint_angle_traj.value(t0),
-            self.recorded_object_quat_pos_traj.value(t0))))
-        self.inv_dyn_controller.StartFrom(
-            joint_angles=self.gt_joint_angle_traj.value(t0),
-            joint_velocities=self.gt_joint_vel_traj.value(t0),
-            joint_torques=self.gt_joint_torque_traj.value(t0),
-            cartesian_stiffness=self.cartesian_stiffness,
-            cartesian_damping=self.cartesian_damping
-        )
+        if do_simulation:
+            t0 = self.object_pose_ts[0]
+            sim_plant_context = self.sim_plant.CreateDefaultContext()
+            self.sim_plant.SetPositions(sim_plant_context, np.vstack((
+                self.gt_joint_angle_traj.value(t0),
+                self.recorded_object_quat_pos_traj.value(t0))))
+            self.inv_dyn_controller.StartFrom(
+                joint_angles=self.gt_joint_angle_traj.value(t0),
+                joint_velocities=self.gt_joint_vel_traj.value(t0),
+                joint_torques=self.gt_joint_torque_traj.value(t0),
+                cartesian_stiffness=self.cartesian_stiffness,
+                cartesian_damping=self.cartesian_damping
+            )
 
-        # Prepare to store results from the simulation.
-        N = len(self.object_pose_ts)
-        pred_object_states = np.zeros((N, 13))
-        pred_franka_states = np.zeros((N, 14))
+            # Prepare to store results from the simulation.
+            N = len(self.object_pose_ts)
+            pred_object_states = np.zeros((N, 13))
+            pred_franka_states = np.zeros((N, 14))
 
         for i, t in enumerate(self.object_pose_ts):
-            # Run the simulation.
-            self.simulator.AdvanceTo(t)
+            if do_simulation:
+                # Run the simulation.
+                self.simulator.AdvanceTo(t)
 
-            # Get the current states from the simulator.
-            sim_context = self.simulator.get_context()
-            sim_plant_context = self.sim_plant.GetMyContextFromRoot(sim_context)
-            sim_positions = self.sim_plant.GetPositions(sim_plant_context)
-            sim_velocities = self.sim_plant.GetVelocities(sim_plant_context)
+                # Get the current states from the simulator.
+                sim_context = self.simulator.get_context()
+                sim_plant_context = self.sim_plant.GetMyContextFromRoot(
+                    sim_context)
+                sim_positions = self.sim_plant.GetPositions(sim_plant_context)
+                sim_velocities = self.sim_plant.GetVelocities(sim_plant_context)
 
-            franka_joint_angles = sim_positions[:7]
-            franka_joint_velocity = sim_velocities[:7]
-            object_quat_pos = sim_positions[7:]
-            object_velocity = sim_velocities[7:]
+                franka_joint_angles = sim_positions[:7]
+                franka_joint_velocity = sim_velocities[:7]
+                object_quat_pos = sim_positions[7:]
+                object_velocity = sim_velocities[7:]
 
-            # Store the results.
-            pred_object_states[i] = np.hstack((
-                object_quat_pos, object_velocity
-            ))
-            pred_franka_states[i] = np.hstack((
-                franka_joint_angles, franka_joint_velocity
-            ))
+                # Store the results.
+                pred_object_states[i] = np.hstack((
+                    object_quat_pos, object_velocity
+                ))
+                pred_franka_states[i] = np.hstack((
+                    franka_joint_angles, franka_joint_velocity
+                ))
+
+            else:
+                object_quat_pos = pred_object_states[i, :7]
+                franka_joint_angles = pred_franka_states[i, :7]
 
             # Update the visualization.
             vis_states = np.vstack((
@@ -768,12 +846,9 @@ class RobotDynamicsPredictor():
         self.video_writer_front.Save()
         self.video_writer_camera.Save()
 
-        np.savetxt(
-            op.join(self.save_dir, f'pred_object_states_{model_to_test}.txt'),
-            pred_object_states)
-        np.savetxt(
-            op.join(self.save_dir, f'pred_franka_states_{model_to_test}.txt'),
-            pred_franka_states)
+        if do_simulation:
+            np.savetxt(pred_object_states_filename, pred_object_states)
+            np.savetxt(pred_franka_states_filename, pred_franka_states)
 
     def _export_test_data(self):
         self.save_dir = file_utils.robot_dynamics_subdir(
@@ -1150,8 +1225,10 @@ class RobotDynamicsPredictor():
               help='add extra debugging printouts')
 @click.option('--meshcat', is_flag=True,
               help='show the simulated visualizations in meshcat')
+@click.option('--overwrite', is_flag=True,
+              help='overwrite any existing files')
 def main_command(vision_asset: str, models_to_test: Tuple[str], debug: bool,
-                 meshcat: bool):
+                 meshcat: bool, overwrite: bool):
     assert vision_asset in PLL_BSDF_NERF_IDS_FROM_VISION_ASSET.keys()
     for model_to_test in models_to_test:
         assert model_to_test in MODELS_TO_TEST
@@ -1163,7 +1240,8 @@ def main_command(vision_asset: str, models_to_test: Tuple[str], debug: bool,
 
     for model_to_test in models_to_test:
         print(f'Running simulation for {vision_asset} with {model_to_test}...')
-        robot_dynamics_predictor.run_simulation(model_to_test)
+        robot_dynamics_predictor.run_simulation(
+            model_to_test, overwrite=overwrite)
 
 
 if __name__ == '__main__':
