@@ -87,58 +87,54 @@ FILES_TO_EXPORT = ['joint_times.txt', 'joint_angles.txt',
                    'cartesian_stiffness.txt', 'cartesian_damping.txt']
 
 PLL_BSDF_NERF_IDS_FROM_VISION_ASSET = {
-    'robotocc_styrofoam_1':
-        ('pll_id_t09d_robotocc_styrofoam_1',
-         'bundlesdf_id_00',
-         'bundlesdf_id_00-t09d'),
     'robotocc_oatly_3':
         ('pll_id_t09d_robotocc_oatly_3',
          'bundlesdf_id_00',
          'bundlesdf_id_00-t09d'),
     'robotocc_oatly_4':
-        ('pll_id_t02e300b20_occoatly_4',
+        ('pll_id_t11_robotocc_oatly_4',
          'bundlesdf_id_00',
-         'bundlesdf_id_00-t02_3'),
+         'bundlesdf_id_00-t11'),
     'robotocc_oatly_5':
         ('pll_id_t09d_robotocc_oatly_5',
          'bundlesdf_id_00',
          'bundlesdf_id_00-t09d'),
     'robotocc_oatly_6':
-        ('pll_id_t02e300b20_occoatly_6',
+        ('pll_id_t11_robotocc_oatly_6',
          'bundlesdf_id_00',
-         'bundlesdf_id_00-t02_3'),
+         'bundlesdf_id_00-t11'),
     'robotocc_milk_2':
-        ('pll_id_t02e300b20_occmilk_2',
+        ('pll_id_t11_robotocc_milk_2',
          'bundlesdf_id_00',
-         'bundlesdf_id_00-t02_3'),
-    'robotocc_toblerone_1':
-        ('pll_id_t02e300b20_occtoblerone_1',
+         'bundlesdf_id_00-t11'),
+    'robotocc_milk_3':
+        ('pll_id_t11_robotocc_milk_3',
          'bundlesdf_id_00',
-         'bundlesdf_id_00-t02_3'),
-    'robotocc_bakingbox_3':
-        ('pll_id_t02_robotocc_bakingbox_3',
+         'bundlesdf_id_00-t11'),
+    'robotocc_milk_4':
+        ('pll_id_t11_robotocc_milk_4',
          'bundlesdf_id_00',
-         'bundlesdf_id_00-t02_3'),
-    'robotocc_bottle_4':
-        ('pll_id_t02_robotocc_bottle_4',
-         'bundlesdf_id_00',
-         'bundlesdf_id_00-t02_3'),
-    'robotocc_bottle_5':
-        ('pll_id_t02_robotocc_bottle_5',
-         'bundlesdf_id_00',
-         'bundlesdf_id_00-t02_3'),
-    'robotocc_bottle_7':
-        ('pll_id_t02_robotocc_bottle_7',
-         'bundlesdf_id_00',
-         'bundlesdf_id_00-t02_3'),
+         'bundlesdf_id_00-t11'),
     'robotocc_milk_5':
         ('pll_id_t09d_robotocc_milk_5',
          'bundlesdf_id_00',
          'bundlesdf_id_00-t09d'),
+    'robotocc_styrofoam_1':
+        ('pll_id_t09d_robotocc_styrofoam_1',
+         'bundlesdf_id_00',
+         'bundlesdf_id_00-t09d'),
+    'robotocc_styrofoam_2':
+        ('pll_id_t11_robotocc_styrofoam_2',
+         'bundlesdf_id_00',
+         'bundlesdf_id_00-t11'),
     'robotocc_styrofoam_3':
         ('pll_id_t09d_robotocc_styrofoam_3',
          'bundlesdf_id_00',
          'bundlesdf_id_00-t09d'),
+    'robotocc_styrofoam_4':
+        ('pll_id_t11_robotocc_styrofoam_4',
+         'bundlesdf_id_00',
+         'bundlesdf_id_00-t11'),
     'robotocc_styrofoam_5':
         ('pll_id_t09d_robotocc_styrofoam_5',
          'bundlesdf_id_00',
@@ -147,6 +143,10 @@ PLL_BSDF_NERF_IDS_FROM_VISION_ASSET = {
         ('pll_id_t09d_robotocc_styrofoam_6',
          'bundlesdf_id_00',
          'bundlesdf_id_00-t09d'),
+    'robotocc_toblerone_1':
+        ('pll_id_t02e300b20_occtoblerone_1',
+         'bundlesdf_id_00',
+         'bundlesdf_id_00-t02_3'),
     'robotocc_toblerone_2':
         ('pll_id_t09d_robotocc_toblerone_2',
          'bundlesdf_id_00',
@@ -159,10 +159,26 @@ PLL_BSDF_NERF_IDS_FROM_VISION_ASSET = {
         ('pll_id_t09d_robotocc_eggs_1',
          'bundlesdf_id_00',
          'bundlesdf_id_00-t09d'),
-    'robotocc_bakingbox_1':
-        ('pll_id_t09d_robotocc_bakingbox_1',
+    'robotocc_eggs_6':
+        ('pll_id_t11_robotocc_eggs_6',
          'bundlesdf_id_00',
-         'bundlesdf_id_00-t09d'),
+         'bundlesdf_id_00-t11'),
+    'robotocc_bakingbox_1':
+        ('pll_id_t11_robotocc_bakingbox_1',
+         'bundlesdf_id_00',
+         'bundlesdf_id_00-t11'),
+    'robotocc_bakingbox_2':
+        ('pll_id_t11_robotocc_bakingbox_2',
+         'bundlesdf_id_00',
+         'bundlesdf_id_00-t11'),
+    'robotocc_bakingbox_3':
+        ('pll_id_t11_robotocc_bakingbox_3',
+         'bundlesdf_id_00',
+         'bundlesdf_id_00-t11'),
+    'robotocc_bakingbox_4':
+        ('pll_id_t11_robotocc_bakingbox_4',
+         'bundlesdf_id_00',
+         'bundlesdf_id_00-t11'),
     'robotocc_bakingbox_5':
         ('pll_id_t09d_robotocc_bakingbox_5',
          'bundlesdf_id_00',
@@ -179,10 +195,30 @@ PLL_BSDF_NERF_IDS_FROM_VISION_ASSET = {
         ('pll_id_t09d_robotocc_bottle_1',
          'bundlesdf_id_00',
          'bundlesdf_id_00-t09d'),
+    'robotocc_bottle_2':
+        ('pll_id_t11_robotocc_bottle_2',
+         'bundlesdf_id_00',
+         'bundlesdf_id_00-t11'),
+    'robotocc_bottle_3':
+        ('pll_id_t09d_robotocc_bottle_3',
+         'bundlesdf_id_00',
+         'bundlesdf_id_00-t09d'),
+    'robotocc_bottle_4':
+        ('pll_id_t11_robotocc_bottle_4',
+         'bundlesdf_id_00',
+         'bundlesdf_id_00-t11'),
+    'robotocc_bottle_5':
+        ('pll_id_t11_robotocc_bottle_5',
+         'bundlesdf_id_00',
+         'bundlesdf_id_00-t11'),
     'robotocc_bottle_6':
         ('pll_id_t09d_robotocc_bottle_6',
          'bundlesdf_id_00',
          'bundlesdf_id_00-t09d'),
+    'robotocc_bottle_7':
+        ('pll_id_t11_robotocc_bottle_7',
+         'bundlesdf_id_00',
+         'bundlesdf_id_00-t11'),
 }
 
 def hex_to_rgba_format(hex: str, opacity: float):
@@ -256,7 +292,7 @@ def write_obj_file_with_normals(original_obj_path: str, new_obj_path: str,
 def make_gt_geometry_urdf(
         vision_asset: str, bsdf_iteration: int, pll_id: str, track_bsdf_id: str,
         nerf_bsdf_id: str, save_dir: str, verbose: bool = False,
-        from_eval_folder: bool = False, for_comparison: bool = True) -> str:
+        from_eval_folder: bool = True, for_comparison: bool = True) -> str:
     name = 'comparison' if for_comparison else 'gt'
     color_rgba = COMPARISON_MESH_RGBA if for_comparison else GT_MESH_RGBA
 
