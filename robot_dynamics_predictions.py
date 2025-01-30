@@ -141,10 +141,7 @@ PLL_BSDF_NERF_IDS_FROM_VISION_ASSET = {
     'robotocc_styrofoam_8': t11_tuple_from_vision_asset('robotocc_styrofoam_8'),
     'robotocc_styrofoam_9': t11_tuple_from_vision_asset('robotocc_styrofoam_9'),
     'robotocc_styrofoam_10': t11_tuple_from_vision_asset('robotocc_styrofoam_10'),
-    'robotocc_toblerone_1':
-        ('pll_id_t02e300b20_occtoblerone_1',
-         'bundlesdf_id_00',
-         'bundlesdf_id_00-t02_3'),
+    'robotocc_toblerone_1': t11_tuple_from_vision_asset('robotocc_toblerone_1'),
     'robotocc_toblerone_2':
         ('pll_id_t09d_robotocc_toblerone_2',
          'bundlesdf_id_00',
@@ -201,6 +198,19 @@ PLL_BSDF_NERF_IDS_FROM_VISION_ASSET = {
     'robotocc_bottle_7': t11_tuple_from_vision_asset('robotocc_bottle_7'),
 }
 
+## Code for generating command line for robot overlay videos.
+# breakpoint()
+# for vision_asset, items in PLL_BSDF_NERF_IDS_FROM_VISION_ASSET.items():
+#     pll_id, bsdf_id, bsdf_nerf_id = items
+#     pll_id = pll_id.replace('pll_id_', '')
+#     bsdf_id = bsdf_id.replace('bundlesdf_id_', '')
+#     bsdf_nerf_id = bsdf_nerf_id.replace('bundlesdf_id_', '')
+#     print(f'python overlay_videos.py --vision-asset={vision_asset} ' + \
+#           f'--cycle-iteration={BSDF_ITERATION} --bundlesdf-id={bsdf_id} ' + \
+#           f'--nerf-bundlesdf-id={bsdf_nerf_id} --bsdf-only --show-robot ' + \
+#           f'--remote')
+# breakpoint()
+
 def hex_to_rgba_format(hex: str, opacity: float):
     r, g, b = tuple(int(hex[i:i+2], 16) for i in (1, 3, 5))
     return f'{r/255} {g/255} {b/255} {opacity}'
@@ -220,6 +230,9 @@ DEFAULT_COM_STRING = '<inertial>\n            <origin xyz="0 0 0"'
 
 SMALLEST_LINEWIDTH = 0.2
 BIGGEST_LINEWIDTH = 3.0
+
+POSITION_TOLERANCE = 0.1
+ROTATION_TOLERANCE = np.pi/4
 
 
 def obj_file_to_com_string(obj_path: str) -> str:
@@ -1297,6 +1310,8 @@ class DynamicsPredictionQuantifier():
             vysics:
                 position_error: (N,)
                 rotation_error: (N,)
+                time_before_bad_pos: float
+                time_before_bad_rot: float
             bsdf: ...
             pll: ...
             gt: ...
@@ -1346,7 +1361,10 @@ class DynamicsPredictionQuantifier():
         """Create the time-series dictionary of errors, first keyed by the
         comparison trajectory (tracked or GT simulated), then by the model
         being tested (Vysics, BSDF, PLL, GT), and lastly by the error type
-        (position error or rotation error)."""
+        (position error or rotation error).
+
+        In addition to time-series errors, this also computes the time before
+        position and rotation errors cross the error tolerances."""
         # Quantify w.r.t. tracked poses or GT simulated poses.
         compare_against = [
             self.object_poses, self.pred_files['pred_object_states_gt.txt']]
@@ -1363,21 +1381,38 @@ class DynamicsPredictionQuantifier():
                 rotation_error = TrajectoryMetrics.rotation_error(
                     compare_traj, pred_traj)
 
+                # Compute the time before each error becomes too large.
+                try:
+                    pos_idx = np.where(pos_error > POSITION_TOLERANCE)[0][0]
+                    pos_error_time = self.times[pos_idx]
+                except IndexError:
+                    pos_error_time = self.times[-1] + 1e-3
+
+                try:
+                    rad_idx = np.where(rotation_error>ROTATION_TOLERANCE)[0][0]
+                    rad_error_time = self.times[rad_idx]
+                except IndexError:
+                    rad_error_time = self.times[-1] + 1e-3
+
+                # Store the results.
                 new_key = key.replace('pred_object_states_', ''
                                       ).replace('.txt', '')
                 error_dict[new_key] = {
                     'position_error': pos_error,
-                    'rotation_error': rotation_error
+                    'rotation_error': rotation_error,
+                    'time_before_bad_pos': pos_error_time,
+                    'time_before_bad_rot': rad_error_time
                 }
 
         self.errors = errors
 
-    def plot_errors(self):
-        if self.interactive:
-            plt.ion()
+    def plot_errors(self, truncate: bool = False):
         for compare_against in ['tracked', 'gt_sim']:
             fig, axs = plt.subplots(2, 1, figsize=(6, 9), sharex=True)
-            fig.suptitle(f'{self.vision_asset} against {compare_against}')
+            title = f'{self.vision_asset} against {compare_against}'
+            title += f', truncated ({POSITION_TOLERANCE:.2f}m, ' + \
+                f'{ROTATION_TOLERANCE:.2f}rad)' if truncate else ''
+            fig.suptitle(title)
             axs[0].set_xlabel('Time (s)')
             axs[1].set_xlabel('Time (s)')
             axs[0].set_ylabel('Error [m]')
@@ -1388,16 +1423,62 @@ class DynamicsPredictionQuantifier():
             models = ['vysics', 'bsdf', 'pll', 'gt']
             colors = [VYSICS_MESH_HEX, BSDF_MESH_HEX, PLL_MESH_HEX, GT_MESH_HEX]
             for model, color in zip(models, colors):
+                pos_times = self.times if not truncate else \
+                    self.times[
+                        self.times < self.errors[compare_against][model][
+                            'time_before_bad_pos']]
                 pos_error = self.errors[compare_against][model][
-                    'position_error']
+                    'position_error'][:len(pos_times)]
+
+                rot_times = self.times if not truncate else \
+                    self.times[
+                        self.times < self.errors[compare_against][model][
+                            'time_before_bad_rot']]
                 rot_error = self.errors[compare_against][model][
-                    'rotation_error']
-                axs[0].plot(self.times, pos_error, color=color, label=model)
-                axs[1].plot(self.times, rot_error, color=color, label=model)
+                    'rotation_error'][:len(rot_times)]
+
+                axs[0].plot(pos_times, pos_error, color=color, label=model)
+                axs[1].plot(rot_times, rot_error, color=color, label=model)
 
             plt.legend()
             plt.savefig(
                 op.join(self.save_dir, f'{compare_against}_{model}_errors.png'))
+            if not self.interactive:
+                plt.close()
+
+        # if self.interactive:
+        #     breakpoint()
+
+    def plot_time_to_failure(self):
+        for compare_against in ['tracked', 'gt_sim']:
+            fig, axs = plt.subplots(1, 2, figsize=(9, 6), sharey=True)
+            fig.suptitle(f'{self.vision_asset} Time to Dynamics Prediction ' + \
+                         f'Divergence, compared against {compare_against}')
+            axs[0].set_ylabel('Time [s]')
+            axs[0].set_title(f'Time to {POSITION_TOLERANCE:.2f}m Error')
+            axs[1].set_title(f'Time to {ROTATION_TOLERANCE:.2f}rad Error')
+
+            models = ['vysics', 'bsdf', 'pll', 'gt']
+            colors = [VYSICS_MESH_HEX, BSDF_MESH_HEX, PLL_MESH_HEX, GT_MESH_HEX]
+
+            bar_width = 0.2
+            offsets = np.linspace(-bar_width * (len(models) - 1) / 2,
+                                  bar_width * (len(models) - 1) / 2,
+                                  len(models))
+
+            for model_i, (model, color) in enumerate(zip(models, colors)):
+                t = self.errors[compare_against][model]['time_before_bad_pos']
+                axs[0].bar(offsets[model_i], t, width=bar_width, color=color,
+                           label=model)
+
+                t = self.errors[compare_against][model]['time_before_bad_rot']
+                axs[1].bar(offsets[model_i], t, width=bar_width, color=color,
+                           label=model)
+
+            plt.legend()
+            plt.savefig(op.join(
+                self.save_dir, f'{compare_against}_{model}_time_divergence.png'
+            ))
             if not self.interactive:
                 plt.close()
 
@@ -1415,13 +1496,24 @@ class ConglomeratedDynamicsMetrics():
     def plot(self):
         if self.interactive:
             plt.ion()
-        
+
+        self._plot_traces(truncate=False)
+        self._plot_traces(truncate=True)
+        self._plot_time_to_failure()
+
+        if self.interactive:
+            breakpoint()
+
+    def _plot_traces(self, truncate: bool = False):
         n_lines = len(self.dpqs)
         for compare_against in ['tracked', 'gt_sim']:
             fig, axs = plt.subplots(2, 4, figsize=(12, 9), sharex=True,
                                     sharey='row')
-            fig.suptitle(f'Conglomerated Dynamics Predictions against ' + \
-                         f'{compare_against}')
+            title = f'Conglomerated Dynamics Predictions against ' + \
+                    f'{compare_against}'
+            title += f', truncated ({POSITION_TOLERANCE:.2f}m, ' + \
+                f'{ROTATION_TOLERANCE:.2f}rad)' if truncate else ''
+            fig.suptitle(title)
             axs[1, 0].set_xlabel('Time (s)')
             axs[1, 1].set_xlabel('Time (s)')
             axs[1, 2].set_xlabel('Time (s)')
@@ -1438,16 +1530,27 @@ class ConglomeratedDynamicsMetrics():
             lines = []
             for col_i, (model, color) in enumerate(zip(models, colors)):
                 for dpq_i, dpq in enumerate(self.dpqs):
+                    pos_times = dpq.times if not truncate else \
+                        dpq.times[
+                            dpq.times < dpq.errors[compare_against][model][
+                                'time_before_bad_pos']]
                     pos_error = dpq.errors[compare_against][model][
-                        'position_error']
+                        'position_error'][:len(pos_times)]
+
+                    rot_times = dpq.times if not truncate else \
+                        dpq.times[
+                            dpq.times < dpq.errors[compare_against][model][
+                                'time_before_bad_rot']]
                     rot_error = dpq.errors[compare_against][model][
-                        'rotation_error']
+                        'rotation_error'][:len(rot_times)]
+
                     linewidth = 2  #SMALLEST_LINEWIDTH #+ \
-                        # (BIGGEST_LINEWIDTH-SMALLEST_LINEWIDTH)*dpq_i/(n_lines-1)
-                    line = axs[0, col_i].plot(dpq.times, pos_error, color=color,
+                        # (BIGGEST_LINEWIDTH-SMALLEST_LINEWIDTH)*dpq_i /
+                        # (n_lines-1)
+                    line = axs[0, col_i].plot(pos_times, pos_error, color=color,
                         linewidth=linewidth, alpha=0.2,
                         label=dpq.vision_asset.replace('robotocc_', ''))
-                    axs[1, col_i].plot(dpq.times, rot_error, color=color,
+                    axs[1, col_i].plot(rot_times, rot_error, color=color,
                         linewidth=linewidth, alpha=0.2,
                         label=dpq.vision_asset.replace('robotocc_', ''))
                     if col_i == 0:
@@ -1460,8 +1563,52 @@ class ConglomeratedDynamicsMetrics():
             if not self.interactive:
                 plt.close()
 
-        if self.interactive:
-            breakpoint()
+    def _plot_time_to_failure(self):
+        n_bars = len(self.dpqs)
+        for compare_against in ['tracked', 'gt_sim']:
+            fig, axs = plt.subplots(
+                2, 4, figsize=(12, 9), sharex=True, sharey='row')
+            fig.suptitle(f'Conglomerated Time to Dynamics Prediction ' + \
+                         f'Divergence, compared against {compare_against}')
+            axs[0, 0].set_ylabel(
+                f'Time to {POSITION_TOLERANCE:.2f}m Position Error [s]')
+            axs[1, 0].set_ylabel(
+                f'Time to {ROTATION_TOLERANCE:.2f}rad Rotation Error [s]')
+
+            models = ['vysics', 'bsdf', 'pll', 'gt']
+            colors = [VYSICS_MESH_HEX, BSDF_MESH_HEX, PLL_MESH_HEX, GT_MESH_HEX]
+
+            bar_width = 0.2
+            offsets = np.linspace(-bar_width * (n_bars-1)/2,
+                                  bar_width * (n_bars-1)/2,
+                                  n_bars)
+
+            for model_i, (model, color) in enumerate(zip(models, colors)):
+                for dpq_i, dpq in enumerate(self.dpqs):
+                    t = dpq.errors[compare_against][model][
+                        'time_before_bad_pos']
+                    axs[0, model_i].bar(
+                        offsets[dpq_i], t, width=bar_width, color=color,
+                        label=model)
+
+                    t = dpq.errors[compare_against][model][
+                        'time_before_bad_rot']
+                    axs[1, model_i].bar(
+                        offsets[dpq_i], t, width=bar_width, color=color,
+                        label=model)
+
+            vision_assets = [dpq.vision_asset for dpq in self.dpqs]
+            axs[1,0].set_xticks(offsets, vision_assets, rotation=45, ha='right')
+            axs[1,1].set_xticks(offsets, vision_assets, rotation=45, ha='right')
+            axs[1,2].set_xticks(offsets, vision_assets, rotation=45, ha='right')
+            axs[1,3].set_xticks(offsets, vision_assets, rotation=45, ha='right')
+            plt.tight_layout()
+            plt.savefig(op.join(
+                self.save_dir, f'{compare_against}_{model}_combined_time_' + \
+                    f'divergence.png'
+            ))
+            if not self.interactive:
+                plt.close()
 
 
 @click.group()
@@ -1521,7 +1668,9 @@ def plot_command(interactive: bool):
     dpqs = []
     for vision_asset in vision_assets:
         dpq = DynamicsPredictionQuantifier(vision_asset, interactive)
-        dpq.plot_errors()
+        dpq.plot_errors(truncate=False)
+        dpq.plot_errors(truncate=True)
+        dpq.plot_time_to_failure()
         dpqs.append(dpq)
 
     cdm = ConglomeratedDynamicsMetrics(dpqs, interactive)

@@ -359,7 +359,7 @@ def check_franka_control_violation(
         if np.any(joint_position > joint_max_limit):
             print(f'Joint {joint_name} position above limit.')
             breakpoint()
-        if np.any(joint_velocity > joint_velocity_max_limit):
+        if np.any(np.abs(joint_velocity) > joint_velocity_max_limit):
             print(f'Joint {joint_name} velocity above limit.')
             breakpoint()
         if np.any(np.abs(joint_effort) > joint_effort_limit):
