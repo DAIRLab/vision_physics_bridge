@@ -1537,7 +1537,11 @@ class DynamicsPredictionQuantifier():
                 cs = self.contact_force_dict[model]['pred_contact_activation']
             true_indices = np.where(cs)[0]
             true_times = self.times[true_indices]
-            widths = self.times[true_indices + 1] - true_times
+            try:
+                widths = self.times[true_indices + 1] - true_times
+            except IndexError:
+                widths = self.times[true_indices[:-1] + 1] - true_times[:-1]
+                widths = np.append(widths, self.times[-1] - true_times[-1])
             axs.barh(y=model_i, width=widths, left=true_times,
                      color=color, align='center', label=model)
 
