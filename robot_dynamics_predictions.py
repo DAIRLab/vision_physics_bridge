@@ -29,7 +29,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 import torch
 import trimesh
-from typing import Tuple
+from typing import List, Tuple
 
 from pydrake.common.eigen_geometry import AngleAxis, Quaternion
 from pydrake.geometry import HalfSpace, MeshcatVisualizer, StartMeshcat
@@ -48,6 +48,8 @@ from pydrake.visualization import AddFrameTriadIllustration, VideoWriter
 
 import file_utils
 import rosbag_processor
+
+from evaluate import TrajectoryMetrics
 
 
 SIM_TIME_STEP = 5e-4
@@ -85,6 +87,8 @@ FILES_TO_EXPORT = ['joint_times.txt', 'joint_angles.txt',
                    'joint_velocities.txt', 'tau_J_ds.txt',
                    'pose_command_times.txt', 'des_pos.txt', 'des_quat_wxyz.txt',
                    'cartesian_stiffness.txt', 'cartesian_damping.txt']
+FILES_TO_GENERATE = [f'pred_franka_states_{mod}.txt' for mod in MODELS_TO_TEST]
+FILES_TO_GENERATE += [f'pred_object_states_{mod}.txt' for mod in MODELS_TO_TEST]
 
 PLL_BSDF_NERF_IDS_FROM_VISION_ASSET = {
     'robotocc_oatly_3':
@@ -228,11 +232,12 @@ def hex_to_rgba_format(hex: str, opacity: float):
 PLL_MESH_HEX = '#70ad47'
 BSDF_MESH_HEX = '#4472c4'
 VYSICS_MESH_HEX = '#7030a0'
+GT_MESH_HEX = '#990000'
 
 PLL_MESH_RGBA = hex_to_rgba_format(PLL_MESH_HEX, 0.6)
 BSDF_MESH_RGBA = hex_to_rgba_format(BSDF_MESH_HEX, 0.6)
 VYSICS_MESH_RGBA = hex_to_rgba_format(VYSICS_MESH_HEX, 0.6)
-GT_MESH_RGBA = '0.6 0 0 0.6'
+GT_MESH_RGBA = hex_to_rgba_format(GT_MESH_HEX, 0.6)
 COMPARISON_MESH_RGBA = '0.6 0.6 0.6 0.6'
 
 DEFAULT_COM_STRING = '<inertial>\n            <origin xyz="0 0 0"'
@@ -1254,17 +1259,186 @@ class RobotDynamicsPredictor():
         self.vis_diagram = vis_diagram
 
 
-@click.command()
+class DynamicsPredictionQuantifier():
+    """Creates an internal dictionary with the following structure:
+
+        tracked:
+            vysics:
+                position_error: (N,)
+                rotation_error: (N,)
+            bsdf: ...
+            pll: ...
+            gt: ...
+        gt_sim: ...
+    """
+    def __init__(self, vision_asset: str, interactive: bool = False):
+        self.vision_asset = vision_asset
+        self.interactive = interactive
+        self.pred_dir = file_utils.robot_dynamics_subdir(vision_asset)
+        self.save_dir = file_utils.robot_dynamics_subdir(
+            vision_asset, overwrite=False)
+
+        if interactive:
+            plt.ion()
+
+        self._load_data()
+        self._load_recorded_object_poses_and_times()
+        self._compute_time_series_errors()
+
+    def _load_data(self):
+        self.pred_files = {}
+        for file in FILES_TO_GENERATE:
+            # Skip loading the Franka states, only need object states.
+            if 'object' in file:
+                self.pred_files[file] = np.loadtxt(op.join(self.pred_dir, file))
+
+    def _load_recorded_object_poses_and_times(self):
+        pll_id, bsdf_id, nerf_bsdf_id = ids_from_vision_asset(self.vision_asset)
+        toss_num = int(self.vision_asset.split('_')[-1])
+
+        # Load the object poses from the PLL input data.
+        pll_traj_dir = file_utils.contactnets_input_dir_bundlesdf(
+            self.vision_asset, BSDF_ITERATION, bsdf_id,
+            full=False, create=False)
+        toss_data_dict = torch.load(
+            op.join(pll_traj_dir, f'{toss_num}.pt'), weights_only=False)
+        object_states = np.array(toss_data_dict['object_state'])
+        self.object_poses = object_states[:, :7]  # quat_wxyz, pos
+
+        cnets_data_gen_dir = file_utils.cnets_data_gen_dataset_dir(
+            self.vision_asset, check_exists=True)
+        self.times = np.loadtxt(op.join(
+            cnets_data_gen_dir, 'bundlesdf_timestamps.txt'))
+        self.times -= self.times[0]
+
+    def _compute_time_series_errors(self):
+        """Create the time-series dictionary of errors, first keyed by the
+        comparison trajectory (tracked or GT simulated), then by the model
+        being tested (Vysics, BSDF, PLL, GT), and lastly by the error type
+        (position error or rotation error)."""
+        # Quantify w.r.t. tracked poses or GT simulated poses.
+        compare_against = [
+            self.object_poses, self.pred_files['pred_object_states_gt.txt']]
+        errors = {'tracked': {}, 'gt_sim': {}}
+
+        for compare_traj, error_dict in zip(compare_against, errors.values()):
+            for key, pred_traj in self.pred_files.items():
+                if 'object' not in key:
+                    continue
+
+                # Compute the error.
+                pos_error = TrajectoryMetrics.position_error(
+                    compare_traj, pred_traj)
+                rotation_error = TrajectoryMetrics.rotation_error(
+                    compare_traj, pred_traj)
+
+                new_key = key.replace('pred_object_states_', ''
+                                      ).replace('.txt', '')
+                error_dict[new_key] = {
+                    'position_error': pos_error,
+                    'rotation_error': rotation_error
+                }
+
+        self.errors = errors
+
+    def plot_errors(self):
+        if self.interactive:
+            plt.ion()
+        for compare_against in ['tracked', 'gt_sim']:
+            fig, axs = plt.subplots(2, 1, figsize=(6, 9), sharex=True)
+            fig.suptitle(f'{self.vision_asset} against {compare_against}')
+            axs[0].set_xlabel('Time (s)')
+            axs[1].set_xlabel('Time (s)')
+            axs[0].set_ylabel('Error [m]')
+            axs[1].set_ylabel('Error [rad]')
+            axs[0].set_title('Position Error')
+            axs[1].set_title('Rotation Error')
+
+            models = ['vysics', 'bsdf', 'pll', 'gt']
+            colors = [VYSICS_MESH_HEX, BSDF_MESH_HEX, PLL_MESH_HEX, GT_MESH_HEX]
+            for model, color in zip(models, colors):
+                pos_error = self.errors[compare_against][model][
+                    'position_error']
+                rot_error = self.errors[compare_against][model][
+                    'rotation_error']
+                axs[0].plot(self.times, pos_error, color=color, label=model)
+                axs[1].plot(self.times, rot_error, color=color, label=model)
+
+            plt.legend()
+            plt.savefig(
+                op.join(self.save_dir, f'{compare_against}_{model}_errors.png'))
+            if not self.interactive:
+                plt.close()
+
+        if self.interactive:
+            breakpoint()
+
+
+class ConglomeratedDynamicsMetrics():
+    def __init__(self, list_of_dpqs: List[DynamicsPredictionQuantifier],
+                 interactive: bool = False):
+        self.dpqs = list_of_dpqs
+        self.interactive = interactive
+        self.save_dir = file_utils.robot_dynamics_dir()
+
+    def plot(self):
+        if self.interactive:
+            plt.ion()
+        for compare_against in ['tracked', 'gt_sim']:
+            fig, axs = plt.subplots(2, 4, figsize=(12, 9), sharex=True,
+                                    sharey='row')
+            fig.suptitle(f'Conglomerated Dynamics Predictions against ' + \
+                         f'{compare_against}')
+            axs[0, 0].set_xlabel('Time (s)')
+            axs[1, 0].set_xlabel('Time (s)')
+            axs[0, 0].set_ylabel('Position Error [m]')
+            axs[1, 0].set_ylabel('Orientation Error [rad]')
+            axs[0, 0].set_title('Vysics')
+            axs[0, 1].set_title('BundleSDF')
+            axs[0, 2].set_title('PLL')
+            axs[0, 3].set_title('Ground Truth')
+
+            models = ['vysics', 'bsdf', 'pll', 'gt']
+            colors = [VYSICS_MESH_HEX, BSDF_MESH_HEX, PLL_MESH_HEX, GT_MESH_HEX]
+            for col_i, (model, color) in enumerate(zip(models, colors)):
+                for dpq_i, dpq in enumerate(self.dpqs):
+                    pos_error = dpq.errors[compare_against][model][
+                        'position_error']
+                    rot_error = dpq.errors[compare_against][model][
+                        'rotation_error']
+                    axs[0, col_i].plot(dpq.times, pos_error, color=color,
+                        linewidth=dpq_i+0.5, label=dpq.vision_asset)
+                    axs[1, col_i].plot(dpq.times, rot_error, color=color,
+                        linewidth=dpq_i+0.5, label=dpq.vision_asset)
+
+            plt.legend(bbox_to_anchor=(1.1, 1), loc='upper left')
+            plt.tight_layout()
+            plt.savefig(op.join(
+                self.save_dir, f'{compare_against}_combined_errors.png'))
+            if not self.interactive:
+                plt.close()
+
+        if self.interactive:
+            breakpoint()
+
+
+@click.group()
+def cli():
+    pass
+
+@cli.command('gen')
 @click.argument('vision-asset', type=str, required=True)
 @click.argument('models-to-test', type=str, nargs=-1, required=True)
 @click.option('--debug', is_flag=True,
               help='add extra debugging printouts')
 @click.option('--meshcat', is_flag=True,
               help='show the simulated visualizations in meshcat')
+@click.option('--plot', is_flag=True,
+              help='plot results from existing trajectories')
 @click.option('--overwrite', is_flag=True,
               help='overwrite any existing files')
-def main_command(vision_asset: str, models_to_test: Tuple[str], debug: bool,
-                 meshcat: bool, overwrite: bool):
+def gen_command(vision_asset: str, models_to_test: Tuple[str], debug: bool,
+                meshcat: bool, plot: bool, overwrite: bool):
     assert vision_asset in PLL_BSDF_NERF_IDS_FROM_VISION_ASSET.keys()
     for model_to_test in models_to_test:
         assert model_to_test in MODELS_TO_TEST
@@ -1280,7 +1454,41 @@ def main_command(vision_asset: str, models_to_test: Tuple[str], debug: bool,
             model_to_test, overwrite=overwrite)
 
 
+@cli.command('plot')
+@click.option('--interactive', is_flag=True,
+            help='show the plots interactively')
+def plot_command(interactive: bool):
+    # Iterate over all the folders in the robot dynamics directory.
+    robot_dir = file_utils.robot_dynamics_dir()
+    dir_list = os.listdir(robot_dir)
+    vision_assets = []
+    for dir in dir_list:
+        # Check that the item is a directory.
+        if op.isdir(op.join(robot_dir, dir)):
+            # Check that the item contains the predicted files.
+            if np.all(np.array([
+                op.exists(op.join(robot_dir, dir, f)) for f in FILES_TO_GENERATE
+            ])):
+                vision_assets.append(dir)
+                print(f'=== Prepared to analyze {dir} ===')
+            else:
+                print(f'{dir} did not have all files.')
+        else:
+            print(f'{dir} is not a directory.')
+
+    dpqs = []
+    for vision_asset in vision_assets:
+        dpq = DynamicsPredictionQuantifier(vision_asset, interactive)
+        dpq.plot_errors()
+        dpqs.append(dpq)
+
+    cdm = ConglomeratedDynamicsMetrics(dpqs, interactive)
+    cdm.plot()
+    if interactive:
+        breakpoint()
+
+
 if __name__ == '__main__':
-    main_command()  # pylint: disable=no-value-for-parameter
+    cli()  # pylint: disable=no-value-for-parameter
 
 
