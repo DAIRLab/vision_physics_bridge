@@ -27,6 +27,7 @@ import os
 import os.path as op
 import numpy as np
 import matplotlib.pyplot as plt
+import matplotlib.ticker as mtick
 import torch
 import trimesh
 from typing import List, Tuple
@@ -1493,6 +1494,33 @@ class ConglomeratedDynamicsMetrics():
         self.interactive = interactive
         self.save_dir = file_utils.robot_dynamics_dir()
 
+        self._get_ordered_dpqs()
+
+    def _get_ordered_dpqs(self):
+        """Goal is to define self.pos_ordered_dpqs as a dictionary keyed by
+        ['tracked', 'gt_sim'], each key pointing to a list of dpqs, ordered by
+        the GT geometry's time to position error divergence, and similarly for
+        self.rot_ordered_dpqs."""
+        dpq_pos_rot = {}
+        for compare_against in ['tracked', 'gt_sim']:
+            dpq_pos_rot[compare_against] = [
+                self.dpqs,
+                [dpq.errors[compare_against]['gt']['time_before_bad_pos'] \
+                    for dpq in self.dpqs],
+                [dpq.errors[compare_against]['gt']['time_before_bad_rot'] \
+                    for dpq in self.dpqs],
+            ]
+
+        self.pos_ordered_dpqs = {}
+        self.rot_ordered_dpqs = {}
+        for compare_against in ['tracked', 'gt_sim']:
+            self.pos_ordered_dpqs[compare_against] = [
+                dpq for _, dpq in sorted(zip(
+                    dpq_pos_rot[compare_against][1], self.dpqs))]
+            self.rot_ordered_dpqs[compare_against] = [
+                dpq for _, dpq in sorted(zip(
+                    dpq_pos_rot[compare_against][2], self.dpqs))]
+
     def plot(self):
         if self.interactive:
             plt.ion()
@@ -1500,6 +1528,7 @@ class ConglomeratedDynamicsMetrics():
         self._plot_traces(truncate=False)
         self._plot_traces(truncate=True)
         self._plot_time_to_failure()
+        self._plot_time_to_failure_cdf()
 
         if self.interactive:
             breakpoint()
@@ -1563,17 +1592,68 @@ class ConglomeratedDynamicsMetrics():
             if not self.interactive:
                 plt.close()
 
+    def _plot_time_to_failure_cdf(self):
+        for compare_against in ['tracked', 'gt_sim']:
+            # Generate a plot of cumulative distribution functions.
+            fig, axs = plt.subplots(1, 2, figsize=(8,6), sharey=True)
+            axs[0].set_xlabel(f'Time of Position Divergence ' + \
+                              f'({POSITION_TOLERANCE:.2f}m) [s]')
+            axs[1].set_xlabel(f'Time of Rotation Divergence ' + \
+                              f'({ROTATION_TOLERANCE:.2f}rad) [s]')
+            axs[0].set_ylabel('Fraction of Trials')
+            axs[0].yaxis.set_major_formatter(mtick.PercentFormatter(1.0))
+            axs[0].set_ylim([0, 1])
+            fig.suptitle(
+                'Time to Dynamics Prediction Divergence Cumulative Density,' + \
+                f' against {compare_against}')
+
+            models = ['vysics', 'bsdf', 'pll', 'gt']
+            colors = [VYSICS_MESH_HEX, BSDF_MESH_HEX, PLL_MESH_HEX, GT_MESH_HEX]
+            linestyles = ['solid', 'solid', 'dashed', 'dashed']
+
+            for model, color, linestyle in zip(models, colors, linestyles):
+                for metric_i, key in enumerate(
+                    ['time_before_bad_pos', 'time_before_bad_rot']):
+                    data = [dpq.errors[compare_against][model][key] \
+                            for dpq in self.dpqs]
+                    count, bins_count = np.histogram(data, bins=11)
+                    pdf = count / sum(count)
+                    cdf = np.cumsum(pdf)
+                    bins_count[0] = 0
+                    cdf = np.concatenate([[0], cdf])
+                    axs[metric_i].plot(
+                        bins_count, cdf, color=color, linestyle=linestyle,
+                        linewidth=5, label=model)
+
+            axs[0].grid()
+            axs[1].grid()
+            axs[0].legend()
+
+            plt.savefig(op.join(
+                self.save_dir, f'{compare_against}_combined_time_' + \
+                    f'divergence_cdf.png'
+            ))
+            if not self.interactive:
+                plt.close()
+
     def _plot_time_to_failure(self):
         n_bars = len(self.dpqs)
         for compare_against in ['tracked', 'gt_sim']:
+            dpq_list_pos = self.pos_ordered_dpqs[compare_against]
+            dpq_list_rot = self.rot_ordered_dpqs[compare_against]
+
             fig, axs = plt.subplots(
-                2, 4, figsize=(12, 9), sharex=True, sharey='row')
+                2, 4, figsize=(12, 9), sharey='row')
             fig.suptitle(f'Conglomerated Time to Dynamics Prediction ' + \
                          f'Divergence, compared against {compare_against}')
             axs[0, 0].set_ylabel(
                 f'Time to {POSITION_TOLERANCE:.2f}m Position Error [s]')
             axs[1, 0].set_ylabel(
                 f'Time to {ROTATION_TOLERANCE:.2f}rad Rotation Error [s]')
+            axs[0, 0].set_title('Vysics')
+            axs[0, 1].set_title('BundleSDF')
+            axs[0, 2].set_title('PLL')
+            axs[0, 3].set_title('Ground Truth Geometry')
 
             models = ['vysics', 'bsdf', 'pll', 'gt']
             colors = [VYSICS_MESH_HEX, BSDF_MESH_HEX, PLL_MESH_HEX, GT_MESH_HEX]
@@ -1584,13 +1664,14 @@ class ConglomeratedDynamicsMetrics():
                                   n_bars)
 
             for model_i, (model, color) in enumerate(zip(models, colors)):
-                for dpq_i, dpq in enumerate(self.dpqs):
+                for dpq_i, dpq in enumerate(dpq_list_pos):
                     t = dpq.errors[compare_against][model][
                         'time_before_bad_pos']
                     axs[0, model_i].bar(
                         offsets[dpq_i], t, width=bar_width, color=color,
                         label=model)
 
+                for dpq_i, dpq in enumerate(dpq_list_rot):
                     t = dpq.errors[compare_against][model][
                         'time_before_bad_rot']
                     axs[1, model_i].bar(
@@ -1599,12 +1680,16 @@ class ConglomeratedDynamicsMetrics():
 
             vision_assets = [dpq.vision_asset for dpq in self.dpqs]
             axs[1,0].set_xticks(offsets, vision_assets, rotation=45, ha='right')
-            axs[1,1].set_xticks(offsets, vision_assets, rotation=45, ha='right')
-            axs[1,2].set_xticks(offsets, vision_assets, rotation=45, ha='right')
-            axs[1,3].set_xticks(offsets, vision_assets, rotation=45, ha='right')
+            axs[1,1].set_xticks([], [])
+            axs[1,2].set_xticks([], [])
+            axs[1,3].set_xticks([], [])
+            axs[0,0].set_xticks([], [])
+            axs[0,1].set_xticks([], [])
+            axs[0,2].set_xticks([], [])
+            axs[0,3].set_xticks([], [])
             plt.tight_layout()
             plt.savefig(op.join(
-                self.save_dir, f'{compare_against}_{model}_combined_time_' + \
+                self.save_dir, f'{compare_against}_combined_time_' + \
                     f'divergence.png'
             ))
             if not self.interactive:
@@ -1645,7 +1730,7 @@ def gen_command(vision_asset: str, models_to_test: Tuple[str], debug: bool,
 
 @cli.command('plot')
 @click.option('--interactive', is_flag=True,
-            help='show the plots interactively')
+              help='show the plots interactively')
 def plot_command(interactive: bool):
     # Iterate over all the folders in the robot dynamics directory.
     robot_dir = file_utils.robot_dynamics_dir()
