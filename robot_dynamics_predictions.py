@@ -90,6 +90,8 @@ FILES_TO_EXPORT = ['joint_times.txt', 'joint_angles.txt',
                    'cartesian_stiffness.txt', 'cartesian_damping.txt']
 FILES_TO_GENERATE = [f'pred_franka_states_{mod}.txt' for mod in MODELS_TO_TEST]
 FILES_TO_GENERATE += [f'pred_object_states_{mod}.txt' for mod in MODELS_TO_TEST]
+FILES_TO_GENERATE += [f'pred_forces_from_ee_{mod}.txt' for mod in \
+                      MODELS_TO_TEST]
 
 def t11_tuple_from_vision_asset(vision_asset: str) -> Tuple[str, str, str]:
     return (f'pll_id_t11_{vision_asset}',
@@ -220,6 +222,7 @@ PLL_MESH_HEX = '#70ad47'
 BSDF_MESH_HEX = '#4472c4'
 VYSICS_MESH_HEX = '#7030a0'
 GT_MESH_HEX = '#990000'
+MANUAL_ANNOTATION_HEX = '#999999'
 
 PLL_MESH_RGBA = hex_to_rgba_format(PLL_MESH_HEX, 0.6)
 BSDF_MESH_RGBA = hex_to_rgba_format(BSDF_MESH_HEX, 0.6)
@@ -483,6 +486,10 @@ def make_vysics_geometry_urdf(
               f'{orig_obj_path}\n')
 
     return new_urdf_path
+
+def binary_iou(first_bools: np.array, second_bools: np.array) -> float:
+    agreement = first_bools == second_bools
+    return np.sum(agreement) / np.size(agreement)
 
 
 ### Inverse dynamics controller ###
@@ -1329,17 +1336,17 @@ class DynamicsPredictionQuantifier():
             plt.ion()
 
         self._load_data()
-        self._load_recorded_object_poses_and_times()
+        self._load_recorded_object_poses_times_contacts()
         self._compute_time_series_errors()
 
     def _load_data(self):
         self.pred_files = {}
         for file in FILES_TO_GENERATE:
             # Skip loading the Franka states, only need object states.
-            if 'object' in file:
+            if 'object' in file or 'forces' in file:
                 self.pred_files[file] = np.loadtxt(op.join(self.pred_dir, file))
 
-    def _load_recorded_object_poses_and_times(self):
+    def _load_recorded_object_poses_times_contacts(self):
         pll_id, bsdf_id, nerf_bsdf_id = ids_from_vision_asset(self.vision_asset)
         toss_num = int(self.vision_asset.split('_')[-1])
 
@@ -1352,11 +1359,24 @@ class DynamicsPredictionQuantifier():
         object_states = np.array(toss_data_dict['object_state'])
         self.object_poses = object_states[:, :7]  # quat_wxyz, pos
 
+        # Load the timestamps from the generated dataset.
         cnets_data_gen_dir = file_utils.cnets_data_gen_dataset_dir(
             self.vision_asset, check_exists=True)
         self.times = np.loadtxt(op.join(
             cnets_data_gen_dir, 'bundlesdf_timestamps.txt'))
         self.times -= self.times[0]
+
+        # Load the contact activations from the manually annotated yaml.
+        contact_activation_dict = \
+            file_utils.load_contact_activation_dict_from_yaml(self.vision_asset)
+        starts = contact_activation_dict['start']
+        starts = [starts] if type(starts) != list else starts
+        ends = contact_activation_dict['end']
+        ends = [ends] if type(ends) != list else ends
+        contact_activations = np.zeros_like(self.times, dtype=bool)
+        for start, end in zip(starts, ends):
+            contact_activations[start:end+1] = np.ones(end+1-start)
+        self.contact_activations = contact_activations
 
     def _compute_time_series_errors(self):
         """Create the time-series dictionary of errors, first keyed by the
@@ -1369,11 +1389,29 @@ class DynamicsPredictionQuantifier():
         # Quantify w.r.t. tracked poses or GT simulated poses.
         compare_against = [
             self.object_poses, self.pred_files['pred_object_states_gt.txt']]
+        contact_force_dict = {}
         errors = {'tracked': {}, 'gt_sim': {}}
 
         for compare_traj, error_dict in zip(compare_against, errors.values()):
             for key, pred_traj in self.pred_files.items():
-                if 'object' not in key:
+                if 'franka' in key:
+                    continue
+
+                model = key.replace('.txt', '').split('_')[-1]
+                if model not in error_dict.keys():
+                    error_dict[model] = {}
+
+                if 'forces' in key:
+                    if model in contact_force_dict.keys():
+                        continue
+
+                    force_activation = np.linalg.norm(pred_traj, axis=1) > 0
+                    contact_activation_iou = binary_iou(
+                        force_activation, self.contact_activations)
+                    contact_force_dict[model] = {
+                        'pred_contact_activation': force_activation,
+                        'contact_activation_iou': contact_activation_iou
+                    }
                     continue
 
                 # Compute the error.
@@ -1396,16 +1434,13 @@ class DynamicsPredictionQuantifier():
                     rad_error_time = self.times[-1] + 1e-3
 
                 # Store the results.
-                new_key = key.replace('pred_object_states_', ''
-                                      ).replace('.txt', '')
-                error_dict[new_key] = {
-                    'position_error': pos_error,
-                    'rotation_error': rotation_error,
-                    'time_before_bad_pos': pos_error_time,
-                    'time_before_bad_rot': rad_error_time
-                }
+                error_dict[model]['position_error'] = pos_error
+                error_dict[model]['rotation_error'] = rotation_error
+                error_dict[model]['time_before_bad_pos'] = pos_error_time
+                error_dict[model]['time_before_bad_rot'] = rad_error_time
 
         self.errors = errors
+        self.contact_force_dict = contact_force_dict
 
     def plot_errors(self, truncate: bool = False):
         for compare_against in ['tracked', 'gt_sim']:
@@ -1485,6 +1520,34 @@ class DynamicsPredictionQuantifier():
 
         if self.interactive:
             breakpoint()
+
+    def plot_contact_activations(self):
+        fig, axs = plt.subplots(1, 1, figsize=(6, 3))
+        fig.suptitle(f'{self.vision_asset} Contact Activations')
+        axs.set_xlabel('Time (s)')
+
+        models = ['vysics', 'bsdf', 'pll', 'gt', 'manual']
+        colors = [VYSICS_MESH_HEX, BSDF_MESH_HEX, PLL_MESH_HEX, GT_MESH_HEX,
+                  MANUAL_ANNOTATION_HEX]
+
+        for model_i, (model, color) in enumerate(zip(models, colors)):
+            if model == 'manual':
+                cs = self.contact_activations
+            else:
+                cs = self.contact_force_dict[model]['pred_contact_activation']
+            true_indices = np.where(cs)[0]
+            true_times = self.times[true_indices]
+            widths = self.times[true_indices + 1] - true_times
+            axs.barh(y=model_i, width=widths, left=true_times,
+                     color=color, align='center', label=model)
+
+        axs.set_xlim([0, self.times[-1]])
+        axs.set_yticks([i for i in range(len(models))], models)
+        plt.tight_layout()
+
+        plt.savefig(op.join(self.save_dir, f'contact_activations.png'))
+        if not self.interactive:
+            plt.close()
 
 
 class ConglomeratedDynamicsMetrics():
@@ -1770,9 +1833,10 @@ def plot_command(interactive: bool):
     dpqs = []
     for vision_asset in vision_assets:
         dpq = DynamicsPredictionQuantifier(vision_asset, interactive)
-        dpq.plot_errors(truncate=False)
-        dpq.plot_errors(truncate=True)
-        dpq.plot_time_to_failure()
+        # dpq.plot_errors(truncate=False)
+        # dpq.plot_errors(truncate=True)
+        # dpq.plot_time_to_failure()
+        dpq.plot_contact_activations()
         dpqs.append(dpq)
 
     cdm = ConglomeratedDynamicsMetrics(dpqs, interactive)

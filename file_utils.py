@@ -48,6 +48,8 @@ assert bsdf_file_utils.BUNDLENETS_REPO_DIR == REPO_DIR, f"Unexpected file " \
 
 REALSENSE_CAMERA_NAME = 'cam0'
 PROCESSING_YAML_FILE = op.join(DATA_GEN_DIR, 'assets', 'config.yaml')
+CONTACT_ACTIVATION_YAML_FILE = op.join(
+    DATA_GEN_DIR, 'assets', 'config_contact_frames.yaml')
 TAGLESS_OBJECTS = ['bakingbox', 'burger', 'cardboard', 'chocolate', 'cream',
                    'croc', 'crushedcan', 'duck', 'gallon', 'greencan', 'hotdog',
                    'icetray', 'mug', 'oatly', 'pinkcan', 'stapler', 'styrofoam',
@@ -996,6 +998,14 @@ def load_table_z_height(object, toss_number) -> float:
     with open(table_calibration_yaml_filepath(), 'r') as f:
         data = yaml.safe_load(f)
     return data[object][toss_number]
+
+def load_contact_activation_dict_from_yaml(vision_asset: str) -> dict:
+    toss_num = int(vision_asset.split('_')[-1])
+    object = '_'.join(vision_asset.split('_')[:-1])
+
+    with open(CONTACT_ACTIVATION_YAML_FILE, 'r') as f:
+        data = yaml.safe_load(f)
+    return data[object][toss_num]
 
 def load_keyframe_indices_from_nerf_results_yml(
         dataset: str, cycle_iteration: int, bundlesdf_id: str) -> list:
