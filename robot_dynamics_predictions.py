@@ -218,6 +218,9 @@ COMPARISON_MESH_RGBA = '0.6 0.6 0.6 0.6'
 
 DEFAULT_COM_STRING = '<inertial>\n            <origin xyz="0 0 0"'
 
+SMALLEST_LINEWIDTH = 0.2
+BIGGEST_LINEWIDTH = 3.0
+
 
 def obj_file_to_com_string(obj_path: str) -> str:
     obj = trimesh.load(obj_path, force='mesh')
@@ -1412,6 +1415,8 @@ class ConglomeratedDynamicsMetrics():
     def plot(self):
         if self.interactive:
             plt.ion()
+        
+        n_lines = len(self.dpqs)
         for compare_against in ['tracked', 'gt_sim']:
             fig, axs = plt.subplots(2, 4, figsize=(12, 9), sharex=True,
                                     sharey='row')
@@ -1430,21 +1435,26 @@ class ConglomeratedDynamicsMetrics():
 
             models = ['vysics', 'bsdf', 'pll', 'gt']
             colors = [VYSICS_MESH_HEX, BSDF_MESH_HEX, PLL_MESH_HEX, GT_MESH_HEX]
+            lines = []
             for col_i, (model, color) in enumerate(zip(models, colors)):
                 for dpq_i, dpq in enumerate(self.dpqs):
                     pos_error = dpq.errors[compare_against][model][
                         'position_error']
                     rot_error = dpq.errors[compare_against][model][
                         'rotation_error']
-                    axs[0, col_i].plot(dpq.times, pos_error, color=color,
-                        linewidth=dpq_i+0.5,
+                    linewidth = 2  #SMALLEST_LINEWIDTH #+ \
+                        # (BIGGEST_LINEWIDTH-SMALLEST_LINEWIDTH)*dpq_i/(n_lines-1)
+                    line = axs[0, col_i].plot(dpq.times, pos_error, color=color,
+                        linewidth=linewidth, alpha=0.2,
                         label=dpq.vision_asset.replace('robotocc_', ''))
                     axs[1, col_i].plot(dpq.times, rot_error, color=color,
-                        linewidth=dpq_i+0.5,
+                        linewidth=linewidth, alpha=0.2,
                         label=dpq.vision_asset.replace('robotocc_', ''))
+                    if col_i == 0:
+                        lines.append(line[0])
 
-            plt.legend(bbox_to_anchor=(1.1, 1), loc='upper left')
-            plt.tight_layout()
+            fig.legend(handles=lines, loc='center right')
+            plt.tight_layout(rect=[0, 0, 0.88, 1])
             plt.savefig(op.join(
                 self.save_dir, f'{compare_against}_combined_errors.png'))
             if not self.interactive:
