@@ -90,55 +90,45 @@ FILES_TO_EXPORT = ['joint_times.txt', 'joint_angles.txt',
 FILES_TO_GENERATE = [f'pred_franka_states_{mod}.txt' for mod in MODELS_TO_TEST]
 FILES_TO_GENERATE += [f'pred_object_states_{mod}.txt' for mod in MODELS_TO_TEST]
 
+def t11_tuple_from_vision_asset(vision_asset: str) -> Tuple[str, str, str]:
+    return (f'pll_id_t11_{vision_asset}',
+            'bundlesdf_id_00', 'bundlesdf_id_00-t11')
+
 PLL_BSDF_NERF_IDS_FROM_VISION_ASSET = {
     'robotocc_oatly_3':
         ('pll_id_t09d_robotocc_oatly_3',
          'bundlesdf_id_00',
          'bundlesdf_id_00-t09d'),
-    'robotocc_oatly_4':
-        ('pll_id_t11_robotocc_oatly_4',
-         'bundlesdf_id_00',
-         'bundlesdf_id_00-t11'),
+    'robotocc_oatly_4': t11_tuple_from_vision_asset('robotocc_oatly_4'),
     'robotocc_oatly_5':
         ('pll_id_t09d_robotocc_oatly_5',
          'bundlesdf_id_00',
          'bundlesdf_id_00-t09d'),
-    'robotocc_oatly_6':
-        ('pll_id_t11_robotocc_oatly_6',
-         'bundlesdf_id_00',
-         'bundlesdf_id_00-t11'),
-    'robotocc_milk_2':
-        ('pll_id_t11_robotocc_milk_2',
-         'bundlesdf_id_00',
-         'bundlesdf_id_00-t11'),
-    'robotocc_milk_3':
-        ('pll_id_t11_robotocc_milk_3',
-         'bundlesdf_id_00',
-         'bundlesdf_id_00-t11'),
-    'robotocc_milk_4':
-        ('pll_id_t11_robotocc_milk_4',
-         'bundlesdf_id_00',
-         'bundlesdf_id_00-t11'),
+    'robotocc_oatly_6': t11_tuple_from_vision_asset('robotocc_oatly_6'),
+    'robotocc_oatly_7': t11_tuple_from_vision_asset('robotocc_oatly_7'),
+    'robotocc_oatly_8': t11_tuple_from_vision_asset('robotocc_oatly_8'),
+    'robotocc_oatly_9': t11_tuple_from_vision_asset('robotocc_oatly_9'),
+    'robotocc_oatly_10': t11_tuple_from_vision_asset('robotocc_oatly_10'),
+    'robotocc_oatly_11': t11_tuple_from_vision_asset('robotocc_oatly_11'),
+    'robotocc_oatly_12': t11_tuple_from_vision_asset('robotocc_oatly_12'),
+    'robotocc_milk_2': t11_tuple_from_vision_asset('robotocc_milk_2'),
+    'robotocc_milk_3': t11_tuple_from_vision_asset('robotocc_milk_3'),
+    'robotocc_milk_4': t11_tuple_from_vision_asset('robotocc_milk_4'),
     'robotocc_milk_5':
         ('pll_id_t09d_robotocc_milk_5',
          'bundlesdf_id_00',
          'bundlesdf_id_00-t09d'),
+    'robotocc_milk_8': t11_tuple_from_vision_asset('robotocc_milk_8'),
     'robotocc_styrofoam_1':
         ('pll_id_t09d_robotocc_styrofoam_1',
          'bundlesdf_id_00',
          'bundlesdf_id_00-t09d'),
-    'robotocc_styrofoam_2':
-        ('pll_id_t11_robotocc_styrofoam_2',
-         'bundlesdf_id_00',
-         'bundlesdf_id_00-t11'),
+    'robotocc_styrofoam_2': t11_tuple_from_vision_asset('robotocc_styrofoam_2'),
     'robotocc_styrofoam_3':
         ('pll_id_t09d_robotocc_styrofoam_3',
          'bundlesdf_id_00',
          'bundlesdf_id_00-t09d'),
-    'robotocc_styrofoam_4':
-        ('pll_id_t11_robotocc_styrofoam_4',
-         'bundlesdf_id_00',
-         'bundlesdf_id_00-t11'),
+    'robotocc_styrofoam_4': t11_tuple_from_vision_asset('robotocc_styrofoam_4'),
     'robotocc_styrofoam_5':
         ('pll_id_t09d_robotocc_styrofoam_5',
          'bundlesdf_id_00',
@@ -147,6 +137,10 @@ PLL_BSDF_NERF_IDS_FROM_VISION_ASSET = {
         ('pll_id_t09d_robotocc_styrofoam_6',
          'bundlesdf_id_00',
          'bundlesdf_id_00-t09d'),
+    'robotocc_styrofoam_7': t11_tuple_from_vision_asset('robotocc_styrofoam_7'),
+    'robotocc_styrofoam_8': t11_tuple_from_vision_asset('robotocc_styrofoam_8'),
+    'robotocc_styrofoam_9': t11_tuple_from_vision_asset('robotocc_styrofoam_9'),
+    'robotocc_styrofoam_10': t11_tuple_from_vision_asset('robotocc_styrofoam_10'),
     'robotocc_toblerone_1':
         ('pll_id_t02e300b20_occtoblerone_1',
          'bundlesdf_id_00',
@@ -159,30 +153,17 @@ PLL_BSDF_NERF_IDS_FROM_VISION_ASSET = {
         ('pll_id_t09d_robotocc_toblerone_5',
          'bundlesdf_id_00',
          'bundlesdf_id_00-t09d'),
-    'robotocc_eggs_1':
-        ('pll_id_t09d_robotocc_eggs_1',
+    'robotocc_toblerone_6': t11_tuple_from_vision_asset('robotocc_toblerone_6'),
+    'robotocc_toblerone_11': t11_tuple_from_vision_asset('robotocc_toblerone_11'),
+    'robotocc_egg_1':
+        ('pll_id_t09d_robotocc_egg_1',
          'bundlesdf_id_00',
          'bundlesdf_id_00-t09d'),
-    'robotocc_eggs_6':
-        ('pll_id_t11_robotocc_eggs_6',
-         'bundlesdf_id_00',
-         'bundlesdf_id_00-t11'),
-    'robotocc_bakingbox_1':
-        ('pll_id_t11_robotocc_bakingbox_1',
-         'bundlesdf_id_00',
-         'bundlesdf_id_00-t11'),
-    'robotocc_bakingbox_2':
-        ('pll_id_t11_robotocc_bakingbox_2',
-         'bundlesdf_id_00',
-         'bundlesdf_id_00-t11'),
-    'robotocc_bakingbox_3':
-        ('pll_id_t11_robotocc_bakingbox_3',
-         'bundlesdf_id_00',
-         'bundlesdf_id_00-t11'),
-    'robotocc_bakingbox_4':
-        ('pll_id_t11_robotocc_bakingbox_4',
-         'bundlesdf_id_00',
-         'bundlesdf_id_00-t11'),
+    'robotocc_egg_6': t11_tuple_from_vision_asset('robotocc_egg_6'),
+    'robotocc_bakingbox_1': t11_tuple_from_vision_asset('robotocc_bakingbox_1'),
+    'robotocc_bakingbox_2': t11_tuple_from_vision_asset('robotocc_bakingbox_2'),
+    'robotocc_bakingbox_3': t11_tuple_from_vision_asset('robotocc_bakingbox_3'),
+    'robotocc_bakingbox_4': t11_tuple_from_vision_asset('robotocc_bakingbox_4'),
     'robotocc_bakingbox_5':
         ('pll_id_t09d_robotocc_bakingbox_5',
          'bundlesdf_id_00',
@@ -195,34 +176,29 @@ PLL_BSDF_NERF_IDS_FROM_VISION_ASSET = {
         ('pll_id_t09d_robotocc_bakingbox_8',
          'bundlesdf_id_00',
          'bundlesdf_id_00-t09d'),
+    'robotocc_bakingbox_9': t11_tuple_from_vision_asset('robotocc_bakingbox_9'),
+    'robotocc_bakingbox_10': t11_tuple_from_vision_asset('robotocc_bakingbox_10'),
+    'robotocc_bakingbox_11': t11_tuple_from_vision_asset('robotocc_bakingbox_11'),
+    'robotocc_bakingbox_12': t11_tuple_from_vision_asset('robotocc_bakingbox_12'),
+    'robotocc_bakingbox_13': t11_tuple_from_vision_asset('robotocc_bakingbox_13'),
+    'robotocc_bakingbox_14': t11_tuple_from_vision_asset('robotocc_bakingbox_14'),
+    'robotocc_bakingbox_15': t11_tuple_from_vision_asset('robotocc_bakingbox_15'),
     'robotocc_bottle_1':
         ('pll_id_t09d_robotocc_bottle_1',
          'bundlesdf_id_00',
          'bundlesdf_id_00-t09d'),
-    'robotocc_bottle_2':
-        ('pll_id_t11_robotocc_bottle_2',
-         'bundlesdf_id_00',
-         'bundlesdf_id_00-t11'),
+    'robotocc_bottle_2': t11_tuple_from_vision_asset('robotocc_bottle_2'),
     'robotocc_bottle_3':
         ('pll_id_t09d_robotocc_bottle_3',
          'bundlesdf_id_00',
          'bundlesdf_id_00-t09d'),
-    'robotocc_bottle_4':
-        ('pll_id_t11_robotocc_bottle_4',
-         'bundlesdf_id_00',
-         'bundlesdf_id_00-t11'),
-    'robotocc_bottle_5':
-        ('pll_id_t11_robotocc_bottle_5',
-         'bundlesdf_id_00',
-         'bundlesdf_id_00-t11'),
+    'robotocc_bottle_4': t11_tuple_from_vision_asset('robotocc_bottle_4'),
+    'robotocc_bottle_5': t11_tuple_from_vision_asset('robotocc_bottle_5'),
     'robotocc_bottle_6':
         ('pll_id_t09d_robotocc_bottle_6',
          'bundlesdf_id_00',
          'bundlesdf_id_00-t09d'),
-    'robotocc_bottle_7':
-        ('pll_id_t11_robotocc_bottle_7',
-         'bundlesdf_id_00',
-         'bundlesdf_id_00-t11'),
+    'robotocc_bottle_7': t11_tuple_from_vision_asset('robotocc_bottle_7'),
 }
 
 def hex_to_rgba_format(hex: str, opacity: float):
@@ -783,9 +759,12 @@ class RobotDynamicsPredictor():
             self.save_dir, f'pred_object_states_{model_to_test}.txt')
         pred_franka_states_filename = op.join(
             self.save_dir, f'pred_franka_states_{model_to_test}.txt')
+        pred_forces_on_object_by_ee_filename = op.join(
+            self.save_dir, f'pred_forces_from_ee_{model_to_test}.txt')
 
         do_simulation = False if op.exists(pred_object_states_filename) and \
-            op.exists(pred_franka_states_filename) else True
+            op.exists(pred_franka_states_filename) and \
+            op.exists(pred_forces_on_object_by_ee_filename) else True
         if not do_simulation:
             pred_object_states = np.loadtxt(pred_object_states_filename)
             pred_franka_states = np.loadtxt(pred_franka_states_filename)
@@ -833,6 +812,7 @@ class RobotDynamicsPredictor():
             N = len(self.object_pose_ts)
             pred_object_states = np.zeros((N, 13))
             pred_franka_states = np.zeros((N, 14))
+            pred_ee_forces = np.zeros((N, 3))
 
         for i, t in enumerate(self.object_pose_ts):
             if do_simulation:
@@ -851,13 +831,20 @@ class RobotDynamicsPredictor():
                 object_quat_pos = sim_positions[7:]
                 object_velocity = sim_velocities[7:]
 
-                # Store the results.
+                # Store the state results.
                 pred_object_states[i] = np.hstack((
                     object_quat_pos, object_velocity
                 ))
                 pred_franka_states[i] = np.hstack((
                     franka_joint_angles, franka_joint_velocity
                 ))
+
+                # Store the contact results.
+                contact_results = \
+                    self.sim_plant.get_contact_results_output_port(
+                    ).Eval(sim_plant_context)
+                pred_ee_forces[i] = self._get_robot_contact_force(\
+                    contact_results, model_to_test)
 
             else:
                 object_quat_pos = pred_object_states[i, :7]
@@ -890,6 +877,47 @@ class RobotDynamicsPredictor():
         if do_simulation:
             np.savetxt(pred_object_states_filename, pred_object_states)
             np.savetxt(pred_franka_states_filename, pred_franka_states)
+            np.savetxt(pred_forces_on_object_by_ee_filename, pred_ee_forces)
+
+    def _get_robot_contact_force(self, contact_results, model_to_test):
+        """Given the simulated contact results, determine the world forces
+        between the robot and the end effector."""
+        body_model = self.sim_plant.GetBodyByName(
+            f'{model_to_test}_body').index()
+        body_ee = self.sim_plant.GetBodyByName(
+            'end_effector_tip').index()
+
+        contact_force = np.zeros(3)
+
+        n_point_contacts = contact_results.num_point_pair_contacts()
+        for i in range(n_point_contacts):
+            point_pair_contact_info = contact_results.point_pair_contact_info(i)
+            body_a = point_pair_contact_info.bodyA_index()
+            body_b = point_pair_contact_info.bodyB_index()
+
+            if (body_a == body_model and body_b == body_ee) or \
+               (body_a == body_ee and body_b == body_model):
+                scale = 1 if body_b == body_model else -1
+                return scale*point_pair_contact_info.contact_force().reshape(3)
+
+        # There should be no hydroelastic contacts expected, but check just in
+        # case.
+        n_hydroelastic_contacts = contact_results.num_hydroelastic_contacts()
+        for i in range(n_hydroelastic_contacts):
+            hydroelastic_contact_info = \
+                contact_results.hydroelastic_contact_info(i)
+            body_a = hydroelastic_contact_info.contact_surface().id_M()
+            body_b = hydroelastic_contact_info.contact_surface().id_N()
+
+            if (body_a == body_model and body_b == body_ee) or \
+               (body_a == body_ee and body_b == body_model):
+                # Note:  the scale convention is flipped between point contact
+                # and hydroelastic contact.
+                scale = 1 if body_a == body_model else -1
+                return hydroelastic_contact_info.F_Ac_W().translational(
+                    ).reshape(3)
+
+        return contact_force
 
     def _export_test_data(self):
         self.save_dir = file_utils.robot_dynamics_subdir(
@@ -1389,8 +1417,10 @@ class ConglomeratedDynamicsMetrics():
                                     sharey='row')
             fig.suptitle(f'Conglomerated Dynamics Predictions against ' + \
                          f'{compare_against}')
-            axs[0, 0].set_xlabel('Time (s)')
             axs[1, 0].set_xlabel('Time (s)')
+            axs[1, 1].set_xlabel('Time (s)')
+            axs[1, 2].set_xlabel('Time (s)')
+            axs[1, 3].set_xlabel('Time (s)')
             axs[0, 0].set_ylabel('Position Error [m]')
             axs[1, 0].set_ylabel('Orientation Error [rad]')
             axs[0, 0].set_title('Vysics')
@@ -1407,9 +1437,11 @@ class ConglomeratedDynamicsMetrics():
                     rot_error = dpq.errors[compare_against][model][
                         'rotation_error']
                     axs[0, col_i].plot(dpq.times, pos_error, color=color,
-                        linewidth=dpq_i+0.5, label=dpq.vision_asset)
+                        linewidth=dpq_i+0.5,
+                        label=dpq.vision_asset.replace('robotocc_', ''))
                     axs[1, col_i].plot(dpq.times, rot_error, color=color,
-                        linewidth=dpq_i+0.5, label=dpq.vision_asset)
+                        linewidth=dpq_i+0.5,
+                        label=dpq.vision_asset.replace('robotocc_', ''))
 
             plt.legend(bbox_to_anchor=(1.1, 1), loc='upper left')
             plt.tight_layout()
