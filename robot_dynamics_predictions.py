@@ -1528,7 +1528,8 @@ class ConglomeratedDynamicsMetrics():
         self._plot_traces(truncate=False)
         self._plot_traces(truncate=True)
         self._plot_time_to_failure()
-        self._plot_time_to_failure_cdf()
+        self._plot_time_to_failure_cdf(relative=False)
+        self._plot_time_to_failure_cdf(relative=True)
 
         if self.interactive:
             breakpoint()
@@ -1592,17 +1593,30 @@ class ConglomeratedDynamicsMetrics():
             if not self.interactive:
                 plt.close()
 
-    def _plot_time_to_failure_cdf(self):
+    def _plot_time_to_failure_cdf(self, relative: bool = False):
         for compare_against in ['tracked', 'gt_sim']:
             # Generate a plot of cumulative distribution functions.
             fig, axs = plt.subplots(1, 2, figsize=(8,6), sharey=True)
-            axs[0].set_xlabel(f'Time of Position Divergence ' + \
-                              f'({POSITION_TOLERANCE:.2f}m) [s]')
-            axs[1].set_xlabel(f'Time of Rotation Divergence ' + \
-                              f'({ROTATION_TOLERANCE:.2f}rad) [s]')
-            axs[0].set_ylabel('Fraction of Trials')
-            axs[0].yaxis.set_major_formatter(mtick.PercentFormatter(1.0))
-            axs[0].set_ylim([0, 1])
+            if relative:
+                axs[0].set_ylabel(f'Fraction of GT Prediction until ' + \
+                                  f'Position Divergence ' + \
+                                  f'({POSITION_TOLERANCE:.2f}m)')
+                axs[1].set_ylabel(f'Fraction of GT Prediction until ' + \
+                                  f'Rotation Divergence ' + \
+                                  f'({ROTATION_TOLERANCE:.2f}rad)')
+                axs[0].yaxis.set_major_formatter(mtick.PercentFormatter(1.0))
+                axs[1].yaxis.set_major_formatter(mtick.PercentFormatter(1.0))
+            else:
+                axs[0].set_ylabel(f'Time of Position Divergence ' + \
+                                f'({POSITION_TOLERANCE:.2f}m) [s]')
+                axs[1].set_ylabel(f'Time of Rotation Divergence ' + \
+                                f'({ROTATION_TOLERANCE:.2f}rad) [s]')
+            axs[0].set_xlabel('Fraction of Trials')
+            axs[1].set_xlabel('Fraction of Trials')
+            axs[0].xaxis.set_major_formatter(mtick.PercentFormatter(1.0))
+            axs[1].xaxis.set_major_formatter(mtick.PercentFormatter(1.0))
+            axs[0].set_xlim([0, 1])
+            axs[1].set_xlim([0, 1])
             fig.suptitle(
                 'Time to Dynamics Prediction Divergence Cumulative Density,' + \
                 f' against {compare_against}')
@@ -1616,23 +1630,26 @@ class ConglomeratedDynamicsMetrics():
                     ['time_before_bad_pos', 'time_before_bad_rot']):
                     data = [dpq.errors[compare_against][model][key] \
                             for dpq in self.dpqs]
+                    if relative:
+                        comp_data = [dpq.times[-1] for dpq in self.dpqs]
+                        data = np.array(data) / np.array(comp_data)
                     count, bins_count = np.histogram(data, bins=11)
                     pdf = count / sum(count)
                     cdf = np.cumsum(pdf)
                     bins_count[0] = 0
                     cdf = np.concatenate([[0], cdf])
                     axs[metric_i].plot(
-                        bins_count, cdf, color=color, linestyle=linestyle,
+                        cdf, bins_count, color=color, linestyle=linestyle,
                         linewidth=5, label=model)
 
             axs[0].grid()
             axs[1].grid()
+            axs[0].set_ylim(bottom=0)
             axs[0].legend()
 
-            plt.savefig(op.join(
-                self.save_dir, f'{compare_against}_combined_time_' + \
-                    f'divergence_cdf.png'
-            ))
+            filename = f'{compare_against}_combined_time_divergence_cdf'
+            filename += '_relative' if relative else ''
+            plt.savefig(op.join(self.save_dir, f'{filename}.png'))
             if not self.interactive:
                 plt.close()
 
