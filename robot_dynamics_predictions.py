@@ -1779,6 +1779,60 @@ class ConglomeratedDynamicsMetrics():
             if not self.interactive:
                 plt.close()
 
+    def export_statistics(self):
+        """Export a statistics yaml file per model with structure:
+            tagless_objects:
+                robotocc_{object}:
+                    trained_on_toss_{num}:
+                        dynamics_prediction_metrics:
+                            full_geometry:
+                                pos_rollout_error_mean: float
+                                rot_rollout_error_mean: float
+                                time_before_bad_pos: float
+                                time_before_bad_rot: float
+                                contact_activation_iou: float
+        """
+        for model in MODELS_TO_TEST:
+            inner_stats = {}
+            for dpq in self.dpqs:
+                vision_asset = dpq.vision_asset
+                object = '_'.join(vision_asset.split('_')[:-1])
+                if object not in inner_stats.keys():
+                    inner_stats[object] = {}
+                trained_on_key = \
+                    f'trained_on_toss_{vision_asset.split("_")[-1]}'
+                if trained_on_key not in inner_stats[object].keys():
+                    inner_stats[object][trained_on_key] = {
+                        'dynamics_prediction_metrics': {'full_geometry': {}}}
+                one_exp_stats = inner_stats[object][trained_on_key][
+                    'dynamics_prediction_metrics']['full_geometry']
+
+                # Get the errors.
+                pos_errs = dpq.errors['tracked'][model]['position_error']
+                rot_errs = dpq.errors['tracked'][model]['rotation_error']
+                t_pos_divergence = dpq.errors['tracked'][model][
+                    'time_before_bad_pos']
+                t_rot_divergence = dpq.errors['tracked'][model][
+                    'time_before_bad_rot']
+                contact_iou = dpq.contact_force_dict[model][
+                    'contact_activation_iou']
+
+                one_exp_stats['pos_rollout_error_mean'] = float(np.mean(
+                    np.array(pos_errs)))
+                one_exp_stats['rot_rollout_error_mean'] = float(np.mean(rot_errs))
+                one_exp_stats['time_before_bad_pos'] = float(t_pos_divergence)
+                one_exp_stats['time_before_bad_rot'] = float(t_rot_divergence)
+                one_exp_stats['contact_activation_iou'] = float(contact_iou)
+
+            # Wrap inside 'tagless_objects' key.
+            stats = {'tagless_objects': inner_stats}
+
+            # Write to a yaml with the model name.
+            dir = file_utils.robot_dynamics_dir()
+            filename = f'{model}.yaml'
+            file_utils.save_results_to_yaml(stats, dir, filename=filename)
+            print(f'Overwrote {dir}/{filename}.yaml from files.')
+
 
 @click.group()
 def cli():
@@ -1813,9 +1867,11 @@ def gen_command(vision_asset: str, models_to_test: Tuple[str], debug: bool,
 
 
 @cli.command('plot')
+@click.option('--statistics', is_flag=True,
+              help='export statistics as a yaml file')
 @click.option('--interactive', is_flag=True,
               help='show the plots interactively')
-def plot_command(interactive: bool):
+def plot_command(statistics: bool, interactive: bool):
     # Iterate over all the folders in the robot dynamics directory.
     robot_dir = file_utils.robot_dynamics_dir()
     dir_list = os.listdir(robot_dir)
@@ -1837,14 +1893,18 @@ def plot_command(interactive: bool):
     dpqs = []
     for vision_asset in vision_assets:
         dpq = DynamicsPredictionQuantifier(vision_asset, interactive)
-        # dpq.plot_errors(truncate=False)
-        # dpq.plot_errors(truncate=True)
-        # dpq.plot_time_to_failure()
-        dpq.plot_contact_activations()
+        if not statistics:
+            dpq.plot_errors(truncate=False)
+            dpq.plot_errors(truncate=True)
+            dpq.plot_time_to_failure()
+            dpq.plot_contact_activations()
         dpqs.append(dpq)
 
     cdm = ConglomeratedDynamicsMetrics(dpqs, interactive)
-    cdm.plot()
+    if statistics:
+        cdm.export_statistics()
+    else:
+        cdm.plot()
     if interactive:
         breakpoint()
 

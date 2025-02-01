@@ -25,5 +25,6 @@ evaluation*
 
 robot_dynamics/*/*
 robot_dynamics/*.txt
+robot_dynamics/*.yaml
 
 !evaluation/empty_experiment_results.yaml
