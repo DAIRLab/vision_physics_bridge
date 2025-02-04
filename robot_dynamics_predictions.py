@@ -26,6 +26,7 @@ import click
 import os
 import os.path as op
 import numpy as np
+from matplotlib import rc
 import matplotlib.pyplot as plt
 import matplotlib.ticker as mtick
 import torch
@@ -51,6 +52,12 @@ import file_utils
 import rosbag_processor
 
 from evaluate import TrajectoryMetrics
+
+
+# Some settings on the plot generation.
+rc('legend', fontsize=12)
+plt.rc('axes', titlesize=16)    # fontsize of the axes title
+plt.rc('axes', labelsize=16)    # fontsize of the x and y labels
 
 
 SIM_TIME_STEP = 5e-4
@@ -1661,18 +1668,21 @@ class ConglomeratedDynamicsMetrics():
                 plt.close()
 
     def _plot_time_to_failure_cdf(self, relative: bool = False):
+        # Some settings on the plot generation.
+        rc('legend', fontsize=20)
+        plt.rc('axes', titlesize=24)    # fontsize of the axes title
+        plt.rc('axes', labelsize=24)    # fontsize of the x and y labels
+
         for compare_against in ['tracked', 'gt_sim']:
             # Generate a plot of cumulative distribution functions.
-            fig, axs = plt.subplots(1, 2, figsize=(8,6), sharey=True)
+            fig, axs = plt.subplots(1, 2, figsize=(13,10), sharey=True)
             if relative:
-                axs[0].set_ylabel(f'Fraction of GT Prediction until ' + \
-                                  f'Position Divergence ' + \
-                                  f'({POSITION_TOLERANCE:.2f}m)')
-                axs[1].set_ylabel(f'Fraction of GT Prediction until ' + \
-                                  f'Rotation Divergence ' + \
-                                  f'({ROTATION_TOLERANCE:.2f}rad)')
+                axs[0].set_ylabel(f'Fraction of Trajectory')
                 axs[0].yaxis.set_major_formatter(mtick.PercentFormatter(1.0))
                 axs[1].yaxis.set_major_formatter(mtick.PercentFormatter(1.0))
+                fig.suptitle('Fraction of Trajectory Length before ' + \
+                             'Prediction Divergence', fontsize=28,
+                             fontname='serif')
             else:
                 axs[0].set_ylabel(f'Time of Position Divergence ' + \
                                 f'({POSITION_TOLERANCE:.2f}m) [s]')
@@ -1684,15 +1694,18 @@ class ConglomeratedDynamicsMetrics():
             axs[1].xaxis.set_major_formatter(mtick.PercentFormatter(1.0))
             axs[0].set_xlim([0, 1])
             axs[1].set_xlim([0, 1])
-            fig.suptitle(
-                'Time to Dynamics Prediction Divergence Cumulative Density,' + \
-                f' against {compare_against}')
+            axs[0].set_title(
+                f'Position Divergence ({POSITION_TOLERANCE*100:.0f}cm)')
+            deg_tolerance = ROTATION_TOLERANCE*180/np.pi
+            axs[1].set_title(f'Orientation Divergence ({deg_tolerance:.0f}deg)')
 
             models = ['vysics', 'bsdf', 'pll', 'gt']
+            labels = ['Vysics', 'BundleSDF', 'PLL', 'GT Geometry']
             colors = [VYSICS_MESH_HEX, BSDF_MESH_HEX, PLL_MESH_HEX, GT_MESH_HEX]
             linestyles = ['solid', 'solid', 'dashed', 'dashed']
 
-            for model, color, linestyle in zip(models, colors, linestyles):
+            for model, color, linestyle, label in zip(
+                models, colors, linestyles, labels):
                 for metric_i, key in enumerate(
                     ['time_before_bad_pos', 'time_before_bad_rot']):
                     data = [dpq.errors[compare_against][model][key] \
@@ -1707,12 +1720,28 @@ class ConglomeratedDynamicsMetrics():
                     cdf = np.concatenate([[0], cdf])
                     axs[metric_i].plot(
                         cdf, bins_count, color=color, linestyle=linestyle,
-                        linewidth=5, label=model)
+                        linewidth=5, label=label)
 
             axs[0].grid()
             axs[1].grid()
             axs[0].set_ylim(bottom=0)
-            axs[0].legend()
+            axs[0].legend(prop=dict(weight='bold', family='serif'))
+
+            # Beautify the plot.
+            for ax in axs:
+                ax.title.set_fontname('serif')
+                ax.xaxis.label.set_fontname('serif')
+                ax.yaxis.label.set_fontname('serif')
+
+                for tick in ax.get_xticklabels():
+                    tick.set_fontname('serif')
+                for tick in ax.get_yticklabels():
+                    tick.set_fontname('serif')
+
+                ax.tick_params(axis='both', which='major', labelsize=16)
+
+            fig.set_size_inches(13, 10)
+            plt.subplots_adjust(bottom=0.15)
 
             filename = f'{compare_against}_combined_time_divergence_cdf'
             filename += '_relative' if relative else ''
