@@ -35,6 +35,7 @@ from dair_pll import inertia as pll_inertia
 from dair_pll import deep_support_function as pll_dsf
 from dair_pll.multibody_learnable_system import MultibodyLearnableSystem
 from dair_pll.system import MeshSummary
+from dair_pll.multibody_terms import LearnableBodySettings
 
 
 METRICS_BY_TOSS = ['dynamics_rollout_metrics', 'dynamics_single_step_metrics',
@@ -448,6 +449,14 @@ def create_multibody_learnable_system(
             'w_pred': 0, 'w_comp': 0, 'w_pen': 0, 'w_diss': 0, 'w_bsdf': 0},
         output_urdfs_dir = output_urdf_dir,
         represent_geometry_as = 'polygon',
+        learnable_body_dict = {'body': LearnableBodySettings(
+            inertia_mass=False,
+            inertia_com=True,
+            inertia_moments_products=True,
+            geometry=True,
+            friction=True
+        )
+        }
     ).eval()
 
 def create_empty_results_dict(
@@ -1344,15 +1353,73 @@ class InputVideoGenerator(OverlayVideoGenerator):
     """Generate a video out of the input data for a particular vision asset.
     There is no overlay necessary, but inheriting from the OverlayVideoGenerator
     class eliminates the need to rewrite a good bit of code."""
-    def __init__(self, vision_asset: str, remote: bool = False):
-        # Initialize the parent class with some dummy values, since these won't
-        # matter for generating the video.
-        super().__init__(
-            vision_asset,
-            tracking_bundlesdf_id='bundlesdf_id_00',
-            nerf_bundlesdf_id='bundlesdf_id_00',
-            cycle_iteration=1,
-            bsdf_only=False, remote=remote)
+    def __init__(self, vision_asset: str, remote: bool = False,
+                 bsdf_offset_frames: int = 1,
+                 show_robot: bool = False) -> None:
+        """Reimplement the __init__ method to allow input video generation 
+        without any run results. 
+        """
+        # First decode the system and start/end tosses from the provided asset
+        # directory.
+        assert '_' in vision_asset, f'Invalid {vision_asset=}.'
+        object = '_'.join(vision_asset.split('_')[:-1])
+
+        start_toss = int(vision_asset.split('_')[-1].split('-')[0])
+        end_toss = start_toss if '-' not in vision_asset else \
+            int(vision_asset.split('-')[1])
+        assert start_toss <= end_toss, f'Invalid toss range: {start_toss} ' + \
+                f'-{end_toss} inferred from {vision_asset=}.'
+
+        # Automatically detect if BundleSDF-only is necessary based on if the
+        # object is a tagless one.
+        object = '_'.join(vision_asset.split('_')[:-1])
+        if object in file_utils.TAGLESS_OBJECTS:
+            bsdf_only = True
+            print(f'Automatically setting {bsdf_only=} for tagless {object=}.')
+
+
+        self.vision_asset = vision_asset
+        self.remote = remote
+        self.start_toss = start_toss
+        self.end_toss = end_toss
+        self.object = object
+        self.show_robot = show_robot
+
+        # Introduce a start frame offset.  For this class, this will always be
+        # zero.  However for prediction videos which can feature images before
+        # the first prediction/tracking, this offset can determine when the
+        # tracking starts into the video.
+        self.start_frame_offset = bsdf_offset_frames - 1
+        # bsdf_offset_frames indicates the first frame idx that a BundleSDF run
+        # starts at.
+        # bsdf_offset_frames = 1 is the default because its index is 1-based.
+
+        # Get the camera intrinsics and extrinsics.
+        self.fx, self.fy, self.cx, self.cy = file_utils.load_camera_intrinsics(
+            self.object)
+        self.cam_trans, self.cam_axis_vec = \
+            file_utils.load_camera_extrinsics(object)
+
+        self._get_rgb_images()
+        if show_robot:
+            self._get_ee_poses()
+
+        # Plan to put the output video in a single directory for all overlay
+        # videos.
+        self.output_file = file_utils.inspection_overlay_video_filepath(
+            dataset=vision_asset, tracking_bundlesdf_id='bundlesdf_id_00',
+            nerf_bundlesdf_id='bundlesdf_id_00', pll_id=None,
+            cycle_iteration=1, gt_mesh=False,
+            with_robot=show_robot
+        )
+        if not op.exists(op.dirname(self.output_file)):
+            os.makedirs(op.dirname(self.output_file))
+        # Put the output video in the same directory as the pll inputs though
+        # pll does not need the videos. It is for easier visualization.
+        self.output_file_to_pll_input_dir = \
+            file_utils.contactnets_input_bsdf_overlay_video_path(
+                vision_asset, iteration=1, bundlesdf_id='bundlesdf_id_00',
+                nerf_bundlesdf_id='bundlesdf_id_00', gt_mesh=False, with_robot=show_robot)
         
         # Overwrite the output file.
         self.output_file = file_utils.inspection_input_video_filepath(
@@ -1373,7 +1440,10 @@ class InputVideoGenerator(OverlayVideoGenerator):
     def _render_one_image(self, frame_i: int, T_WA: np.ndarray,
                           T_CB: np.ndarray) -> Image:
         """This can do nothing except load the camera image."""
-        return Image.fromarray(self.rgb_images[frame_i]).convert('RGB')
+        im = Image.fromarray(self.rgb_images[frame_i]).convert('RGB')
+    
+        self._add_watermark(im, image_frame_i=frame_i+1)
+        return im
 
 
 #######################################################################

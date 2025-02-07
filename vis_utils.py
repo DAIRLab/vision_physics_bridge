@@ -404,7 +404,8 @@ class SDFSliceViewer:
 
         ### Need x server to run. Either run locally or run remotely with x
         # forward configured.
-        if self.remote:
+        change_display = False
+        if self.remote and os.environ.get('DISPLAY') != ':99':
             # Run Xvfb to create a virtual display.
             print("Running Xvfb (virtual display) for rendering.")
             import subprocess
@@ -414,6 +415,7 @@ class SDFSliceViewer:
                   f"{os.environ['DISPLAY']} variable to :99")
             self.old_display = os.environ['DISPLAY']
             os.environ['DISPLAY'] = ':99'
+            change_display = True
 
         cps_near_pcd_filepath = op.join(sdf_dir, 'cps_near_pcd.pt')
         cps_near_sdf_filepath = op.join(sdf_dir, 'cps_near_sdf_pred.pt')
@@ -430,7 +432,7 @@ class SDFSliceViewer:
                 cps_slices_pred_filepath, video_output_file=video_output_file,
                 figure_output_file=figure_output_file)
 
-        if self.remote:
+        if self.remote and change_display:
             # Restore the original display environment.
             print(f"Restoring display environment to {self.old_display}")
             os.environ['DISPLAY'] = self.old_display

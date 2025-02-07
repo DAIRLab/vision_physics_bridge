@@ -1010,7 +1010,11 @@ class GeometryEvaluator:
         true_cloud = Tensor(np.asarray(
             self.true_mesh.sample_points_poisson_disk(2000).points))
         ### min_edge should be consistent with bundlesdf.py
-        learned_meshes = trimesh_split(self.learned_mesh_trimesh, min_edge=5)
+        if self.pll_id is not None:
+            # Directly use the mesh since pll won't output multiple meshes
+            learned_meshes = [self.learned_mesh_trimesh]
+        else:
+            learned_meshes = trimesh_split(self.learned_mesh_trimesh, min_edge=5)
         if len(learned_meshes) == 1:
             learned_cloud = Tensor(np.asarray(
                 self.learned_mesh.sample_points_poisson_disk(2000).points))
@@ -1076,7 +1080,7 @@ class GeometryEvaluator:
             ax.set_xlabel('x(m)')
             ax.set_ylabel('y(m)')
             ax.set_zlabel('z(m)')
-            ax.set_title(f'{label_exp} true cloud: {mean_dist_from_true:.4f}')
+            ax.set_title(f'{label_exp} true cloud: \n{mean_dist_from_true:.4f}')
             ax.set_box_aspect([np.ptp(arr) for arr in [ax.get_xlim(), ax.get_ylim(), ax.get_zlim()]])
             colorbar_1 = fig.colorbar(colored_1, ax=ax)
             colorbar_1.set_label('CD from true')
@@ -1086,7 +1090,7 @@ class GeometryEvaluator:
             ax.set_xlabel('x(m)')
             ax.set_ylabel('y(m)')
             ax.set_zlabel('z(m)')
-            ax.set_title(f'{label_exp} learned cloud: {mean_dist_from_learned:.4f}')
+            ax.set_title(f'{label_exp} learned cloud: \n{mean_dist_from_learned:.4f}')
             ax.set_box_aspect([np.ptp(arr) for arr in [ax.get_xlim(), ax.get_ylim(), ax.get_zlim()]])
             colorbar_2 = fig.colorbar(colored_2, ax=ax)
             colorbar_2.set_label('CD from learned')
@@ -1187,7 +1191,8 @@ class GeometryEvaluatorFromFiles(GeometryEvaluator):
 
         # Get the learned mesh from PLL's URDF, which is already put in the
         # evaluation directory.
-        learned_mesh_path = op.join(self.eval_dir, 'pll_urdf', 'test.obj')
+        # learned_mesh_path = op.join(self.eval_dir, 'pll_urdf', 'test.obj')
+        learned_mesh_path = op.join(self.eval_dir, 'pll_mesh.obj')
         if not op.exists(learned_mesh_path):
             learned_mesh_path = op.join(
                 self.eval_dir, 'pll_urdf', 'test_best.obj')
@@ -1196,6 +1201,7 @@ class GeometryEvaluatorFromFiles(GeometryEvaluator):
             f'not exist.'
 
         self.learned_mesh = icp.load_mesh_from_obj(learned_mesh_path)
+        self.learned_mesh_trimesh = trimesh.load_mesh(learned_mesh_path)
         self.learned_hull, _ = self.learned_mesh.compute_convex_hull()
 
     def _get_true_geometry_pll_system(self):
@@ -1273,6 +1279,7 @@ class DynamicsPredictor:
             dataset=self.vision_asset, cycle_iteration=pll_iteration,
             pll_id=pll_id)
 
+        return {}
 
     def _look_up_latest_bundlesdf_results(self):
         """Also stores self.nerf_results_dir."""
@@ -1335,7 +1342,7 @@ class DynamicsPredictor:
             old_obj_path = op.join(self.pll_results_dir, 'urdfs', 'test.obj')
             if not op.exists(old_obj_path):
                 old_obj_path = op.join(
-                    self.pll_results_dir, 'urdfs', 'test_best.obj')
+                    self.pll_results_dir, 'urdfs', 'body_best.obj')
             new_mesh_name = 'pll_mesh.obj'
         new_obj_path = op.join(self.eval_dir, new_mesh_name)
         
@@ -2246,13 +2253,18 @@ def recompute_results_from_existing_files(
 @click.option('--plot-geo-errors',
                 is_flag=True,
                 help="Plot the geometric errors.")
-
+@click.option('--remote', 
+              is_flag=True,
+              help="Whether to run on the remote server.")
+@click.option('--plot-phi',
+              is_flag=True,
+              help="Plot the penetration errors. Only valid when do_tracking. ")
 def main_command(vision_asset: str, bundlesdf_id: str, nerf_bundlesdf_id: str,
                  pll_id: str, cycle_iteration: int, gt: bool, do_videos: bool,
-                 overwrite: str, plot_geo_errors: bool):
-    do_tracking = True
+                 overwrite: str, plot_geo_errors: bool, remote: bool, plot_phi: bool):
+    do_tracking = False
     do_dynamics = False
-    do_geometry = False
+    do_geometry = True
 
     if cycle_iteration == 0:
         assert pll_id is not None, f'Need {pll_id=} if cycle_iteration is 0.'
@@ -2426,7 +2438,8 @@ def main_command(vision_asset: str, bundlesdf_id: str, nerf_bundlesdf_id: str,
         traj_evaluator.get_tracking_trajectories()
         if pll_id is None:
             traj_evaluator.store_tracking_metrics(results)
-            traj_evaluator.visualize_phis()
+            if plot_phi:
+                traj_evaluator.visualize_phis()
 
     ### Some prerequisites required by each other, sadly.
     dynamics_predictor = DynamicsPredictor(
@@ -2465,8 +2478,28 @@ def main_command(vision_asset: str, bundlesdf_id: str, nerf_bundlesdf_id: str,
     ### Geometry evaluation.
     if do_geometry:
         print(f'\nDOING GEOMETRY METRICS\n')
+        change_display = False
+        if plot_geo_errors and remote and os.environ['DISPLAY'] != ':99':
+            ## Use virtual display to plot faster.
+            # Run Xvfb to create a virtual display.
+            print("Running Xvfb (virtual display) for rendering.")
+            import subprocess
+            xvfb_process = subprocess.Popen(['Xvfb', ':99', '-screen', '0',
+                                                    '640x480x24'])
+            print(f"Changing display environment from " + \
+                    f"{os.environ['DISPLAY']} variable to :99")
+            old_display = os.environ['DISPLAY']
+            os.environ['DISPLAY'] = ':99'
+            change_display = True
         geometry_evaluator.compute_metrics(plot_geo_errors)
         geometry_evaluator.store_geometry_metrics(results)
+        if plot_geo_errors and remote and change_display:
+            ## Close the virtual display.
+            print("Closing Xvfb (virtual display).")
+            xvfb_process.kill()
+            os.environ['DISPLAY'] = old_display
+            print(f"Changing display environment from " + \
+                    f":99 back to {os.environ['DISPLAY']} variable")
 
     ### Save the results.
     file_utils.save_results_to_yaml(results, eval_dir)

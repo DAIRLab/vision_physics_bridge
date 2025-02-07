@@ -17,6 +17,10 @@ import file_utils
 EARLY_TESTS = False
 COMPUTE_AVERAGE_VYSICS_PARAMETERS = True
 
+REPORTED_OBJECTS = ['stapler', 'styrofoam', 'pinkcan', 'half', 'cube', 'egg',
+        'oatly', 'greencan', 'milk', 'bottle', 'crushedcan', 'bakingbox',
+        'napkin', 'cardboard', 'gallon']
+
 OBJECT_MASS = 0.37
 
 FRICTION_SLIP_ANGLE_BOTTLE = np.deg2rad(26)
@@ -115,6 +119,10 @@ if COMPUTE_AVERAGE_VYSICS_PARAMETERS:
     eval_dir = file_utils.evaluation_dir()
     for subdir in os.listdir(eval_dir):
         if not subdir.endswith('02_02_2'):
+            continue
+
+        object = subdir.split('_')[0]
+        if object not in REPORTED_OBJECTS:
             continue
 
         print(f'Processing {subdir}...', end=' ')

@@ -7,6 +7,7 @@ from scipy.spatial.transform import Rotation as R
 import sys
 import torch
 from torch import Tensor
+from typing import Optional
 
 DATA_GEN_DIR = op.dirname(op.realpath(__file__))
 REPO_DIR = op.dirname(DATA_GEN_DIR)
@@ -55,7 +56,8 @@ def extract_floats_from_camk(lines):
 
 def convert_relative_frames_to_absolute(
         relative_frames: np.ndarray, full_times: np.ndarray,
-        ros_times: rospy.rostime.Time) -> np.ndarray:
+        ros_times: rospy.rostime.Time, 
+        end_ros_times: Optional[rospy.rostime.Time]=None) -> np.ndarray:
     """Converts frames relative to the start of a subsection of a longer
     trajectory to frames as absolute indices of the full trajectory.  Handles
     the case where a relative frame is set to -1, which is interpreted as
@@ -71,18 +73,25 @@ def convert_relative_frames_to_absolute(
         absolute_frames: 1D numpy array of absolute frame indices.
     """
     start_times = ros_time_to_float(ros_times)
+    end_times = None
+    if end_ros_times is not None:
+        end_times = ros_time_to_float(end_ros_times)
     absolute_frames = np.zeros_like(relative_frames)
 
     for i, relative_frame in enumerate(relative_frames):
         # Handle the case where the relative frame is set to -1, meaning use the
         # last frame in the given toss.
         if relative_frame == -1:
-            # If considering the last toss, include the last frame of the full
-            # trajectory.  If considering a previous toss, can use the first
-            # absolute frame of the next toss.
-            absolute_frames[i] = \
-                len(full_times) if i == len(relative_frames)-1 else \
-                np.argmin(np.abs(full_times - start_times[i + 1]))
+            if end_times is not None:
+                # If the end frame of the toss is specified, use it.
+                absolute_frames[i] = np.argmin(np.abs(full_times - end_times[i]))
+            else:
+                # If considering the last toss, include the last frame of the full
+                # trajectory.  If considering a previous toss, can use the first
+                # absolute frame of the next toss.
+                absolute_frames[i] = \
+                    len(full_times) if i == len(relative_frames)-1 else \
+                    np.argmin(np.abs(full_times - start_times[i + 1]))
 
             # Convert 0-indexing to 1-indexing.
             absolute_frames[i] += 1

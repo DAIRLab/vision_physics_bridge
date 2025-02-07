@@ -514,6 +514,7 @@ def inspection_overlay_video_filepath(
         mesh_id = f'nerf_{nerf_bundlesdf_id}'
 
     filename = f'{date_str}_{dataset}_{tracking_id}_{mesh_id}_{cycle_iteration}.mp4'
+    # filename = f'{dataset}_{tracking_id}_{mesh_id}_{cycle_iteration}.mp4'
     if with_robot:
         filename = filename.replace('.mp4', '_robot.mp4')
 

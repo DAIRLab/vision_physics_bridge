@@ -71,6 +71,8 @@ class DatasetCreator:
 
         # Determine if the experiment has robot interactions or not.
         self.has_robot_interactions = vision_asset.startswith('robot')
+        self.is_robot_1st_exp = vision_asset.startswith('robot_')
+        self.is_robotocc_exp = vision_asset.startswith('robotocc')
 
         start_toss = int(vision_asset.split('_')[-1].split('-')[0])
         end_toss = start_toss if '-' not in vision_asset else \
@@ -270,8 +272,8 @@ class DatasetCreator:
         # measured surface height.  Otherwise for all other experiments that
         # include TagSLAM, the -12mm offset was determined by adjusting the
         # point cloud to match the TagSLAM-reported cube location.
-        self.depth_offset_mm = 6 if self.has_robot_interactions else \
-            0 if self.bsdf_only else -12
+        self.depth_offset_mm = 6 if self.is_robot_1st_exp else \
+            0 if self.is_robotocc_exp else 0 if self.bsdf_only else -12
         print(f'NOTE: Using {self.depth_offset_mm=} mm.\n')
 
         # Extract the synchronized RGB and depth images, writing them to
@@ -405,6 +407,11 @@ class DatasetCreator:
         else:
             print(f'No ground truth geometry for {self.vision_asset} so ' + \
                   f'cannot visualize the results of the depth offset.')
+
+        if self.is_robotocc_exp:
+            print(f'Skip computing table offset for {self.vision_asset} because' + \
+                  'all robot occlusion experiments use the same offset.')
+            return
 
         # Lastly, compute the table offset for the experiment.
         table_offset_cmd = f'python ' + \
