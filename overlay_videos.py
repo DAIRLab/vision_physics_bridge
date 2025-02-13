@@ -34,7 +34,7 @@ VYSICS_COLOR = 0x7e44a9  # 1 tint lighter than typical Vysics color 0x7030a0
 TAGSLAM_COLOR = 0xff0000
 
 ROBOT_OPACITY = 0.8
-OBJECT_OPACITY = 0.6
+OBJECT_OPACITY = 1.0
 
 PANDA_JOINT_NAMES = ['panda_panda_joint1_q', 'panda_panda_joint2_q',
                      'panda_panda_joint3_q', 'panda_panda_joint4_q',
