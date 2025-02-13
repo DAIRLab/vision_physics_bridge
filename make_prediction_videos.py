@@ -10,6 +10,7 @@ import os.path as op
 import pdb
 from tempfile import TemporaryDirectory
 from tqdm import tqdm
+from typing import Optional
 
 import evaluate, eval_utils, file_utils, math_utils, rosbag_processor
 from eval_utils import PredictionOverlayGenerator, \
@@ -42,8 +43,8 @@ OPACITY_OVER_TIME = [255]*10 + \
 COM_TRAJ_COLORS_OVER_TIME = [f'#FF80D5{opacity:02x}' for opacity in OPACITY_OVER_TIME]
 
 # UPPER_DISTANCE = 0.013  # Reference: Vysics/BSDF CD averages are 0.0126/0.0136 <-- OUTDATED 6/9
-UPPER_DISTANCE = 0.010
-LOWER_DISTANCE = 0.005
+UPPER_DISTANCE = 0.03 # 0.010 # Used for coloring the mesh with CD error.
+LOWER_DISTANCE = 0.005 # 0.005
 
 COLOR_MAP = 'rainbow'  # Other good ones: YlGnBu_r, cool, bwr, Spectral_r
 N_TOTAL_SPIN_UNITS = 2080  # 2040 maybe too low, 2160 too high, 1920 too low
@@ -325,8 +326,8 @@ def cli():
               default=True,
               help="whether to visualize the learned or true mesh.")
 
-def main_command(vision_asset: str, bundlesdf_id: str, nerf_bundlesdf_id: str,
-                 pll_id: str, cycle_iteration: int, color: bool,
+def process_mesh_comand(vision_asset: str, bundlesdf_id: str, nerf_bundlesdf_id: str,
+                 pll_id: Optional[str], cycle_iteration: int, color: bool,
                  learned_mesh: bool):
     if cycle_iteration == 0:
         assert pll_id is not None, f'Need {pll_id=} if cycle_iteration is 0.'

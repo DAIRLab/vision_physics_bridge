@@ -427,6 +427,7 @@ dataset: #toss_id:rosbag_id
     8: 217
     9: 217
     10: 217
+    50: 217
   robot_stapler:
     0:
     1: 219
@@ -448,7 +449,165 @@ dataset: #toss_id:rosbag_id
     17: 219
     18: 219
     19: 219
+  robotocc_cardboard:
+    0:
+    1: 301
+    2: 301
+    3: 301
+    4: 301
+    5: 301
+    6: 301
+    7: 301
+    8: 304  # empty side facing camera (7 touches)
+    9: 304
+    10: 304
+    11: 304
+    12: 304
+    13: 304
+    14: 304
+  robotocc_oatly:
+    0:
+    1: 302
+    2: 302
+    3: 302
+    4: 302
+    5: 302
+    6: 302
+    7: 303  # earlier than 302, but the object shows full view (8 touches)
+    8: 303
+    9: 303
+    10: 303
+    11: 303
+    12: 303
+  robotocc_milk:
+    0:
+    1: 308  # 8 touches frpm the side. 1736367846. Show full view of the object.
+    2: 308
+    3: 308
+    4: 308
+    5: 308
+    6: 305  # 2 touches from the top. 1736368047. The second one hides the object. 
+    7: 311  # 2 touches from the top. 1736368171. Hide the object. 
+    8: 313  # 3 touches from the top. 1736368210. 
+  robotocc_styrofoam:
+    0:
+    1: 306
+    2: 306
+    3: 306
+    4: 306
+    5: 306
+    6: 306
+    7: 307 # almost show the full view of the object. 1736368819.
+    8: 307
+    9: 307
+    10: 307
+  robotocc_toblerone:
+    0:
+    1: 309
+    2: 309
+    3: 309
+    4: 309
+    5: 309
+    6: 310
+    7: 310
+    8: 310
+    9: 310
+    10: 310
+    11: 310
+  robotocc_egg:
+    0:
+    1: 312
+    2: 312
+    3: 312
+    4: 312
+    5: 312
+    6: 312
+  robotocc_bakingbox:
+    0:
+    1: 324
+    2: 324
+    3: 324
+    4: 324
+    5: 324
+    6: 324
+    7: 324
+    8: 324
+    9: 325
+    10: 325
+    11: 325
+    12: 330
+    13: 330
+    14: 330
+    15: 330
+    # 2: 325
+    # 3: 330
+    # 4: 331
+  robotocc_bottle:
+    0:
+    1: 332
+    2: 332
+    3: 332
+    4: 332
+    5: 332
+    6: 332
+    7: 332
+  robotoccmove_toblerone:
+    0:
+    1: 314
+    2: 314
+    3: 314
+    4: 314
+    5: 314
+    6: 314
+    7: 314
+    # 2: 315
+  robotoccmove_styrofoam:
+    0:
+    1: 317
+    2: 317
+    3: 317
+    4: 317
+    5: 317
+    6: 317
 
+  robotoccdual_oatly:
+    0:
+    1: 316
+    2: 316
+    3: 316
+    4: 316
+    5: 316
+  robotoccdual_milk:
+    0:
+    1: 318
+    2: 318
+    3: 318
+    4: 318
+    # 2: 323
+    # 3: 328
+  robotoccdual_bakingbox:
+    0:
+    1: 319
+    2: 319
+    3: 319
+    4: 319
+    5: 319
+    6: 319
+    7: 319
+    # 2: 321
+    # 3: 322
+    # 4: 326
+  robotoccdual_bottle:
+    0:
+    1: 320
+    2: 320
+    3: 320
+    4: 320
+    5: 320
+    6: 320
+    7: 320
+    # 2: 327
+    # 3: 329
 # WARNING:  When we parse this yaml, it relies on the tosses going
 # chronologically, starting from 0, with no skipped tosses.  If you want to have
 # entries for tosses 1 and 3, it is also necessary to have (empty) entries for
@@ -474,8 +633,8 @@ tosses:
       end_time:
         secs: 1716134392
         nsecs: 533757000
-      start_frame: 96
-      end_frame: 129
+      start_frame: 96 #98 #96
+      end_frame: 129 #113 #129
       start_adjust: 3
     - toss: 3
       start_time:
@@ -4278,6 +4437,15 @@ tosses:
       end_time:
         secs: 1720535973
         nsecs: 456183386
+    - toss: 50
+      start_time:
+        secs: 1720535953
+        nsecs: 727239967
+      end_time:
+        secs: 1720535973
+        nsecs: 456183386
+      start_frame: 401
+      end_frame: 450
     - toss: 6
       start_time:
         secs: 1720535973
@@ -4448,6 +4616,867 @@ tosses:
       end_time:
         secs: 1720536377
         nsecs: 768436366
+  robotocc_cardboard:
+    - toss: 0
+    - toss: 1
+      start_time:
+        secs: 1736369160
+        nsecs: 864828631
+      end_time:
+        secs: 1736369176
+        nsecs: 463194986
+    - toss: 2
+      start_time:
+        secs: 1736369176
+        nsecs: 463194986
+      end_time:
+        secs: 1736369182
+        nsecs: 230773084
+    - toss: 3
+      start_time:
+        secs: 1736369185
+        nsecs: 954143486
+      end_time:
+        secs: 1736369204
+        nsecs: 976154755
+    - toss: 4
+      start_time:
+        secs: 1736369210
+        nsecs: 447370138
+      end_time:
+        secs: 1736369227
+        nsecs: 720449422
+    - toss: 5
+      start_time:
+        secs: 1736369227
+        nsecs: 720449422
+      end_time:
+        secs: 1736369235
+        nsecs: 209286988
+    - toss: 6
+      start_time:
+        secs: 1736369238
+        nsecs: 956517237
+      end_time:
+        secs: 1736369244
+        nsecs: 512250120
+    - toss: 7
+      start_time:
+        secs: 1736369248
+        nsecs: 704141502
+      end_time:
+        secs: 1736369258
+        nsecs: 119284262
+    - toss: 8
+      start_time:
+        secs: 1736369293
+        nsecs: 060605330
+      end_time:
+        secs: 1736369301
+        nsecs: 566514552
+    - toss: 9
+      start_time:
+        secs: 1736369305
+        nsecs: 648007320
+      end_time:
+        secs: 1736369312
+        nsecs: 876677850
+    - toss: 10
+      start_time:
+        secs: 1736369320
+        nsecs: 477992423
+      end_time:
+        secs: 1736369325
+        nsecs: 079023027
+    - toss: 11
+      start_time:
+        secs: 1736369332
+        nsecs: 780396194
+      end_time:
+        secs: 1736369339
+        nsecs: 425636669
+    - toss: 12
+      start_time:
+        secs: 1736369344
+        nsecs: 431454852
+      end_time:
+        secs: 1736369352
+        nsecs: 880783145
+    - toss: 13
+      start_time:
+        secs: 1736369356
+        nsecs: 938053358
+      end_time:
+        secs: 1736369361
+        nsecs: 805646868
+    - toss: 14
+      start_time:
+        secs: 1736369364
+        nsecs: 823264949
+      end_time:
+        secs: 1736369370
+        nsecs: 150425019
+  robotocc_oatly:
+    - toss: 0
+    - toss: 1
+      start_time:
+        secs: 1736369702
+        nsecs: 212821607
+      end_time:
+        secs: 1736369711
+        nsecs: 316634021
+    - toss: 2
+      start_time:
+        secs: 1736369715
+        nsecs: 844731732
+      end_time:
+        secs: 1736369721
+        nsecs: 114257958
+    - toss: 3
+      start_time:
+        secs: 1736369723
+        nsecs: 855385453
+      end_time:
+        secs: 1736369733
+        nsecs: 935400435
+    - toss: 4
+      start_time:
+        secs: 1736369735
+        nsecs: 829284855
+      end_time:
+        secs: 1736369748
+        nsecs: 967218242
+    - toss: 5
+      start_time:
+        secs: 1736369750
+        nsecs: 956517237
+      end_time:
+        secs: 1736369761
+        nsecs: 344936153
+    - toss: 6
+      start_time:
+        secs: 1736369762
+        nsecs: 153689875
+      end_time:
+        secs: 1736369773
+        nsecs: 035510888
+    - toss: 7
+      start_time: 
+        secs: 1736369503
+        nsecs: 070699003
+      end_time: 
+        secs: 1736369509
+        nsecs: 514758704
+    - toss: 8
+      start_time:
+        secs: 1736369512
+        nsecs: 059572950
+      end_time:
+        secs: 1736369521
+        nsecs: 099075895
+    - toss: 9
+      start_time:
+        secs: 1736369522
+        nsecs: 430794199
+      end_time:
+        secs: 1736369531
+        nsecs: 869676470
+    - toss: 10
+      start_time:
+        secs: 1736369533
+        nsecs: 397978084
+      end_time:
+        secs: 1736369538
+        nsecs: 497142782
+    - toss: 11
+      start_time:
+        secs: 1736369540
+        nsecs: 521616551
+      end_time:
+        secs: 1736369544
+        nsecs: 087463546
+    - toss: 12
+      start_time:
+        secs: 1736369550
+        nsecs: 828606925
+      end_time:
+        secs: 1736369558
+        nsecs: 722105648
+  robotocc_milk:
+    - toss: 0
+    - toss: 1
+      start_time:
+        secs: 1736367855
+        nsecs: 829251308
+      end_time:
+        secs: 1736367868
+        nsecs: 476493152
+    - toss: 2
+      start_time:
+        secs: 1736367868
+        nsecs: 476493152
+      end_time:
+        secs: 1736367876
+        nsecs: 615071731
+    - toss: 3
+      start_time:
+        secs: 1736367880
+        nsecs: 904322603
+      end_time:
+        secs: 1736367887
+        nsecs: 833112475
+    - toss: 4 # visible touch
+      start_time:
+        secs: 1736367895
+        nsecs: 201825512
+      end_time:
+        secs: 1736367905
+        nsecs: 759981506
+    - toss: 5
+      start_time:
+        secs: 1736367917
+        nsecs: 218329585
+      end_time:
+        secs: 1736367930
+        nsecs: 071729355
+    - toss: 6
+      start_time:
+        secs: 1736368051
+        nsecs: 183357369
+      end_time:
+        secs: 1736368063
+        nsecs: 403821288
+    - toss: 7
+      start_time:
+        secs: 1736368173
+        nsecs: 201956289
+      end_time:
+        secs: 1736368182
+        nsecs: 422837260
+    - toss: 8
+      start_time:
+        secs: 1736368248
+        nsecs: 696723740
+      end_time:
+        secs: 1736368256
+        nsecs: 370235310
+  robotocc_styrofoam:
+    - toss: 0
+    - toss: 1
+      start_time:
+        secs: 1736368978
+        nsecs: 169142976
+      end_time:
+        secs: 1736368987
+        nsecs: 399450030
+    - toss: 2
+      start_time:
+        secs: 1736368989
+        nsecs: 750966331
+      end_time:
+        secs: 1736368995
+        nsecs: 423874471
+    - toss: 3 # visible touch
+      start_time:
+        secs: 1736369000
+        nsecs: 509784240
+      end_time:
+        secs: 1736369006
+        nsecs: 258185179
+    - toss: 4 # visible touch
+      start_time:
+        secs: 1736369010
+        nsecs: 106279314
+      end_time:
+        secs: 1736369017
+        nsecs: 035510888
+    - toss: 5
+      start_time:
+        secs: 1736369027
+        nsecs: 110075996
+      end_time:
+        secs: 1736369034
+        nsecs: 135836518
+    - toss: 6
+      start_time:
+        secs: 1736369038
+        nsecs: 030535392
+      end_time:
+        secs: 1736369056
+        nsecs: 385662203
+    - toss: 7
+      start_time:
+        secs: 1736368826
+        nsecs: 356257022
+      end_time:
+        secs: 1736368839
+        nsecs: 467536570
+    - toss: 8
+      start_time:
+        secs: 1736368843
+        nsecs: 155880333
+      end_time:
+        secs: 1736368848
+        nsecs: 673510562
+    - toss: 9
+      start_time:
+        secs: 1736368853
+        nsecs: 477180716
+      end_time:
+        secs: 1736368858
+        nsecs: 090049821
+    - toss: 10  # visible touch
+      start_time:
+        secs: 1736368865
+        nsecs: 155555659
+      end_time:
+        secs: 1736368874
+        nsecs: 288479739
+  robotocc_toblerone:
+    - toss: 0
+    - toss: 1
+      start_time:
+        secs: 1736368659
+        nsecs: 581586133
+      end_time:
+        secs: 1736368669
+        nsecs: 157106258
+    - toss: 2
+      start_time:
+        secs: 1736368671
+        nsecs: 599906071
+      end_time:
+        secs: 1736368676
+        nsecs: 431391473
+    - toss: 3 # visible touch
+      start_time:
+        secs: 1736368684
+        nsecs: 403342386
+      end_time:
+        secs: 1736368690
+        nsecs: 962789263
+    - toss: 4
+      start_time:
+        secs: 1736368700
+        nsecs: 245952388
+      end_time:
+        secs: 1736368706
+        nsecs: 628175235
+    - toss: 5
+      start_time:
+        secs: 1736368711
+        nsecs: 674544259
+      end_time:
+        secs: 1736368721
+        nsecs: 243418576
+    - toss: 6
+      start_time:
+        secs: 1736368540
+        nsecs: 744822563
+      end_time:
+        secs: 1736368544
+        nsecs: 802071060
+    - toss: 7
+      start_time:
+        secs: 1736368547
+        nsecs: 712263850
+      end_time:
+        secs: 1736368552
+        nsecs: 588257661
+    - toss: 8
+      start_time:
+        secs: 1736368557
+        nsecs: 662886359
+      end_time:
+        secs: 1736368567
+        nsecs: 602239645
+    - toss: 9
+      start_time:
+        secs: 1736368568
+        nsecs: 561187202
+      end_time:
+        secs: 1736368577
+        nsecs: 758471023
+    - toss: 10
+      start_time:
+        secs: 1736368584
+        nsecs: 465387131
+      end_time:
+        secs: 1736368594
+        nsecs: 942810727
+    - toss: 11
+      start_time:
+        secs: 1736368598
+        nsecs: 247820062
+      end_time:
+        secs: 1736368606
+        nsecs: 612756403
+  robotocc_egg:
+    - toss: 0
+    - toss: 1
+      start_time:
+        secs: 1736368343
+        nsecs: 374502940
+      end_time:
+        secs: 1736368357
+        nsecs: 572272930
+    - toss: 2
+      start_time:
+        secs: 1736368359
+        nsecs: 896111905
+      end_time:
+        secs: 1736368368
+        nsecs: 346638720
+    - toss: 3
+      start_time:
+        secs: 1736368370
+        nsecs: 786416299
+      end_time:
+        secs: 1736368381
+        nsecs: 020341141
+    - toss: 4 # visible touch
+      start_time:
+        secs: 1736368386
+        nsecs: 015257054
+      end_time:
+        secs: 1736368394
+        nsecs: 465023450
+    - toss: 5
+      start_time:
+        secs: 1736368404
+        nsecs: 034105040
+      end_time:
+        secs: 1736368430
+        nsecs: 399941914
+    - toss: 6
+      start_time:
+        secs: 1736368432
+        nsecs: 419194914
+      end_time:
+        secs: 1736368448
+        nsecs: 194393560
+  robotocc_bakingbox:
+    - toss: 0
+    - toss: 1
+      start_time:
+        secs: 1736367340
+        nsecs: 990270492
+      end_time:
+        secs: 1736367357
+        nsecs: 009550961
+    - toss: 2
+      start_time:
+        secs: 1736367361
+        nsecs: 414853090
+      end_time:
+        secs: 1736367369
+        nsecs: 691481332
+    - toss: 3
+      start_time:
+        secs: 1736367378
+        nsecs: 769073598
+      end_time:
+        secs: 1736367391
+        nsecs: 414853090
+    - toss: 4 # after 4: continue later due to network issues
+      start_time:
+        secs: 1736367393
+        nsecs: 853896039
+      end_time:
+        secs: 1736367408
+        nsecs: 004075716
+    - toss: 5
+      start_time:
+        secs: 1736367416
+        nsecs: 147394692
+      end_time:
+        secs: 1736367422
+        nsecs: 822094888
+    - toss: 6
+      start_time:
+        secs: 1736367428
+        nsecs: 291751231
+      end_time:
+        secs: 1736367440
+        nsecs: 814007178
+    - toss: 7
+      start_time:
+        secs: 1736367449
+        nsecs: 120413658
+      end_time:
+        secs: 1736367460
+        nsecs: 055687691
+    - toss: 8
+      start_time:
+        secs: 1736367464
+        nsecs: 404124628
+      end_time:
+        secs: 1736367478
+        nsecs: 622588522
+    - toss: 9
+      start_time:
+        secs: 1736367621
+        nsecs: 432197939
+      end_time:
+        secs: 1736367627
+        nsecs: 598272581
+    - toss: 10
+      start_time:
+        secs: 1736367630
+        nsecs: 923217509
+      end_time:
+        secs: 1736367644
+        nsecs: 231801414
+    - toss: 11
+      start_time:
+        secs: 1736367649
+        nsecs: 754939301
+      end_time:
+        secs: 1736367656
+        nsecs: 313441187
+    - toss: 12
+      start_time:
+        secs: 1736366973
+        nsecs: 373110566
+      end_time:
+        secs: 1736366982
+        nsecs: 739433111
+    - toss: 13
+      start_time:
+        secs: 1736366991
+        nsecs: 152977397
+      end_time:
+        secs: 1736366996
+        nsecs: 135308640
+    - toss: 14
+      start_time:
+        secs: 1736367008
+        nsecs: 814340567
+      end_time:
+        secs: 1736367018
+        nsecs: 680660837
+    - toss: 15
+      start_time:
+        secs: 1736367025
+        nsecs: 821698964
+      end_time:
+        secs: 1736367029
+        nsecs: 834113193
+  robotocc_bottle:
+    - toss: 0
+    - toss: 1
+      start_time:
+        secs: 1736366538
+        nsecs: 102638814
+      end_time:
+        secs: 1736366552
+        nsecs: 473960737
+    - toss: 2
+      start_time:
+        secs: 1736366566
+        nsecs: 185375299
+      end_time:
+        secs: 1736366574
+        nsecs: 365959008
+    - toss: 3
+      start_time:
+        secs: 1736366590
+        nsecs: 371681186
+      end_time:
+        secs: 1736366599
+        nsecs: 142995642
+    - toss: 4
+      start_time:
+        secs: 1736366606
+        nsecs: 842154396
+      end_time:
+        secs: 1736366615
+        nsecs: 772903849
+    - toss: 5
+      start_time:
+        secs: 1736366625
+        nsecs: 108687381
+      end_time:
+        secs: 1736366631
+        nsecs: 447431104
+    - toss: 6
+      start_time:
+        secs: 1736366634
+        nsecs: 723518542
+      end_time:
+        secs: 1736366640
+        nsecs: 560204105
+    - toss: 7
+      start_time:
+        secs: 1736366644
+        nsecs: 024503353
+      end_time:
+        secs: 1736366652
+        nsecs: 225989228
+  robotoccmove_toblerone:
+    - toss: 0
+    - toss: 1
+      start_time:
+        secs: 1736374407
+        nsecs: 396232751
+      end_time:
+        secs: 1736374412
+        nsecs: 408625096
+    - toss: 2
+      start_time:
+        secs: 1736374412
+        nsecs: 408625096
+      end_time:
+        secs: 1736374415
+        nsecs: 815358390
+    - toss: 3
+      start_time:
+        secs: 1736374415
+        nsecs: 815358390
+      end_time:
+        secs: 1736374421
+        nsecs: 495850689
+    - toss: 4
+      start_time:
+        secs: 1736374425
+        nsecs: 085136587
+      end_time:
+        secs: 1736374430
+        nsecs: 008487660
+    - toss: 5
+      start_time:
+        secs: 1736374430
+        nsecs: 008487660
+      end_time:
+        secs: 1736374437
+        nsecs: 303230292
+    - toss: 6
+      start_time:
+        secs: 1736374440
+        nsecs: 369131394
+      end_time:
+        secs: 1736374446
+        nsecs: 269544835
+    - toss: 7
+      start_time:
+        secs: 1736374453
+        nsecs: 442596470
+      end_time:
+        secs: 1736374460
+        nsecs: 475704325
+  robotoccmove_styrofoam:
+    - toss: 0
+    - toss: 1
+      start_time:
+        secs: 1736374254
+        nsecs: 592996188
+      end_time:
+        secs: 1736374269
+        nsecs: 574704831
+    - toss: 2
+      start_time:
+        secs: 1736374277
+        nsecs: 868280691
+      end_time:
+        secs: 1736374285
+        nsecs: 228583553
+    - toss: 3
+      start_time:
+        secs: 1736374289
+        nsecs: 109374448
+      end_time:
+        secs: 1736374303
+        nsecs: 515860413
+    - toss: 4
+      start_time:
+        secs: 1736374307
+        nsecs: 193188251
+      end_time:
+        secs: 1736374316
+        nsecs: 290468555
+    - toss: 5
+      start_time:
+        secs: 1736374320
+        nsecs: 380087447
+      end_time:
+        secs: 1736374333
+        nsecs: 400933085
+    - toss: 6
+      start_time:
+        secs: 1736374335
+        nsecs: 292717438
+      end_time:
+        secs: 1736374338
+        nsecs: 828775615
+  robotoccdual_oatly:
+    - toss: 0
+    - toss: 1
+      start_time:
+        secs: 1736373916
+        nsecs: 642948859
+      end_time:
+        secs: 1736373924
+        nsecs: 221678084
+    - toss: 2
+      start_time:
+        secs: 1736373941
+        nsecs: 864045161
+      end_time:
+        secs: 1736373954
+        nsecs: 723370497
+    - toss: 3 # visible touch
+      start_time:
+        secs: 1736373961
+        nsecs: 153033165
+      end_time:
+        secs: 1736373970
+        nsecs: 205318955
+    - toss: 4
+      start_time:
+        secs: 1736373978
+        nsecs: 811295039
+      end_time:
+        secs: 1736373984
+        nsecs: 777441592
+    - toss: 5
+      start_time:
+        secs: 1736373984
+        nsecs: 777441592
+      end_time:
+        secs: 1736373989
+        nsecs: 302409968
+  robotoccdual_milk:
+    - toss: 0
+    - toss: 1
+      start_time:
+        secs: 1736372378
+        nsecs: 234560824
+      end_time:
+        secs: 1736372384
+        nsecs: 169397701
+    - toss: 2
+      start_time:
+        secs: 1736372396
+        nsecs: 419043308
+      end_time:
+        secs: 1736372402
+        nsecs: 834054625
+    - toss: 3
+      start_time:
+        secs: 1736372410
+        nsecs: 223210204
+      end_time:
+        secs: 1736372419
+        nsecs: 660497036
+    - toss: 4
+      start_time:
+        secs: 1736372422
+        nsecs: 823210204
+      end_time:
+        secs: 1736372430
+        nsecs: 660548206
+  robotoccdual_bakingbox:
+    - toss: 0
+    - toss: 1
+      start_time:
+        secs: 1736373288
+        nsecs: 868735523
+      end_time:
+        secs: 1736373298
+        nsecs: 928329645
+    - toss: 2
+      start_time:
+        secs: 1736373309
+        nsecs: 083968849
+      end_time:
+        secs: 1736373318
+        nsecs: 872397618
+    - toss: 3
+      start_time:
+        secs: 1736373331
+        nsecs: 852705332
+      end_time:
+        secs: 1736373339
+        nsecs: 165769249
+    - toss: 4
+      start_time:
+        secs: 1736373347
+        nsecs: 297362469
+      end_time:
+        secs: 1736373360
+        nsecs: 792407778
+    - toss: 5
+      start_time:
+        secs: 1736373364
+        nsecs: 835454444
+      end_time:
+        secs: 1736373373
+        nsecs: 101956384
+    - toss: 6
+      start_time:
+        secs: 1736373382
+        nsecs: 497184613
+      end_time:
+        secs: 1736373391
+        nsecs: 649907516
+    - toss: 7
+      start_time:
+        secs: 1736373394
+        nsecs: 255968995
+      end_time:
+        secs: 1736373404
+        nsecs: 840337237
+  robotoccdual_bottle:
+    - toss: 0
+    - toss: 1
+      start_time:
+        secs: 1736373103
+        nsecs: 257805581
+      end_time:
+        secs: 1736373110
+        nsecs: 120370991
+    - toss: 2
+      start_time:
+        secs: 1736373118
+        nsecs: 624769652
+      end_time:
+        secs: 1736373127
+        nsecs: 782859351
+    - toss: 3
+      start_time:
+        secs: 1736373135
+        nsecs: 110901412
+      end_time:
+        secs: 1736373139
+        nsecs: 036444151
+    - toss: 4
+      start_time:
+        secs: 1736373143
+        nsecs: 615489000
+      end_time:
+        secs: 1736373149
+        nsecs: 746752443
+    - toss: 5
+      start_time:
+        secs: 1736373160
+        nsecs: 379449805
+      end_time:
+        secs: 1736373166
+        nsecs: 781547101
+    - toss: 6
+      start_time:
+        secs: 1736373169
+        nsecs: 227095786
+      end_time:
+        secs: 1736373177
+        nsecs: 602586305
+    - toss: 7
+      start_time:
+        secs: 1736373179
+        nsecs: 782182218
+      end_time:
+        secs: 1736373185
+        nsecs: 214947294
 
 # These body_frames are the TagSLAM body frame's pose relative to the first
 # specified tag ID.

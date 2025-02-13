@@ -24,7 +24,10 @@ TRANSFORM_EXCLUDE_FILENAMES = [
     'tosses_and_frames.pt',
     'p_toss_frames.pt',
     'v_toss_frames.pt',
-    'w_toss_frames.pt'
+    'w_toss_frames.pt',
+    'support_point_phis.pt',
+    'support_point_jacobians.pt',
+    'support_point_all_forces.pt',
 ]
 
 REQUIRES_TRANSFORM = 'requires_transform'
@@ -311,8 +314,8 @@ class GeometryConverterPLLToBundleSDF:
                             contact_in_cam_subdir, f'{camera_frame_i:04d}',
                             filename)
                         torch.save(data_in_cam, filepath)
-                        print(f'Saved {subdir}/{filename} for frame ' + \
-                              f'{camera_frame_i}.')
+                        # print(f'Saved {subdir}/{filename} for frame ' + \
+                        #       f'{camera_frame_i}.') # too verbose
 
 
 #######################################################################

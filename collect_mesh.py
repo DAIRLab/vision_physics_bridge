@@ -89,6 +89,8 @@ def main_command(vision_asset: str, bundlesdf_id: str, nerf_bundlesdf_id: str,
     now = datetime.datetime.now()
     date_str = now.strftime('%m%d')
     dest_mesh_file_name = f'{date_str}_{vision_asset}_{bundlesdf_id[13:]}_{nerf_bundlesdf_id[13:]}_{cycle_iteration}.obj'
+    if aligned:
+        dest_mesh_file_name = dest_mesh_file_name.replace('.obj', '_gt.obj')
 
     if local:
         dest_directory = 'mesh_collection'

@@ -414,15 +414,18 @@ class OverlayVideoGenerator:
         start_ros_times = np.array([file_utils.load_toss_time_from_yaml(
             self.object, toss_i, 'start_time', as_ros_time=True) for toss_i \
                 in range(self.start_toss, self.end_toss+1)])
+        end_ros_times = np.array([file_utils.load_toss_time_from_yaml(
+            self.object, toss_i, 'end_time', as_ros_time=True) for toss_i \
+                in range(self.start_toss, self.end_toss+1)])
         cnets_data_gen_dir = file_utils.cnets_data_gen_dataset_dir(
             self.vision_asset, check_exists=True)
         bundlesdf_times = np.loadtxt(
             op.join(cnets_data_gen_dir, 'bundlesdf_timestamps.txt'))
 
         self.start_frames = math_utils.convert_relative_frames_to_absolute(
-            relative_start_frames, bundlesdf_times, start_ros_times)
+            relative_start_frames, bundlesdf_times, start_ros_times, end_ros_times)
         self.end_frames = math_utils.convert_relative_frames_to_absolute(
-            relative_end_frames, bundlesdf_times, start_ros_times)
+            relative_end_frames, bundlesdf_times, start_ros_times, end_ros_times)
 
     def _within_which_toss(self, image_frame_i: int) -> int:
         """Determine if the current frame index is within a toss or not.  If so,
@@ -445,16 +448,24 @@ class OverlayVideoGenerator:
         is part of the PLL toss or not."""
         # First determine if the frame index is within a PLL toss.
         toss_i = self._within_which_toss(image_frame_i)
-
+        
+        # Add a PLL toss label to the image.
+        draw = ImageDraw.Draw(im)
+        font_path = op.join(cv2.__path__[0],'qt','fonts','DejaVuSans.ttf')
+        font = ImageFont.truetype(font_path, 20)
         if toss_i is not None:
-            # Add a PLL toss label to the image.
-            draw = ImageDraw.Draw(im)
-            draw.polygon([(25, 435), (100, 435), (100, 475), (25, 475)],
-                         fill='black')
-            font_path = op.join(cv2.__path__[0],'qt','fonts','DejaVuSans.ttf')
-            font = ImageFont.truetype(font_path, 20)
-            draw.text((30, 440), f'Toss {toss_i}', fill='white',
-                      font=font)
+            text = f'Frame {image_frame_i:04d}. Session {toss_i}. '
+        else:
+            text = f'Frame {image_frame_i:04d}. '
+            
+        text_x = 35
+        text_y = 445
+        margin = 5
+        left, top, right, bottom = draw.textbbox((text_x, text_y), text, font)
+        
+        draw.rectangle((left - margin, top - margin, right + margin, bottom + margin), 
+                        fill='black')
+        draw.text((text_x, text_y), text, fill='white', font=font)
 
         return im
 

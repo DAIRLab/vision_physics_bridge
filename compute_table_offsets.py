@@ -34,7 +34,7 @@ EPS_RIGHT = 1e-2
 TOLERANCE = 1e-5
 PATIENCE = 200
 
-DESIRED_RETENTION = 0.5
+DESIRED_RETENTION = 0.45
 
 CUBE_HALF_WIDTH = 0.0524
 CUBE_CORNERS_IN_CUBE_FRAME = np.array([
@@ -52,6 +52,12 @@ CUBE_CORNERS_IN_CUBE_FRAME = np.array([
 def get_table_height_from_log(log_file: str) -> float:
     """From a recorded log file, extract the optimized table height."""
     # Handle case where the log doesn't exist.
+    filename = op.basename(log_file)
+    if filename.startswith('robotocc'):
+        log_file = log_file.replace(filename, 'robotocc_oatly_1.txt')
+        print(f'Using {log_file} instead of {filename} because' + \
+                'all robot occlusion experiments use the same table height.')
+
     if not op.exists(log_file):
         print(f'Did not find {log_file} -- Skipping.')
         return None

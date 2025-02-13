@@ -11,6 +11,7 @@ import pdb
 import shutil
 from tempfile import TemporaryDirectory
 from tqdm import tqdm
+import trimesh
 
 import eval_utils, file_utils, icp
 
@@ -61,6 +62,14 @@ class MeshProcessor:
         self._load_meshes()
         self.did_alignment_to_bundlesdf = False
 
+    def _check_triangular(self, obj_file_path: str):
+        with open(obj_file_path, 'r') as obj_file:
+            for line in obj_file:
+                if line.startswith('f '):
+                    if len(line.split()) != 4:
+                        return False
+        return True
+
     def _load_meshes(self):
         if not self.meshlab:
             true_obj_file = file_utils.object_scan_filepath(self.object)
@@ -76,7 +85,22 @@ class MeshProcessor:
 
         if self.meshlab:
             true_obj_file = op.join(nerf_results_dir, 'true_geom_aligned_meshlab.obj')
-            self.true_mesh = icp.load_mesh_from_obj(true_obj_file)
+            is_triangular = self._check_triangular(true_obj_file)
+            if not is_triangular:
+                print(f'{true_obj_file} is not a triangle mesh.  Loading with trimesh.')
+                # toblerone gt mesh aligned by meshlab may not be a triangle mesh.  
+                # Load with trimesh (it automatically triangulates)
+                mesh_trimesh = trimesh.load(true_obj_file)
+                if not mesh_trimesh.is_watertight:
+                    mesh_trimesh.merge_vertices(merge_norm=True)
+                    assert mesh_trimesh.is_watertight, f'{true_obj_file} is not watertight.'
+                # Convert to Open3D
+                mesh_o3d = o3d.geometry.TriangleMesh()
+                mesh_o3d.vertices = o3d.utility.Vector3dVector(np.asarray(mesh_trimesh.vertices))
+                mesh_o3d.triangles = o3d.utility.Vector3iVector(np.asarray(mesh_trimesh.faces))
+                self.true_mesh = mesh_o3d
+            else:
+                self.true_mesh = icp.load_mesh_from_obj(true_obj_file)
     def align_true_to_learned_mesh_with_icp(
             self, show: bool = True, save_dir: str = None,
             obj_name: str = 'true_geom_aligned.obj'):
@@ -276,6 +300,7 @@ class MeshProcessor:
             print(f'Found true_geom_aligned_assist.obj already in ' + \
                   f'{save_dir}.')
             pdb.set_trace()
+            print('Overwriting the file.')
         self.true_mesh.transform(reg_p2p.transformation)
         o3d.io.write_triangle_mesh(
             op.join(save_dir, 'true_geom_aligned_assist.obj'),
@@ -924,10 +949,13 @@ def cli():
               is_flag=True,
               help="Whether to start with meshlab-aligned meshes, in which " + \
                 "case only icp is needed here for refinement")
+@click.option('--remote',
+              is_flag=True,
+              help="Whether to run on remote server.")
 
 def process_manual_icp_command(vision_asset: str, bundlesdf_id: str,
                                nerf_bundlesdf_id: str, cycle_iteration: int, 
-                               meshlab: bool):
+                               meshlab: bool, remote: bool):
     # Decode the BundleSDF run ID.
     tracking_bundlesdf_id = bundlesdf_id
     if tracking_bundlesdf_id[:13] != 'bundlesdf_id_':
@@ -943,12 +971,35 @@ def process_manual_icp_command(vision_asset: str, bundlesdf_id: str,
         nerf_bundlesdf_id=nerf_bundlesdf_id
     )
 
+    if remote:
+        old_display = os.environ['DISPLAY']
+        if old_display != ':99':
+            ## Use virtual display to plot faster.
+            # Run Xvfb to create a virtual display.
+            print("Running Xvfb (virtual display) for rendering.")
+            import subprocess
+            xvfb_process = subprocess.Popen(['Xvfb', ':99', '-screen', '0',
+                                                    '640x480x24'])
+            print(f"Changing display environment from " + \
+                    f"{os.environ['DISPLAY']} variable to :99")
+            os.environ['DISPLAY'] = ':99' 
+
     mesh_processor = MeshProcessor(
         vision_asset, tracking_bundlesdf_id, nerf_bundlesdf_id, cycle_iteration, 
         meshlab)
 
     mesh_processor.interactive_align_true_to_learned_mesh_with_icp2(
         save_dir=eval_dir)
+    
+    if remote:
+        if old_display != ':99':
+            # Kill the virtual display.
+            print("Killing Xvfb (virtual display).")
+            xvfb_process.terminate()
+            xvfb_process.wait()
+            os.environ['DISPLAY'] = old_display
+            print(f"Changing display environment from " + \
+                    f":99 back to {os.environ['DISPLAY']} variable.")
 
 
 @cli.command('distribute_alignments')
