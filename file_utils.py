@@ -376,6 +376,17 @@ def robot_dynamics_subdir(dataset: str, overwrite: bool = False) -> str:
         os.makedirs(subdir)
     return subdir
 
+def load_robot_dynamics_yaml(model_name: str) -> str:
+    """Load the yaml corresponding to 'vysics', 'bsdf', 'pll', or 'gt' in the
+    robot dynamics directory."""
+    assert model_name in ['vysics', 'bsdf', 'pll', 'gt'], f'{model_name} ' + \
+        f'unexpected robot dynamics result yaml name.'
+    yaml_file = op.join(robot_dynamics_dir(), f'{model_name}.yaml')
+
+    with open(yaml_file, 'r') as f:
+        robot_dynamics_results = yaml.safe_load(f)
+    return robot_dynamics_results
+
 def bundlesdf_video_rgb_dir(dataset: str, check_exists: bool = True) -> str:
     """The BundleSDF input directory for RGB images for a particular dataset."""
     return bsdf_file_utils.video_rgb_dir(
@@ -810,6 +821,7 @@ def save_results_to_yaml(
     """Save the results dictionary to a yaml file in a provided evaluation
     directory."""
     yaml.dump(results, open(op.join(eval_dir, filename), 'w'))
+    print(f'Wrote results to {eval_dir}/{filename}')
 
 def start_adjustment_dir() -> str:
     """Directory for all start adjust results."""

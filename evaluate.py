@@ -1299,7 +1299,6 @@ class DynamicsPredictor:
         bsdf_params['bsdf_geometry_hull'] = geometry.convex_hull
         return bsdf_params
 
-
     def _create_pll_sim_system(self):
         """Create a PLL MultibodyLearnableSystem, which can be simulated."""
         if hasattr(self, 'pll_system'):

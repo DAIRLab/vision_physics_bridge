@@ -1860,7 +1860,7 @@ class ConglomeratedDynamicsMetrics():
             dir = file_utils.robot_dynamics_dir()
             filename = f'{model}.yaml'
             file_utils.save_results_to_yaml(stats, dir, filename=filename)
-            print(f'Overwrote {dir}/{filename}.yaml from files.')
+            print(f'Overwrote {dir}/{filename} from files.')
 
 
 @click.group()
