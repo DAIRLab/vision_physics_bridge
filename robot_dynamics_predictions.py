@@ -209,17 +209,33 @@ PLL_BSDF_NERF_IDS_FROM_VISION_ASSET = {
 }
 
 ## Code for generating command line for robot overlay videos.
-# breakpoint()
-# for vision_asset, items in PLL_BSDF_NERF_IDS_FROM_VISION_ASSET.items():
-#     pll_id, bsdf_id, bsdf_nerf_id = items
-#     pll_id = pll_id.replace('pll_id_', '')
-#     bsdf_id = bsdf_id.replace('bundlesdf_id_', '')
-#     bsdf_nerf_id = bsdf_nerf_id.replace('bundlesdf_id_', '')
-#     print(f'python overlay_videos.py --vision-asset={vision_asset} ' + \
-#           f'--cycle-iteration={BSDF_ITERATION} --bundlesdf-id={bsdf_id} ' + \
-#           f'--nerf-bundlesdf-id={bsdf_nerf_id} --bsdf-only --show-robot ' + \
-#           f'--remote')
-# breakpoint()
+#breakpoint()
+#for vision_asset, items in PLL_BSDF_NERF_IDS_FROM_VISION_ASSET.items():
+#    pll_id, bsdf_id, bsdf_nerf_id = items
+#    pll_id = pll_id.replace('pll_id_', '')
+#    bsdf_id = bsdf_id.replace('bundlesdf_id_', '')
+#    bsdf_nerf_id = bsdf_nerf_id.replace('bundlesdf_id_', '')
+#    print(f'\n### ASSET {vision_asset} ###')
+#    print(f'# Vysics')
+#    print(f'python overlay_videos.py --vision-asset={vision_asset} ' + \
+#          f'--cycle-iteration={BSDF_ITERATION} --bundlesdf-id={bsdf_id} ' + \
+#          f'--nerf-bundlesdf-id={bsdf_nerf_id} --bsdf-only --show-robot ' + \
+#          f'--remote')
+#    print(f'# BundleSDF')
+#    print(f'python overlay_videos.py --vision-asset={vision_asset} ' + \
+#          f'--cycle-iteration={BSDF_ITERATION} --bundlesdf-id={bsdf_id} ' + \
+#          f'--nerf-bundlesdf-id={bsdf_id} --bsdf-only --show-robot ' + \
+#          f'--remote')
+#    print(f'# PLL')
+#    print(f'python overlay_videos.py --vision-asset={vision_asset} ' + \
+#          f'--cycle-iteration={BSDF_ITERATION} --bundlesdf-id={bsdf_id} ' + \
+#          f'--pll-id={pll_id} --bsdf-only --show-robot --remote')
+#    print(f'# GT')
+#    print(f'python overlay_videos.py --vision-asset={vision_asset} ' + \
+#          f'--cycle-iteration={BSDF_ITERATION} --bundlesdf-id={bsdf_id} ' + \
+#          f'--nerf-bundlesdf-id={bsdf_nerf_id} --bsdf-only --show-robot ' + \
+#          f'--remote --gt-mesh')
+#breakpoint()
 
 def hex_to_rgba_format(hex: str, opacity: float):
     r, g, b = tuple(int(hex[i:i+2], 16) for i in (1, 3, 5))

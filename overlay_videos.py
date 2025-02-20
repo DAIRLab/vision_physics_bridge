@@ -28,7 +28,7 @@ import rosbag_processor
 # Overlay video settings.
 ROBOT_COLOR = 0xf1c232
 BUNDLESDF_COLOR = 0x5680c9  # 1 tint lighter than typical BSDF color 0x4472c4
-GT_COLOR = 0xff0000
+GT_COLOR = 0x999999  #ff0000
 PLL_COLOR = 0x70ad47
 VYSICS_COLOR = 0x7e44a9  # 1 tint lighter than typical Vysics color 0x7030a0
 TAGSLAM_COLOR = 0xff0000
@@ -188,7 +188,7 @@ class OverlayVideoGenerator:
             self.mesh_file = op.join(nerf_results_dir, 'textured_mesh.obj')
             # TODO:  May need to change when BSDF iteration 1 NeRF runs can be
             # considered "iteration 2" results.
-            if cycle_iteration==1 and nerf_bundlesdf_id==tracking_bundlesdf_id:
+            if nerf_bundlesdf_id==tracking_bundlesdf_id:  #cycle_iteration==1
                 self.mesh_color = BUNDLESDF_COLOR
             else:
                 self.mesh_color = VYSICS_COLOR
