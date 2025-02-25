@@ -772,7 +772,8 @@ def aligned_object_scan_dir() -> str:
 
 def aligned_true_geometry_filepath(
         dataset: str, cycle_iteration: int, tracking_bundlesdf_id: str = None,
-        nerf_bundlesdf_id: str = None, pll_id: str = None, check_exists: bool = True
+        nerf_bundlesdf_id: str = None, pll_id: str = None,
+        check_exists: bool = True
 ) -> str:
     """Return the filepath of an object's ground truth scan."""
     run_eval_dir = evaluation_subdir(

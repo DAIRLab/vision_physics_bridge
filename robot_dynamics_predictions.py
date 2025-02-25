@@ -1408,7 +1408,10 @@ class DynamicsPredictionQuantifier():
         (position error or rotation error).
 
         In addition to time-series errors, this also computes the time before
-        position and rotation errors cross the error tolerances."""
+        position and rotation errors cross the error tolerances, as well as
+        contact activations (binary) throughout the trajectory and the IOU of
+        those contact activations w.r.t. the manually annotated ground truth
+        contact activations."""
         # Quantify w.r.t. tracked poses or GT simulated poses.
         compare_against = [
             self.object_poses, self.pred_files['pred_object_states_gt.txt']]
@@ -1466,7 +1469,7 @@ class DynamicsPredictionQuantifier():
         self.contact_force_dict = contact_force_dict
 
     def plot_errors(self, truncate: bool = False):
-        for compare_against in ['tracked', 'gt_sim']:
+        for compare_against in self.errors.keys():  # tracked or gt_sim
             fig, axs = plt.subplots(2, 1, figsize=(6, 9), sharex=True)
             title = f'{self.vision_asset} against {compare_against}'
             title += f', truncated ({POSITION_TOLERANCE:.2f}m, ' + \
@@ -1505,11 +1508,11 @@ class DynamicsPredictionQuantifier():
             if not self.interactive:
                 plt.close()
 
-        # if self.interactive:
-        #     breakpoint()
+        if self.interactive:
+            breakpoint()
 
     def plot_time_to_failure(self):
-        for compare_against in ['tracked', 'gt_sim']:
+        for compare_against in self.errors.keys():  # tracked or gt_sim
             fig, axs = plt.subplots(1, 2, figsize=(9, 6), sharey=True)
             fig.suptitle(f'{self.vision_asset} Time to Dynamics Prediction ' + \
                          f'Divergence, compared against {compare_against}')
@@ -1577,12 +1580,84 @@ class DynamicsPredictionQuantifier():
             plt.close()
 
 
+class MinimalDPQFromStatistics(DynamicsPredictionQuantifier):
+    """Create a DynamicsPredictionQuantifier object from the statistical results
+    of a given vision asset.  Needs to have the following attributes:
+        - self.errors['tracked'][model]['time_before_bad_pos']
+        - self.errors['tracked'][model]['time_before_bad_rot']
+        - self.contact_force_dict[model]['contact_activation_iou'] -- actually
+            this one is not required but is included for thoroughness.
+        - self.times (1,) array with just the final time is required.
+        - self.vision_asset
+
+    Inputs:
+        - vision_asset (str)
+        - vysics_dyn_results (dict) coming from an overall model.yaml results
+          at overall_results[tag_key][object][trained_on_key][
+          robot_dynamics_rollout_metrics], which has keys:
+            - 'contact_activation_iou'
+            - 'pos_rollout_error_mean'
+            - 'rot_rollout_error_mean'
+            - 'time_before_bad_pos'
+            - 'time_before_bad_rot'
+        - same for bsdf_dyn_results, pll_dyn_results, and gt_dyn_results
+    """
+    def __init__(self, vision_asset: str, vysics_dyn_results: dict,
+                 bsdf_dyn_results: dict, pll_dyn_results: dict,
+                 gt_dyn_results: dict):
+        # 1) Save vision asset.
+        self.vision_asset = vision_asset
+
+        # 2) Store away the necessary performance values.
+        tracked_errors = {}
+        contact_force_dict = {}
+
+        results = [vysics_dyn_results, bsdf_dyn_results, pll_dyn_results,
+                   gt_dyn_results]
+        for model, result_dict in zip(MODELS_TO_TEST, results):
+            tracked_errors[model] = {
+                'time_before_bad_pos': result_dict['time_before_bad_pos'],
+                'time_before_bad_rot': result_dict['time_before_bad_rot'],
+            }
+            contact_force_dict[model] = {
+                'contact_activation_iou': result_dict['contact_activation_iou']
+            }
+
+        self.errors = {'tracked': tracked_errors}
+        self.contact_force_dict = contact_force_dict
+
+        # 3) Load the timestamps from the generated dataset.
+        cnets_data_gen_dir = file_utils.cnets_data_gen_dataset_dir(
+            self.vision_asset, check_exists=True)
+        self.times = np.loadtxt(op.join(
+            cnets_data_gen_dir, 'bundlesdf_timestamps.txt'))
+        self.times -= self.times[0]
+
+    def plot_errors(self, truncate: bool = False):
+        print(f'Cannot run plot_errors() on MinimalDPQFromStatistics; ' + \
+              f'skipping.')
+
+    def plot_contact_activations(self):
+        print(f'Cannot run plot_contact_activations() on ' + \
+              f'MinimalDPQFromStatistics; skipping.')
+
+
 class ConglomeratedDynamicsMetrics():
     def __init__(self, list_of_dpqs: List[DynamicsPredictionQuantifier],
                  interactive: bool = False):
         self.dpqs = list_of_dpqs
         self.interactive = interactive
         self.save_dir = file_utils.robot_dynamics_dir()
+
+        self.is_minimal = isinstance(list_of_dpqs[0], MinimalDPQFromStatistics)
+        self.compare_againsts = list(list_of_dpqs[0].errors)
+        if self.is_minimal:
+            assert len(self.compare_againsts) == 1 and \
+                   'tracked' in self.compare_againsts
+        else:
+            assert len(self.compare_againsts) == 2 and \
+                   'tracked' in self.compare_againsts and \
+                   'gt_sim' in self.compare_againsts
 
         self._get_ordered_dpqs()
 
@@ -1592,7 +1667,7 @@ class ConglomeratedDynamicsMetrics():
         the GT geometry's time to position error divergence, and similarly for
         self.rot_ordered_dpqs."""
         dpq_pos_rot = {}
-        for compare_against in ['tracked', 'gt_sim']:
+        for compare_against in self.compare_againsts:
             dpq_pos_rot[compare_against] = [
                 self.dpqs,
                 [dpq.errors[compare_against]['gt']['time_before_bad_pos'] \
@@ -1603,7 +1678,7 @@ class ConglomeratedDynamicsMetrics():
 
         self.pos_ordered_dpqs = {}
         self.rot_ordered_dpqs = {}
-        for compare_against in ['tracked', 'gt_sim']:
+        for compare_against in self.compare_againsts:
             self.pos_ordered_dpqs[compare_against] = [
                 dpq for _, dpq in sorted(zip(
                     dpq_pos_rot[compare_against][1], self.dpqs))]
@@ -1615,8 +1690,10 @@ class ConglomeratedDynamicsMetrics():
         if self.interactive:
             plt.ion()
 
-        self._plot_traces(truncate=False)
-        self._plot_traces(truncate=True)
+        if not self.is_minimal:
+            self._plot_traces(truncate=False)
+            self._plot_traces(truncate=True)
+
         self._plot_time_to_failure()
         self._plot_time_to_failure_cdf(relative=False)
         self._plot_time_to_failure_cdf(relative=True)
@@ -1626,7 +1703,7 @@ class ConglomeratedDynamicsMetrics():
 
     def _plot_traces(self, truncate: bool = False):
         n_lines = len(self.dpqs)
-        for compare_against in ['tracked', 'gt_sim']:
+        for compare_against in self.compare_againsts:
             fig, axs = plt.subplots(2, 4, figsize=(12, 9), sharex=True,
                                     sharey='row')
             title = f'Conglomerated Dynamics Predictions against ' + \
@@ -1689,7 +1766,7 @@ class ConglomeratedDynamicsMetrics():
         plt.rc('axes', titlesize=24)    # fontsize of the axes title
         plt.rc('axes', labelsize=24)    # fontsize of the x and y labels
 
-        for compare_against in ['tracked', 'gt_sim']:
+        for compare_against in self.compare_againsts:
             # Generate a plot of cumulative distribution functions.
             fig, axs = plt.subplots(1, 2, figsize=(13,10), sharey=True)
             if relative:
@@ -1767,7 +1844,7 @@ class ConglomeratedDynamicsMetrics():
 
     def _plot_time_to_failure(self):
         n_bars = len(self.dpqs)
-        for compare_against in ['tracked', 'gt_sim']:
+        for compare_against in self.compare_againsts:
             dpq_list_pos = self.pos_ordered_dpqs[compare_against]
             dpq_list_rot = self.rot_ordered_dpqs[compare_against]
 
@@ -1879,6 +1956,41 @@ class ConglomeratedDynamicsMetrics():
             print(f'Overwrote {dir}/{filename} from files.')
 
 
+def cdm_from_overall_results(
+        vysics_results: dict, bsdf_results: dict, pll_results: dict,
+        gt_results: dict, save_dir: str) -> ConglomeratedDynamicsMetrics:
+    # Iterate by vision asset to build list of dpqs.
+    min_dpqs = []
+    for tag_key in vysics_results.keys():
+        for object_key in vysics_results[tag_key].keys():
+            for trained_on_key in vysics_results[tag_key][object_key].keys():
+                toss = trained_on_key.replace('trained_on_toss_', '')
+                vision_asset = f'robotocc_{object_key}_{toss}'
+
+                v_results = vysics_results[tag_key][object_key][trained_on_key][
+                    'robot_dynamics_rollout_metrics']
+                b_results = bsdf_results[tag_key][object_key][trained_on_key][
+                    'robot_dynamics_rollout_metrics']
+                p_results = pll_results[tag_key][object_key][trained_on_key][
+                    'robot_dynamics_rollout_metrics']
+                g_results = gt_results[tag_key][object_key][trained_on_key][
+                    'robot_dynamics_rollout_metrics']
+
+                min_dpqs.append(MinimalDPQFromStatistics(
+                    vision_asset=vision_asset,
+                    vysics_dyn_results=v_results,
+                    bsdf_dyn_results=b_results,
+                    pll_dyn_results=p_results,
+                    gt_dyn_results=g_results)
+                )
+
+    cdm = ConglomeratedDynamicsMetrics(min_dpqs)
+    cdm.save_dir = save_dir
+    file_utils.assure_created(save_dir)
+
+    return cdm
+
+
 @click.group()
 def cli():
     pass
@@ -1938,18 +2050,16 @@ def plot_command(statistics: bool, interactive: bool):
     dpqs = []
     for vision_asset in vision_assets:
         dpq = DynamicsPredictionQuantifier(vision_asset, interactive)
-        if not statistics:
-            dpq.plot_errors(truncate=False)
-            dpq.plot_errors(truncate=True)
-            dpq.plot_time_to_failure()
-            dpq.plot_contact_activations()
+        dpq.plot_errors(truncate=False)
+        dpq.plot_errors(truncate=True)
+        dpq.plot_time_to_failure()
+        dpq.plot_contact_activations()
         dpqs.append(dpq)
 
     cdm = ConglomeratedDynamicsMetrics(dpqs, interactive)
     if statistics:
         cdm.export_statistics()
-    else:
-        cdm.plot()
+    cdm.plot()
     if interactive:
         breakpoint()
 

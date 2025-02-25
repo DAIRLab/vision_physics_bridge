@@ -1503,7 +1503,7 @@ class ResultsPlotter:
             filename=f'all_objs_{dynamics_metric}_bsdf_v_data_{toss_subset}' + \
                 f'_{dynamics_category}_auc', subdir='dynamics')
 
-    # TODO: Part of rebuttal exploration, eventually incorporate repeated code.
+    # TODO: temporary, eventually incorporate repeated code.
     def plot_object_geometry_scatter_withconvex2(
             self, hull_or_full: str, geometry_metric: str):
         """Drawing four scatter plots, including two convex variants of BundleSDF. """
@@ -1591,7 +1591,7 @@ class ResultsPlotter:
             filename=f'scatter_{geometry_metric}_v_data_{hull_or_full}_true_units_withconvex',
             subdir='object_geometry', save_to_txt=True, normalize=False)
 
-    # TODO: Part of rebuttal exploration, eventually incorporate repeated code.
+    # TODO: temporary, eventually incorporate repeated code.
     def plot_object_geometry_scatter_withconvex(
             self, hull_or_full: str, geometry_metric: str):
         """Drawing three scatter plots, including BundleSDF with convexity loss. """
@@ -1660,6 +1660,11 @@ class ResultsPlotter:
     def plot_object_geometry_scatter(
             self, hull_or_full: str, geometry_metric: str,
             exps: list = [BSDF_ONLY, BSDF_PLL], do_sort: bool = True):
+        if geometry_metric == 'contact_activation_iou':
+            print('Cannot handle contact activation IOU as geometry metric ' + \
+                  'anymore -- skipping.')
+            return
+
         # Get the scale of the metric.
         scale = METRIC_SCALING[geometry_metric]
 
@@ -1677,17 +1682,15 @@ class ResultsPlotter:
 
                 if obj_scope == 'tagged':
                     all_objects = self.tagged_objects
-                    object_labels = ['tagged_objects'] * len(self.tagged_objects)
+                    object_labels = ['tagged_objects']*len(self.tagged_objects)
                 elif obj_scope == 'all':
                     # Iterate over all the objects.
                     all_objects = self.tagless_objects + self.tagged_objects
-                    object_labels = ['tagless_objects'] * len(self.tagless_objects) + \
-                        ['tagged_objects'] * len(self.tagged_objects)
+                    object_labels = \
+                        ['tagless_objects']*len(self.tagless_objects) + \
+                        ['tagged_objects']*len(self.tagged_objects)
                 else:
                     raise ValueError(f'Unknown object scope {obj_scope}')
-
-                # all_objects = self.tagged_objects
-                # object_labels = ['tagged_objects'] * len(self.tagged_objects)
 
                 for obj, tag_label in zip(all_objects, object_labels):
                     if tag_label not in result_dict.keys():
@@ -1698,15 +1701,18 @@ class ResultsPlotter:
                     by_object[obj] = {}
 
                     # Iterate over all the toss strings.
-                    for trained_on, result in result_dict[tag_label][obj].items():
+                    for trained_on, result in \
+                        result_dict[tag_label][obj].items():
                         toss_str = trained_on.split('trained_on_toss_')[-1]
 
                         if 'dynamics_prediction_metrics' in result.keys():
-                            by_object[obj][toss_str] = result['dynamics_prediction_metrics'][
-                                hull_or_full][geometry_metric] * scale
+                            by_object[obj][toss_str] = result[
+                                'dynamics_prediction_metrics'][hull_or_full][
+                                    geometry_metric] * scale
                         else:
-                            by_object[obj][toss_str] = result['geometry_metrics'][
-                                hull_or_full][geometry_metric] * scale
+                            by_object[obj][toss_str] = result[
+                                'geometry_metrics'][hull_or_full][
+                                    geometry_metric] * scale
 
             # Generate the plots.
             title = 'Chamfer Distance \u2193' if \
@@ -1742,7 +1748,6 @@ class ResultsPlotter:
                 show_toss_id=True, )
                 # toss_id_filter={'all': ['1','2','3','4','5']})
 
-
             ylabel = 'Centimeters' if geometry_metric == 'chamfer_distance' \
                 and 'full' in hull_or_full else ERROR_LABELS[geometry_metric]
             ylabel = '' if geometry_metric == 'iou' and 'full' in hull_or_full else ylabel
@@ -1758,6 +1763,66 @@ class ResultsPlotter:
                 filename=filename,
                 subdir='object_geometry', save_to_txt=True, normalize=False, show_toss_id=True,)
                 # toss_id_filter={'all': ['1','2','3','4','5']})
+
+    def plot_contact_activation_scatter(
+            self, exps: list = [BSDF_ONLY, BSDF_PLL], do_sort: bool = True):
+        # Get the scale of the metric.
+        scale = METRIC_SCALING['contact_activation_iou']
+
+        for obj_scope in ['tagged', 'all']:
+            if obj_scope == 'tagged':
+                if len(self.tagged_objects) == 0:
+                    continue
+            by_objects = {key: {} for key in exps}
+            sort_key = exps[0] if do_sort else ''
+
+            # Iterate over all the approaches.
+            for exp_key in exps:
+                by_object = by_objects[exp_key]
+                result_dict = self.results[exp_key]
+
+                if obj_scope == 'tagged':
+                    all_objects = self.tagged_objects
+                    object_labels = ['tagged_objects']*len(self.tagged_objects)
+                elif obj_scope == 'all':
+                    # Iterate over all the objects.
+                    all_objects = self.tagless_objects + self.tagged_objects
+                    object_labels = \
+                        ['tagless_objects']*len(self.tagless_objects) + \
+                        ['tagged_objects']*len(self.tagged_objects)
+                else:
+                    raise ValueError(f'Unknown object scope {obj_scope}')
+
+                for obj, tag_label in zip(all_objects, object_labels):
+                    if tag_label not in result_dict.keys():
+                        continue
+                    if obj not in result_dict[tag_label].keys():
+                        continue
+
+                    by_object[obj] = {}
+
+                    # Iterate over all the toss strings.
+                    for trained_on, result in \
+                        result_dict[tag_label][obj].items():
+                        toss_str = trained_on.split('trained_on_toss_')[-1]
+
+                        if 'robot_dynamics_rollout_metrics' in result.keys():
+                            by_object[obj][toss_str] = \
+                                result['robot_dynamics_rollout_metrics'][
+                                    'contact_activation_iou'] * scale
+
+            # Generate the plots.
+            title = 'Temporal IoU of Contact Activation \u2191'
+            ylabel = ERROR_LABELS['contact_activation_iou']
+            filename = f'scatter_contact_activation_iou_{obj_scope}'
+            filename += '_sorted' if do_sort else ''
+
+            self._do_scatter_plot(
+                data_dict=by_objects, exp_key_list=exps, sort_key=sort_key,
+                ylabel=ylabel, xlabel_txt=sorted(all_objects), title=title,
+                filename=filename,
+                subdir='contact_activation', save_to_txt=True, normalize=False,
+                show_toss_id=True)
 
     def plot_gt_dynamics_comparison(
             self, toss_subset: str, dynamics_metric: str):
@@ -2307,7 +2372,7 @@ class ResultsPlotter:
                 print(f'Saved {filename}')
                 plt.close()
 
-    # TODO: Part of rebuttal exploration, eventually incorporate repeated code.
+    # TODO: temporary, eventually incorporate repeated code.
     def _do_scatter_plot_with_convex2(self, bp_data: list = None,
                          bo_data: list = None, bc_data: list = None,
                          bch_data: list = None,
@@ -2479,7 +2544,7 @@ class ResultsPlotter:
                     txt_file.write(data_str)
                 print(f'Wrote to {str_filepath}')
 
-    # TODO: Part of rebuttal exploration, eventually incorporate repeated code.
+    # TODO: temporary, eventually incorporate repeated code.
     def _do_scatter_plot_with_convex(self, bp_data: list = None,
                          bo_data: list = None, bc_data: list = None,
                          ylabel: str = '', xlabel_txt: str = '',
@@ -2784,7 +2849,8 @@ class ResultsPlotter:
                 n_tosses = len(all_toss_ids[obj])
                 obj_data = ys[exp_key][start_idx:start_idx + n_tosses]
                 x_coords = [i + x_offsets[i_key]] * n_tosses
-                plt.scatter(x_coords, obj_data, s=MARKERSIZE, color=exp_color, label='_')
+                plt.scatter(x_coords, obj_data, s=MARKERSIZE, color=exp_color,
+                            label='_')
 
                 # Add toss ID annotations if requested
                 # if show_toss_id:
@@ -2823,7 +2889,7 @@ class ResultsPlotter:
 
 
         self._beautify_plot(fig, ax, range(len(xlabel_txt)), False,
-                        scatter=True, normalized=normalize)
+                            scatter=True, normalized=normalize)
 
         # Save plot and data
         plot_filename = filename.split('.')[0] + '.png'
@@ -3422,25 +3488,27 @@ def process_gather_command(single_toss, exclude_pll):
 
 # Use 'plot' command to load the previously generated yaml files with results
 # and to generate plots with them.
-PLOT_TRACKING = False           # figure unused, text in table in manuscript
-PLOT_TRACKING_SCATTERS = False  # unused for manuscript
-PLOT_DYNAMICS = False           # figure unused, text in table in manuscript
-PLOT_GEOMETRY = False           # unused for manuscript
-PLOT_GEOMETRY_SCATTERS = True  # Fig 5 of manuscript
-PLOT_GT_COMPARISON = False       # exploration during rebuttal phase
+PLOT_TRACKING = False
+PLOT_TRACKING_SCATTERS = False
+PLOT_DYNAMICS = True
+PLOT_GEOMETRY = False
+PLOT_GEOMETRY_SCATTERS = True
+PLOT_GT_COMPARISON = False
 @cli.command('plot')
 @click.option('--do-objects/--skip-objects',
               type=bool, default=False,
               help='Whether to plot object-level results or just aggregates.')
 @click.option('--remote',
               is_flag=True,
-              help='if running on a remote server, use virtual display to accelerate rendering')
+              help='if running on a remote server, use virtual display to ' + \
+                   'accelerate rendering')
 def process_plot_command(do_objects: bool, remote: bool):
     # Load the gathered results.
     bsdf_pll_results = file_utils.load_gathered_results_yaml('bsdf_pll.yaml')
     nerf_on_results = file_utils.load_gathered_results_yaml('nerf_on.yaml')
     bsdf_only_results = file_utils.load_gathered_results_yaml('bsdf_only.yaml')
-    bsdf_octree_results = file_utils.load_gathered_results_yaml('bsdf_octree.yaml')
+    bsdf_octree_results = file_utils.load_gathered_results_yaml(
+        'bsdf_octree.yaml')
     pll_vision_results = file_utils.load_gathered_results_yaml(
         'pll_vision.yaml')
     pll_size_results = file_utils.load_gathered_results_yaml(
@@ -3461,32 +3529,17 @@ def process_plot_command(do_objects: bool, remote: bool):
         'bsdf_pll_robotocc.yaml')
     bsdf_robotocc_results = file_utils.load_gathered_results_yaml(
         'bsdf_robotocc.yaml')
+    pll_robotocc_results = file_utils.load_gathered_results_yaml(
+        'pll_robotocc.yaml')
+    gt_robotocc_results = file_utils.load_gathered_results_yaml(
+        'gt_robotocc.yaml')
 
     # Ground truth results.
-
     gt_results = file_utils.load_gathered_results_yaml('gt.yaml')
 
     # Load an empty results dictionary for checking which metrics are valid for
     # which category/against which tracking.
     empty_results = file_utils.load_empty_results_yaml()
-
-    # import yaml
-    # robot_dynamics_dir = '/mnt/data0/minghz/repos/bundlenets/cnets-data-generation/robot_dynamics/'
-    # yaml_bsdf = op.join(robot_dynamics_dir, 'bsdf.yaml')
-    # yaml_bsdf_pll = op.join(robot_dynamics_dir, 'vysics.yaml')
-    # yaml_gt = op.join(robot_dynamics_dir, 'gt.yaml')
-    # yaml_pll = op.join(robot_dynamics_dir, 'pll.yaml')
-    # yaml_empty = op.join(robot_dynamics_dir, 'empty.yaml')
-    # with open(yaml_bsdf, 'r') as f:
-    #     bsdf_robotocc_results = yaml.safe_load(f)
-    # with open(yaml_bsdf_pll, 'r') as f:
-    #     bsdf_pll_robotocc_results = yaml.safe_load(f)
-    # with open(yaml_gt, 'r') as f:
-    #     gt_results = yaml.safe_load(f)
-    # with open(yaml_pll, 'r') as f:
-    #     pll_vision_results = yaml.safe_load(f)
-    # with open(yaml_empty, 'r') as f:
-    #     empty_results = yaml.safe_load(f)
 
     change_display = False
     if remote and os.environ.get('DISPLAY') != ':99':
@@ -3494,8 +3547,8 @@ def process_plot_command(do_objects: bool, remote: bool):
         # Run Xvfb to create a virtual display.
         print("Running Xvfb (virtual display) for rendering.")
         import subprocess
-        xvfb_process = subprocess.Popen(['Xvfb', ':99', '-screen', '0',
-                                                '640x480x24'])
+        xvfb_process = subprocess.Popen(
+            ['Xvfb', ':99', '-screen', '0', '640x480x24'])
         print(f"Changing display environment from " + \
                 f"{os.environ['DISPLAY']} variable to :99")
         old_display = os.environ['DISPLAY']
@@ -3520,10 +3573,14 @@ def process_plot_command(do_objects: bool, remote: bool):
         do_objects=do_objects
     )
 
-    # results_plotter.plot_tracking_geometry_correlation([BSDF_CONVEX_OCC, BSDF_PLL_CONVEX_OCC])
-    # results_plotter.plot_tracking_geometry_diff_correlation(BSDF_CONVEX_OCC, [BSDF_CONVEX_OCC, BSDF_PLL_CONVEX_OCC])
-    # results_plotter.plot_tracking_geometry_correlation([BSDF_CONVEX, BSDF_PLL_CONVEX])
-    # results_plotter.plot_tracking_geometry_diff_correlation(BSDF_CONVEX, [BSDF_CONVEX, BSDF_PLL_CONVEX])
+    # results_plotter.plot_tracking_geometry_correlation(
+    #     [BSDF_CONVEX_OCC, BSDF_PLL_CONVEX_OCC])
+    # results_plotter.plot_tracking_geometry_diff_correlation(
+    #     BSDF_CONVEX_OCC, [BSDF_CONVEX_OCC, BSDF_PLL_CONVEX_OCC])
+    # results_plotter.plot_tracking_geometry_correlation(
+    #     [BSDF_CONVEX, BSDF_PLL_CONVEX])
+    # results_plotter.plot_tracking_geometry_diff_correlation(
+    #     BSDF_CONVEX, [BSDF_CONVEX, BSDF_PLL_CONVEX])
 
     for metric in ERROR_LABELS.keys():
         # # Tracking.
@@ -3586,27 +3643,9 @@ def process_plot_command(do_objects: bool, remote: bool):
         #             results_plotter.plot_gt_dynamics_comparison(
         #                 toss_subset, metric)
 
-        # # Geometry.
-        # if metric in \
-        #     empty_results['geometry_metrics']['convex_hull'].keys():
-        #     if PLOT_GEOMETRY:
-        #         print(f'Plotting convex hull geometry {metric}')
-        #         results_plotter.plot_geometry_error_vs_data(
-        #             'convex_hull', metric)
-        #     if PLOT_GEOMETRY_SCATTERS:
-        #         print(f'Plotting convex hull geometry scatters {metric}')
-        #         results_plotter.plot_object_geometry_scatter(
-        #         # results_plotter.plot_object_geometry_scatter_withconvex(
-        #             # 'convex_hull', metric, [BSDF_ONLY, BSDF_OCTREE, BSDF_CONVEX, BSDF_PLL_CONVEX], True)
-        #             # 'convex_hull', metric, [BSDF_CONVEX_OCC, BSDF_PLL_CONVEX_OCC], False)
-        #             'convex_hull', metric, [BSDF_ROBOTOCC, BSDF_PLL_ROBOTOCC], False)
-        #             # 'convex_hull', metric, [BSDF_CONVEX, BSDF_PLL_CONVEX], False)
-
-        metric_set = 'dynamics_prediction_metrics' if 'dynamics_prediction_metrics' in empty_results \
-                        else 'geometry_metrics'
+        # Geometry.
         if metric in \
-            empty_results[metric_set]['full_geometry'].keys():
-            # empty_results['geometry_metrics']['full_geometry'].keys():
+            empty_results['geometry_metrics']['full_geometry'].keys():
             if PLOT_GEOMETRY:
                 print(f'Plotting full geometry {metric}')
                 results_plotter.plot_geometry_error_vs_data(
@@ -3620,6 +3659,15 @@ def process_plot_command(do_objects: bool, remote: bool):
                     # 'full_geometry', metric, [BSDF_ROBOTOCC, BSDF_PLL_ROBOTOCC], False)
                     # 'convex_hull', metric, [BSDF_CONVEX, BSDF_PLL_CONVEX], False)
                     'full_geometry', metric, [BSDF_ROBOTOCC, BSDF_PLL_ROBOTOCC], False)
+
+        # Contact activation.
+        if metric == 'contact_activation_iou':
+            if PLOT_DYNAMICS:
+                print(f'Plotting contact activation IOU')
+                results_plotter.plot_contact_activation_scatter(
+                    [BSDF_ROBOTOCC, BSDF_PLL_ROBOTOCC], do_sort=True)
+                results_plotter.plot_contact_activation_scatter(
+                    [BSDF_ROBOTOCC, BSDF_PLL_ROBOTOCC], do_sort=False)
 
         ### Commented out because not all experiments are evaluated with hull_to_full
         ### and preliminary results show that hull_to_full does not outperform full_geometry.
@@ -3653,6 +3701,15 @@ def process_plot_command(do_objects: bool, remote: bool):
         #             import traceback
         #             traceback.print_exc()
 
+    # Robot dynamics prediction plots.
+    cdm = robot_dynamics_predictions.cdm_from_overall_results(
+        vysics_results=bsdf_pll_robotocc_results,
+        bsdf_results=bsdf_robotocc_results,
+        pll_results=pll_robotocc_results,
+        gt_results=gt_robotocc_results,
+        save_dir=op.join(results_plotter.plot_dir, 'robot_dynamics')
+    )
+    cdm.plot()
 
     if remote and change_display:
         # Close the virtual display.
