@@ -440,8 +440,18 @@ geometry_metrics:
     chamfer_distance: null
     f_score: null
   full_geometry:
+    volume_error: null
+    iou: null
     chamfer_distance: null
     f_score: null
   hull_to_full:
     chamfer_distance: null
     f_score: null
+
+##### Robot dynamics rollout metrics. 
+robot_dynamics_rollout_metrics:
+  contact_activation_iou: null
+  pos_rollout_error_mean: null
+  rot_rollout_error_mean: null
+  time_before_bad_pos: null
+  time_before_bad_rot: null

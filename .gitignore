@@ -24,6 +24,7 @@
 !/table_calibration/table_heights.yaml
 evaluation*
 *.sh
+!evaluation/empty_experiment_results.yaml
 
 robot_dynamics/*/*
 robot_dynamics/*.txt
