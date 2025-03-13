@@ -654,6 +654,11 @@ def add_all_robot_predictions_to_overall_results(vysics_results, bsdf_results,
     add_robot_predictions_to_overall_results(gt_dynamics_results, gt_results)
 
 def add_robot_predictions_to_overall_results(dynamics_results, add_to_results):
+    """Copy robot dynamics prediction results (which can be found under the 
+    `dynamics_prediction_metrics` key in the 
+    file_utils.robot_dynamics_dir()/{method}.yaml file, see: 
+    robot_dynamics_predictions.ConglomeratedDynamicsMetrics.export_statistics() )
+    to the overall results under the `robot_dynamics_rollout_metrics` key."""
     # Iterate over every object.
     for robotocc_obj in dynamics_results['tagless_objects'].keys():
         obj = robotocc_obj.replace('robotocc_', '')
@@ -1503,175 +1508,19 @@ class ResultsPlotter:
             filename=f'all_objs_{dynamics_metric}_bsdf_v_data_{toss_subset}' + \
                 f'_{dynamics_category}_auc', subdir='dynamics')
 
-    # TODO: temporary, eventually incorporate repeated code.
-    def plot_object_geometry_scatter_withconvex2(
-            self, hull_or_full: str, geometry_metric: str):
-        """Drawing four scatter plots, including two convex variants of BundleSDF. """
-        # Get the scale of the metric.
-        scale = METRIC_SCALING[geometry_metric]
-
-        # For now just do this for BundleSDF-PLL and BundleSDF-Only.
-        by_object_bsdf_pll = {}  #[[], []] keys objects, vals [[toss_str], [ys]]
-        by_object_bsdf_only = {}  #[[], []]
-        by_object_bsdf_convex = {}  #[[], []]
-        by_object_bsdf_convex_hull = {}
-
-        # Prepare to zip in consistent order:  BSDF-PLL, BundleSDF Only.
-        by_objects = [by_object_bsdf_pll, by_object_bsdf_only, \
-                      by_object_bsdf_convex, by_object_bsdf_convex_hull]
-        result_dicts = [self.bsdf_pll_results, self.bsdf_only_results, \
-                        self.bsdf_convex_results, self.bsdf_only_results]
-
-        # Iterate over all the approaches.
-        for i, (by_object, result_dict) in enumerate(zip(by_objects, result_dicts)):
-
-            # Iterate over all the objects.
-            all_objects = self.tagless_objects + self.tagged_objects
-            object_labels = ['tagless_objects'] * len(self.tagless_objects) + \
-                ['tagged_objects'] * len(self.tagged_objects)
-
-            # ### Only include the objects with good tracking
-            # all_objects = ['bakingbox', 'bottle', 'egg', 'oatly']
-            # object_labels = ['tagless_objects', 'tagged_objects', 'tagged_objects', 'tagless_objects']
-
-            for obj, tag_label in zip(all_objects, object_labels):
-                if tag_label not in result_dict.keys():
-                    continue
-                if obj not in result_dict[tag_label].keys():
-                    continue
-
-                by_object[obj] = {}
-
-                # Iterate over all the toss strings.
-                for trained_on, result in result_dict[tag_label][obj].items():
-                    toss_str = trained_on.split('trained_on_toss_')[-1]
-
-                    if i == 3:
-                        try:
-                            by_object[obj][toss_str] = result['geometry_metrics'][
-                                'hull_to_full'][geometry_metric] * scale
-                        except KeyError:
-                            by_object[obj][toss_str] = None
-                            print(f'  {i=} {obj=} {geometry_metric=} {trained_on=} no hull_to_full')
-                            breakpoint()
-                    else:
-                        by_object[obj][toss_str] = result['geometry_metrics'][
-                            hull_or_full][geometry_metric] * scale
-
-        # Generate the plots.
-        title = 'Chamfer Distance' if \
-            geometry_metric == 'chamfer_distance' and 'full_geometry' in hull_or_full \
-            else f'Scatter {hull_or_full.replace("_", " ")} Geometry'.title()
-        ylabel = '% object length' if geometry_metric == 'chamfer_distance' \
-            and 'full' in hull_or_full else ERROR_LABELS[geometry_metric]
-        self._do_scatter_plot_with_convex2(
-            bp_data=by_object_bsdf_pll, bo_data=by_object_bsdf_only,
-            bc_data=by_object_bsdf_convex,
-            bch_data=by_object_bsdf_convex_hull,
-            ylabel=ylabel, xlabel_txt=all_objects,
-            title=title,
-            filename=f'scatter_{geometry_metric}_v_data_{hull_or_full}_normalized_withconvex',
-            subdir='object_geometry', save_to_txt=True, normalize=True)
-        ylabel = 'Centimeters' if geometry_metric == 'chamfer_distance' \
-            and 'full' in hull_or_full else ERROR_LABELS[geometry_metric]
-        self._do_scatter_plot_with_convex2(
-            bp_data=by_object_bsdf_pll, bo_data=by_object_bsdf_only,
-            bc_data=by_object_bsdf_convex,
-            bch_data=by_object_bsdf_convex_hull,
-            ylabel=ylabel, xlabel_txt=all_objects,
-            title=title,
-            filename=f'scatter_{geometry_metric}_v_data_{hull_or_full}_true_units_withconvex_naives',
-            subdir='object_geometry', save_to_txt=True, normalize=False)
-        self._do_scatter_plot_with_convex2(
-            bp_data=by_object_bsdf_pll, bo_data=by_object_bsdf_only,
-            # bc_data=by_object_bsdf_convex,
-            # bch_data=by_object_bsdf_convex_hull,
-            ylabel=ylabel, xlabel_txt=all_objects,
-            title=title,
-            filename=f'scatter_{geometry_metric}_v_data_{hull_or_full}_true_units_withconvex',
-            subdir='object_geometry', save_to_txt=True, normalize=False)
-
-    # TODO: temporary, eventually incorporate repeated code.
-    def plot_object_geometry_scatter_withconvex(
-            self, hull_or_full: str, geometry_metric: str):
-        """Drawing three scatter plots, including BundleSDF with convexity loss. """
-        # Get the scale of the metric.
-        scale = METRIC_SCALING[geometry_metric]
-
-        # For now just do this for BundleSDF-PLL and BundleSDF-Only.
-        by_object_bsdf_pll = {}  #[[], []] keys objects, vals [[toss_str], [ys]]
-        by_object_bsdf_only = {}  #[[], []]
-        by_object_bsdf_convex = {}  #[[], []]
-
-        # Prepare to zip in consistent order:  BSDF-PLL, BundleSDF Only.
-        by_objects = [by_object_bsdf_pll, by_object_bsdf_only, by_object_bsdf_convex]
-        result_dicts = [self.bsdf_pll_convex_results, self.bsdf_only_results, self.bsdf_convex_results]
-
-        # Iterate over all the approaches.
-        for i_dict, (by_object, result_dict) in enumerate(zip(by_objects, result_dicts)):
-
-            # Iterate over all the objects.
-            all_objects = self.tagless_objects + self.tagged_objects
-            object_labels = ['tagless_objects'] * len(self.tagless_objects) + \
-                ['tagged_objects'] * len(self.tagged_objects)
-
-            for obj, tag_label in zip(all_objects, object_labels):
-                if tag_label not in result_dict.keys():
-                    continue
-                if obj not in result_dict[tag_label].keys():
-                    continue
-
-                by_object[obj] = {}
-
-                # Iterate over all the toss strings.
-                for trained_on, result in result_dict[tag_label][obj].items():
-                    toss_str = trained_on.split('trained_on_toss_')[-1]
-
-                    try:
-                        by_object[obj][toss_str] = result['geometry_metrics'][
-                            hull_or_full][geometry_metric] * scale
-                    except:
-                        print(f'Error with {obj}, {toss_str}, {hull_or_full}, {geometry_metric}')
-                        pdb.set_trace()
-                    # by_object[obj][toss_str] = result['geometry_metrics'][
-                    #     hull_or_full][geometry_metric] * scale
-
-        # Generate the plots.
-        title = 'Chamfer Distance' if \
-            geometry_metric == 'chamfer_distance' and 'full_geometry' in hull_or_full \
-            else f'Scatter {hull_or_full.replace("_", " ")} Geometry'.title()
-        ylabel = '% object length' if geometry_metric == 'chamfer_distance' \
-            and 'full' in hull_or_full else ERROR_LABELS[geometry_metric]
-        self._do_scatter_plot_with_convex(
-            bp_data=by_object_bsdf_pll, bo_data=by_object_bsdf_only, bc_data=by_object_bsdf_convex,
-            ylabel=ylabel, xlabel_txt=all_objects,
-            title=title,
-            filename=f'scatter_{geometry_metric}_v_data_{hull_or_full}_normalized_withconvex',
-            subdir='object_geometry', save_to_txt=True, normalize=True)
-        ylabel = 'Centimeters' if geometry_metric == 'chamfer_distance' \
-            and 'full' in hull_or_full else ERROR_LABELS[geometry_metric]
-        self._do_scatter_plot_with_convex(
-            bp_data=by_object_bsdf_pll, bo_data=by_object_bsdf_only, bc_data=by_object_bsdf_convex,
-            ylabel=ylabel, xlabel_txt=all_objects,
-            title=title,
-            filename=f'scatter_{geometry_metric}_v_data_{hull_or_full}_true_units_withconvex',
-            subdir='object_geometry', save_to_txt=True, normalize=False)
-
-    def plot_object_geometry_scatter(
+    def plot_object_scatter(
             self, hull_or_full: str, geometry_metric: str,
             exps: list = [BSDF_ONLY, BSDF_PLL], do_sort: bool = True):
-        if geometry_metric == 'contact_activation_iou':
-            print('Cannot handle contact activation IOU as geometry metric ' + \
-                  'anymore -- skipping.')
-            return
 
         # Get the scale of the metric.
         scale = METRIC_SCALING[geometry_metric]
 
+        # Iterate over the evaluation scopes.
         for obj_scope in ['tagged', 'all']:
             if obj_scope == 'tagged':
                 if len(self.tagged_objects) == 0:
                     continue
+            # by_objects: nested dict (exp_key -> obj -> toss_str -> metric)
             by_objects = {key: {} for key in exps}
             sort_key = exps[0] if do_sort else ''
 
@@ -1684,7 +1533,6 @@ class ResultsPlotter:
                     all_objects = self.tagged_objects
                     object_labels = ['tagged_objects']*len(self.tagged_objects)
                 elif obj_scope == 'all':
-                    # Iterate over all the objects.
                     all_objects = self.tagless_objects + self.tagged_objects
                     object_labels = \
                         ['tagless_objects']*len(self.tagless_objects) + \
@@ -1692,6 +1540,7 @@ class ResultsPlotter:
                 else:
                     raise ValueError(f'Unknown object scope {obj_scope}')
 
+                # Iterate over all the objects.
                 for obj, tag_label in zip(all_objects, object_labels):
                     if tag_label not in result_dict.keys():
                         continue
@@ -1705,11 +1554,18 @@ class ResultsPlotter:
                         result_dict[tag_label][obj].items():
                         toss_str = trained_on.split('trained_on_toss_')[-1]
 
-                        if 'dynamics_prediction_metrics' in result.keys():
+                        if geometry_metric in \
+                            result['robot_dynamics_rollout_metrics'].keys():
+
+                            plot_subdir = 'robot_dynamics'
                             by_object[obj][toss_str] = result[
-                                'dynamics_prediction_metrics'][hull_or_full][
+                                'robot_dynamics_rollout_metrics'][
                                     geometry_metric] * scale
                         else:
+                            assert geometry_metric in result[
+                                'geometry_metrics'][hull_or_full].keys()
+                            
+                            plot_subdir = 'object_geometry'
                             by_object[obj][toss_str] = result[
                                 'geometry_metrics'][hull_or_full][
                                     geometry_metric] * scale
@@ -1744,7 +1600,7 @@ class ResultsPlotter:
                 xlabel_txt=all_objects, title=title,
                 # filename=f'scatter_{geometry_metric}_v_data_allobj_{hull_or_full}_normalized',
                 filename=filename,
-                subdir='object_geometry', save_to_txt=True, normalize=True,
+                subdir=plot_subdir, save_to_txt=True, normalize=True,
                 show_toss_id=True, )
                 # toss_id_filter={'all': ['1','2','3','4','5']})
 
@@ -1761,68 +1617,8 @@ class ResultsPlotter:
                 data_dict=by_objects, exp_key_list=exps, sort_key=sort_key, ylabel=ylabel,
                 xlabel_txt=all_objects, title=title,
                 filename=filename,
-                subdir='object_geometry', save_to_txt=True, normalize=False, show_toss_id=True,)
+                subdir=plot_subdir, save_to_txt=True, normalize=False, show_toss_id=True,)
                 # toss_id_filter={'all': ['1','2','3','4','5']})
-
-    def plot_contact_activation_scatter(
-            self, exps: list = [BSDF_ONLY, BSDF_PLL], do_sort: bool = True):
-        # Get the scale of the metric.
-        scale = METRIC_SCALING['contact_activation_iou']
-
-        for obj_scope in ['tagged', 'all']:
-            if obj_scope == 'tagged':
-                if len(self.tagged_objects) == 0:
-                    continue
-            by_objects = {key: {} for key in exps}
-            sort_key = exps[0] if do_sort else ''
-
-            # Iterate over all the approaches.
-            for exp_key in exps:
-                by_object = by_objects[exp_key]
-                result_dict = self.results[exp_key]
-
-                if obj_scope == 'tagged':
-                    all_objects = self.tagged_objects
-                    object_labels = ['tagged_objects']*len(self.tagged_objects)
-                elif obj_scope == 'all':
-                    # Iterate over all the objects.
-                    all_objects = self.tagless_objects + self.tagged_objects
-                    object_labels = \
-                        ['tagless_objects']*len(self.tagless_objects) + \
-                        ['tagged_objects']*len(self.tagged_objects)
-                else:
-                    raise ValueError(f'Unknown object scope {obj_scope}')
-
-                for obj, tag_label in zip(all_objects, object_labels):
-                    if tag_label not in result_dict.keys():
-                        continue
-                    if obj not in result_dict[tag_label].keys():
-                        continue
-
-                    by_object[obj] = {}
-
-                    # Iterate over all the toss strings.
-                    for trained_on, result in \
-                        result_dict[tag_label][obj].items():
-                        toss_str = trained_on.split('trained_on_toss_')[-1]
-
-                        if 'robot_dynamics_rollout_metrics' in result.keys():
-                            by_object[obj][toss_str] = \
-                                result['robot_dynamics_rollout_metrics'][
-                                    'contact_activation_iou'] * scale
-
-            # Generate the plots.
-            title = 'Temporal IoU of Contact Activation \u2191'
-            ylabel = ERROR_LABELS['contact_activation_iou']
-            filename = f'scatter_contact_activation_iou_{obj_scope}'
-            filename += '_sorted' if do_sort else ''
-
-            self._do_scatter_plot(
-                data_dict=by_objects, exp_key_list=exps, sort_key=sort_key,
-                ylabel=ylabel, xlabel_txt=sorted(all_objects), title=title,
-                filename=filename,
-                subdir='contact_activation', save_to_txt=True, normalize=False,
-                show_toss_id=True)
 
     def plot_gt_dynamics_comparison(
             self, toss_subset: str, dynamics_metric: str):
@@ -2372,327 +2168,6 @@ class ResultsPlotter:
                 print(f'Saved {filename}')
                 plt.close()
 
-    # TODO: temporary, eventually incorporate repeated code.
-    def _do_scatter_plot_with_convex2(self, bp_data: list = None,
-                         bo_data: list = None, bc_data: list = None,
-                         bch_data: list = None,
-                         ylabel: str = '', xlabel_txt: str = '',
-                         title: str = '', filename: str = '', subdir: str = '',
-                         save_to_txt: bool = False, normalize: bool = False):
-        assert bp_data is not None and bo_data is not None #and bc_data is not None
-
-        # Make a plot for all the toss configurations.
-        toss_groups = [['1', '2', '3', '4', '5']] #, ['1-2'], ['1-3'], ['1-4'], ['1-5']]
-        for num_tosses, toss_strs in enumerate(toss_groups):
-            num_tosses += 1   # Use 1-indexing.
-
-            # Get longer lists repeating objects in groups, e.g. cube, cube, ...
-            # x_txts = [obj for obj in xlabel_txt for _ in toss_strs]
-            try:
-                bp_ys = [bp_data[obj][toss_str] for obj in xlabel_txt for toss_str \
-                    in toss_strs]
-            except:
-                pdb.set_trace()
-            bo_ys = [bo_data[obj][toss_str] for obj in xlabel_txt for toss_str \
-                in toss_strs]
-
-            if bc_data is not None:
-                bc_ys = [bc_data[obj][toss_str] for obj in xlabel_txt for toss_str \
-                    in toss_strs]
-
-            if bch_data is not None:
-                bch_ys = [bch_data[obj][toss_str] for obj in xlabel_txt for toss_str \
-                    in toss_strs]
-
-            # Get in (n_object, n_toss_groups) 2D arrays.
-            bp_ys = np.array(bp_ys).reshape(-1, len(toss_strs))
-            bo_ys = np.array(bo_ys).reshape(-1, len(toss_strs))
-            bc_ys = np.zeros_like(bp_ys)
-            if bc_data is not None:
-                bc_ys = np.array(bc_ys).reshape(-1, len(toss_strs))
-
-            bch_ys = np.zeros_like(bp_ys)
-            if bch_data is not None:
-                bch_ys = np.array(bch_ys).reshape(-1, len(toss_strs))
-
-            # Convert the data into % of normalized units.
-            if normalize:
-                for i, obj_name in enumerate(xlabel_txt):
-                    bp_ys[i, :] /= CM_LENGTH_SCALES_BY_OBJ[obj_name]
-                    bp_ys[i, :] *= 100
-                    bo_ys[i, :] /= CM_LENGTH_SCALES_BY_OBJ[obj_name]
-                    bo_ys[i, :] *= 100
-                    if bc_data is not None:
-                        bc_ys[i, :] /= CM_LENGTH_SCALES_BY_OBJ[obj_name]
-                        bc_ys[i, :] *= 100
-                    if bch_data is not None:
-                        bch_ys[i, :] /= CM_LENGTH_SCALES_BY_OBJ[obj_name]
-                        bch_ys[i, :] *= 100
-
-            bp_ys_means = bp_ys.mean(axis=1).tolist()
-            bo_ys_means = bo_ys.mean(axis=1).tolist()
-            bc_ys_means = np.zeros_like(bp_ys_means).tolist()
-            if bc_data is not None:
-                bc_ys_means = bc_ys.mean(axis=1).tolist()
-            bch_ys_means = np.zeros_like(bp_ys_means).tolist()
-            if bch_data is not None:
-                bch_ys_means = bch_ys.mean(axis=1).tolist()
-
-            bp_ys = bp_ys.tolist()
-            bo_ys = bo_ys.tolist()
-            bc_ys = bc_ys.tolist()
-            bch_ys = bch_ys.tolist()
-
-            # Try sorting all the data so the average BundleSDF-only results are
-            # in increasing order.
-            combined = list(zip(
-                xlabel_txt, bp_ys_means, bo_ys_means, bc_ys_means, bch_ys_means,
-                bp_ys, bo_ys, bc_ys, bch_ys))
-            sorted_combined = sorted(combined, key=lambda x: x[2])
-            xlabel_txt, bp_ys_means, bo_ys_means, bc_ys_means, bch_ys_means, \
-                bp_ys, bo_ys, bc_ys, bch_ys = zip(*sorted_combined)
-
-            xs_means = np.array([i for i in range(len(xlabel_txt))])
-            xs = np.array([i for i in range(len(xlabel_txt)) for _ in \
-                           toss_strs])
-            bp_ys = np.array(bp_ys).reshape(-1).tolist()
-            bo_ys = np.array(bo_ys).reshape(-1).tolist()
-            if bc_ys is not None:
-                bc_ys = np.array(bc_ys).reshape(-1).tolist()
-            if bch_ys is not None:
-                bch_ys = np.array(bch_ys).reshape(-1).tolist()
-
-            fig = plt.figure()
-            ax = plt.gca()
-
-            if save_to_txt:
-                data_str = ''
-                data_str += f'NORMALIZING? --> {normalize=}\n'
-                data_str += f'{xlabel_txt=}'
-
-            # Vysics.
-            prefixes = [''] + ['_']*(len(xs_means)-1)
-            for i in range(len(xs_means)):
-                plt.plot([i-0.38, i+0.38], [bp_ys_means[i], bp_ys_means[i]],
-                         linestyle='-', linewidth=LINEWIDTH*2,
-                         color=BSDF_PLL_COLOR, label=prefixes[i]+BSDF_PLL_LABEL)
-            plt.scatter(xs+0.3, bp_ys, s=MARKERSIZE, color=BSDF_PLL_COLOR,
-                        label='_')
-            if save_to_txt:
-                data_str += f'\nbp_data:\n{bp_ys}'
-
-            # BundleSDF only.
-            for i in range(len(xs_means)):
-                plt.plot([i-0.38, i+0.38], [bo_ys_means[i], bo_ys_means[i]],
-                         linestyle='-', linewidth=LINEWIDTH*2,
-                         color=BSDF_ONLY_COLOR,
-                         label=prefixes[i]+BSDF_ONLY_LABEL)
-            plt.scatter(xs-0.3, bo_ys, s=MARKERSIZE, color=BSDF_ONLY_COLOR,
-                        label='_')
-            if save_to_txt:
-                data_str += f'\nbo_data:\n{bo_ys}'
-
-            # BundleSDF convex.
-            if bc_data is not None:
-                for i in range(len(xs_means)):
-                    plt.plot([i-0.38, i+0.38], [bc_ys_means[i], bc_ys_means[i]],
-                            linestyle='-', linewidth=LINEWIDTH*2,
-                            color=BSDF_CONVEX_COLOR,
-                            label=prefixes[i]+BSDF_CONVEX_LABEL)
-                plt.scatter(xs-0.1, bc_ys, s=MARKERSIZE, color=BSDF_CONVEX_COLOR,
-                            label='_')
-                if save_to_txt:
-                    data_str += f'\nbc_data:\n{bc_ys}'
-
-            # BundleSDF convex hull.
-            if bch_data is not None:
-                for i in range(len(xs_means)):
-                    plt.plot([i-0.38, i+0.38], [bch_ys_means[i], bch_ys_means[i]],
-                            linestyle='-', linewidth=LINEWIDTH*2,
-                            color=BSDF_CONVEX_HULL_COLOR,
-                            label=prefixes[i]+BSDF_CONVEX_HULL_LABEL)
-                plt.scatter(xs+0.1, bch_ys, s=MARKERSIZE,
-                            color=BSDF_CONVEX_HULL_COLOR,
-                            label='_')
-                if save_to_txt:
-                    data_str += f'\nbch_data:\n{bch_ys}'
-
-
-            plt.xticks(range(len(xlabel_txt)), xlabel_txt, rotation=45,
-                       ha='right', fontsize=20)
-
-            if normalize:
-                ylabel = ylabel.replace('[cm]', '[% length]')
-            plt.ylabel(ylabel)
-            plt.title(title)
-            plt.legend()
-
-            self._beautify_plot(fig, ax, xs_means, False, scatter=True,
-                                normalized=normalize)
-
-            plot_filename = filename.split('.')[0]
-            plot_filename += f'_{num_tosses}.png'
-            file_utils.assure_created(op.join(self.plot_dir, subdir))
-            fig_path = op.join(self.plot_dir, subdir, plot_filename)
-            fig.savefig(fig_path, dpi=100)
-            plt.close()
-
-            # Save the string to a text file as well.
-            if save_to_txt:
-                str_filepath = fig_path.replace('.png', '.txt')
-                with open(str_filepath, 'w') as txt_file:
-                    txt_file.write(data_str)
-                print(f'Wrote to {str_filepath}')
-
-    # TODO: temporary, eventually incorporate repeated code.
-    def _do_scatter_plot_with_convex(self, bp_data: list = None,
-                         bo_data: list = None, bc_data: list = None,
-                         ylabel: str = '', xlabel_txt: str = '',
-                         title: str = '', filename: str = '', subdir: str = '',
-                         save_to_txt: bool = False, normalize: bool = False):
-        assert bp_data is not None and bo_data is not None and bc_data is not None
-
-        # Make a plot for all the toss configurations.
-        toss_groups = [['1', '2', '3', '4', '5']] #, ['1-2'], ['1-3'], ['1-4'], ['1-5']]
-        for num_tosses, toss_strs in enumerate(toss_groups):
-            num_tosses += 1   # Use 1-indexing.
-
-            # Get longer lists repeating objects in groups, e.g. cube, cube, ...
-            # x_txts = [obj for obj in xlabel_txt for _ in toss_strs]
-            try:
-                bp_ys = [bp_data[obj][toss_str] for obj in xlabel_txt for toss_str \
-                    in toss_strs]
-            except:
-                pdb.set_trace()
-            bo_ys = [bo_data[obj][toss_str] for obj in xlabel_txt for toss_str \
-                in toss_strs]
-
-            bc_ys = [bc_data[obj][toss_str] for obj in xlabel_txt for toss_str \
-                in toss_strs]
-
-            # Get in (n_object, n_toss_groups) 2D arrays.
-            bp_ys = np.array(bp_ys).reshape(-1, len(toss_strs))
-            bo_ys = np.array(bo_ys).reshape(-1, len(toss_strs))
-            bc_ys = np.array(bc_ys).reshape(-1, len(toss_strs))
-
-            # Convert the data into % of normalized units.
-            if normalize:
-                for i, obj_name in enumerate(xlabel_txt):
-                    bp_ys[i, :] /= CM_LENGTH_SCALES_BY_OBJ[obj_name]
-                    bp_ys[i, :] *= 100
-                    bo_ys[i, :] /= CM_LENGTH_SCALES_BY_OBJ[obj_name]
-                    bo_ys[i, :] *= 100
-                    bc_ys[i, :] /= CM_LENGTH_SCALES_BY_OBJ[obj_name]
-                    bc_ys[i, :] *= 100
-
-            bp_ys_means = bp_ys.mean(axis=1).tolist()
-            bo_ys_means = bo_ys.mean(axis=1).tolist()
-            bc_ys_means = bc_ys.mean(axis=1).tolist()
-
-            bp_ys = bp_ys.tolist()
-            bo_ys = bo_ys.tolist()
-            bc_ys = bc_ys.tolist()
-
-            # Try sorting all the data so the average BundleSDF-only results are
-            # in increasing order.
-            combined = list(zip(
-                xlabel_txt, bp_ys_means, bo_ys_means, bc_ys_means,
-                bp_ys, bo_ys, bc_ys))
-            sorted_combined = sorted(combined, key=lambda x: x[2])
-            xlabel_txt, bp_ys_means, bo_ys_means, bc_ys_means, \
-                bp_ys, bo_ys, bc_ys = zip(*sorted_combined)
-
-            xs_means = np.array([i for i in range(len(xlabel_txt))])
-            xs = np.array([i for i in range(len(xlabel_txt)) for _ in \
-                           toss_strs])
-            bp_ys = np.array(bp_ys).reshape(-1).tolist()
-            bo_ys = np.array(bo_ys).reshape(-1).tolist()
-            bc_ys = np.array(bc_ys).reshape(-1).tolist()
-
-            fig = plt.figure()
-            ax = plt.gca()
-
-            if save_to_txt:
-                data_str = ''
-                data_str += f'NORMALIZING? --> {normalize=}\n'
-                data_str += f'{xlabel_txt=}'
-
-            # Vysics.
-            # plt.scatter(xs_means+0.2, bp_ys_means, s=MARKERSIZE*2,
-            #     color=BSDF_PLL_COLOR, label=BSDF_PLL_LABEL)
-            prefixes = [''] + ['_']*(len(xs_means)-1)
-            for i in range(len(xs_means)):
-                plt.plot([i-0.38, i+0.38], [bp_ys_means[i], bp_ys_means[i]],
-                         linestyle='-', linewidth=LINEWIDTH*2,
-                         color=BSDF_PLL_COLOR, label=prefixes[i]+BSDF_PLL_LABEL)
-            # plt.plot(xs_means, bp_ys_means, '.', linestyle='-',
-            #     markersize=MARKERSIZE/3, linewidth=LINEWIDTH,
-            #     color=BSDF_PLL_COLOR, label=BSDF_PLL_LABEL)
-            plt.scatter(xs+0.2, bp_ys, s=MARKERSIZE, color=BSDF_PLL_COLOR,
-                        label='_')
-            if save_to_txt:
-                data_str += f'\nbp_data:\n{bp_ys}'
-
-            # BundleSDF only.
-            # plt.scatter(xs_means-0.2, bo_ys_means, s=MARKERSIZE*2,
-            #     color=BSDF_ONLY_COLOR, label=BSDF_ONLY_LABEL)
-            # plt.plot(xs_means, bo_ys_means, '.', linestyle='-',
-            #     markersize=MARKERSIZE/3, linewidth=LINEWIDTH,
-            #     color=BSDF_ONLY_COLOR,
-            #     label=BSDF_ONLY_LABEL)
-            for i in range(len(xs_means)):
-                plt.plot([i-0.38, i+0.38], [bo_ys_means[i], bo_ys_means[i]],
-                         linestyle='-', linewidth=LINEWIDTH*2,
-                         color=BSDF_ONLY_COLOR,
-                         label=prefixes[i]+BSDF_ONLY_LABEL)
-            plt.scatter(xs-0.2, bo_ys, s=MARKERSIZE, color=BSDF_ONLY_COLOR,
-                        label='_')
-            if save_to_txt:
-                data_str += f'\nbo_data:\n{bo_ys}'
-
-            # BundleSDF convex.
-            # plt.scatter(xs_means-0.2, bc_ys_means, s=MARKERSIZE*2,
-            #     color=BSDF_CONVEX_COLOR, label=BSDF_CONVEX_LABEL)
-            # plt.plot(xs_means, bc_ys_means, '.', linestyle='-',
-            #     markersize=MARKERSIZE/3, linewidth=LINEWIDTH,
-            #     color=BSDF_CONVEX_COLOR,
-            #     label=BSDF_CONVEX_LABEL)
-            for i in range(len(xs_means)):
-                plt.plot([i-0.38, i+0.38], [bc_ys_means[i], bc_ys_means[i]],
-                         linestyle='-', linewidth=LINEWIDTH*2,
-                         color=BSDF_CONVEX_COLOR,
-                         label=prefixes[i]+BSDF_CONVEX_LABEL)
-            plt.scatter(xs, bc_ys, s=MARKERSIZE, color=BSDF_CONVEX_COLOR,
-                        label='_')
-            if save_to_txt:
-                data_str += f'\nbc_data:\n{bc_ys}'
-
-            plt.xticks(range(len(xlabel_txt)), xlabel_txt, rotation=45,
-                       ha='right', fontsize=20)
-
-            if normalize:
-                ylabel = ylabel.replace('[cm]', '[% length]')
-            plt.ylabel(ylabel)
-            plt.title(title)
-            plt.legend()
-
-            self._beautify_plot(fig, ax, xs_means, False, scatter=True,
-                                normalized=normalize)
-
-            plot_filename = filename.split('.')[0]
-            plot_filename += f'_{num_tosses}.png'
-            file_utils.assure_created(op.join(self.plot_dir, subdir))
-            fig_path = op.join(self.plot_dir, subdir, plot_filename)
-            fig.savefig(fig_path, dpi=100)
-            plt.close()
-
-            # Save the string to a text file as well.
-            if save_to_txt:
-                str_filepath = fig_path.replace('.png', '.txt')
-                with open(str_filepath, 'w') as txt_file:
-                    txt_file.write(data_str)
-                print(f'Wrote to {str_filepath}')
-
     def _do_scatter_plot(self, data_dict: dict = None, exp_key_list: list = [],
                         sort_key: str = '', ylabel: str = '', xlabel_txt: str = '',
                         title: str = '', filename: str = '', subdir: str = '',
@@ -2702,7 +2177,8 @@ class ResultsPlotter:
         Modified scatter plot function supporting different toss IDs per object.
 
         Args:
-            data_dict: Dictionary containing experimental data
+            data_dict: Nested dictionary: {exp_key: {object_name: {toss_id: value}}}
+            sort_key:  experiment key to sort the objects by average performance of tosses. 
             toss_id_filter: Dictionary specifying which toss IDs to include for each object.
                         Format: {'object_name': ['1', '2'], 'all': ['1', '2', '3']}
                         If None, use all available toss IDs for each object
@@ -2717,7 +2193,7 @@ class ResultsPlotter:
 
         n_exp = len(data_dict)
 
-        # Helper function to get toss IDs for an object
+        # Get all toss IDs for an object filtered by the toss_id_filter
         def get_toss_ids_for_object(obj_name, data):
             if toss_id_filter is None:
                 # Use all available toss IDs for this object
@@ -2776,6 +2252,9 @@ class ResultsPlotter:
 
         # Handle sorting if requested
         if sort_key != '':
+            # Use ys_means[sort_key], which is a list of the mean performance of 
+            # all tosses of each object in the sort_key experiment, to sort the objects.
+            # All experiments' lists (ys_means[exp]) will be sorted in the same order.
             ys_list = []
             ys_means_list = []
             sort_key_i = None
@@ -3652,54 +3131,28 @@ def process_plot_command(do_objects: bool, remote: bool):
                     'full_geometry', metric)
             if PLOT_GEOMETRY_SCATTERS:
                 print(f'Plotting full geometry geometry scatters {metric}')
-                results_plotter.plot_object_geometry_scatter(
-                # results_plotter.plot_object_geometry_scatter_withconvex(
+                results_plotter.plot_object_scatter(
                     # 'full_geometry', metric, [BSDF_ONLY, BSDF_OCTREE, BSDF_CONVEX, BSDF_PLL_CONVEX], True)
                     # 'full_geometry', metric, [BSDF_CONVEX_OCC, BSDF_PLL_CONVEX_OCC], False)
                     # 'full_geometry', metric, [BSDF_ROBOTOCC, BSDF_PLL_ROBOTOCC], False)
                     # 'convex_hull', metric, [BSDF_CONVEX, BSDF_PLL_CONVEX], False)
                     'full_geometry', metric, [BSDF_ROBOTOCC, BSDF_PLL_ROBOTOCC], False)
 
-        # Contact activation.
-        if metric == 'contact_activation_iou':
-            if PLOT_DYNAMICS:
-                print(f'Plotting contact activation IOU')
-                results_plotter.plot_contact_activation_scatter(
-                    [BSDF_ROBOTOCC, BSDF_PLL_ROBOTOCC], do_sort=True)
-                results_plotter.plot_contact_activation_scatter(
-                    [BSDF_ROBOTOCC, BSDF_PLL_ROBOTOCC], do_sort=False)
-
-        ### Commented out because not all experiments are evaluated with hull_to_full
+        ### hull_to_full not plotted because not all experiments are evaluated with hull_to_full
         ### and preliminary results show that hull_to_full does not outperform full_geometry.
-        # if metric in \
-        #     empty_results['geometry_metrics']['hull_to_full'].keys():
-        #     if PLOT_GEOMETRY:
-        #         print(f'Plotting predicted hull vs full gt geometry {metric}')
-        #         results_plotter.plot_geometry_error_vs_data(
-        #             'hull_to_full', metric)
-        #     if PLOT_GEOMETRY_SCATTERS:
-        #         print(f'Plotting predicted hull vs full gt geometry ' + \
-        #               f'scatters {metric}')
-        #         # results_plotter.plot_object_geometry_scatter(
-        #         results_plotter.plot_object_geometry_scatter_withconvex(
-        #             'hull_to_full', metric)
 
-        # if metric in \
-        #     empty_results['geometry_metrics']['full_geometry'].keys() and \
-        #     metric in empty_results['geometry_metrics']['hull_to_full'].keys():
-        #     if PLOT_GEOMETRY_SCATTERS:
-        #         try:
-        #             print(f'Plotting full geometry (with hull_to_full) ' + \
-        #                   f'geometry scatters {metric}')
-        #             # results_plotter.plot_object_geometry_scatter(
-        #             results_plotter.plot_object_geometry_scatter_withconvex2(
-        #                 'full_geometry', metric)
-        #         except Exception as e:
-        #             print(f'--> ERROR')
-        #             print(f'--> {e}')
-        #             # print the stack trace
-        #             import traceback
-        #             traceback.print_exc()
+        # Dynamics.
+        if metric in \
+            empty_results['robot_dynamics_rollout_metrics'].keys():
+            if PLOT_DYNAMICS:
+                print(f'Plotting full geometry dynamics scatters {metric}')
+                results_plotter.plot_object_scatter(
+                    # 'full_geometry', metric, [BSDF_ONLY, BSDF_OCTREE, BSDF_CONVEX, BSDF_PLL_CONVEX], True)
+                    # 'full_geometry', metric, [BSDF_CONVEX_OCC, BSDF_PLL_CONVEX_OCC], False)
+                    # 'full_geometry', metric, [BSDF_ROBOTOCC, BSDF_PLL_ROBOTOCC], False)
+                    # 'convex_hull', metric, [BSDF_CONVEX, BSDF_PLL_CONVEX], False)
+                    'full_geometry', metric, [BSDF_ROBOTOCC, BSDF_PLL_ROBOTOCC], False)
+
 
     # Robot dynamics prediction plots.
     cdm = robot_dynamics_predictions.cdm_from_overall_results(
