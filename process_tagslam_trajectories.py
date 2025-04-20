@@ -116,7 +116,7 @@ class TagSLAMTrajectoryConverter:
         self.end_frames = math_utils.convert_relative_frames_to_absolute(
             relative_end_frames, self.tagslam_full_times, start_ros_times)
 
-    def _load_poses(self) -> None:
+    def _load_poses(self, load_pose_graph_opt_poses=False) -> None:
         """Load the timestamped poses reported from TagSLAM, BundleSDF, and the
         Franka, saving the results in attributes:
             - self.tagslam_full_times (only if not self.bsdf_only)
@@ -138,7 +138,7 @@ class TagSLAMTrajectoryConverter:
         BundleSDF and are timestamped according to the BundleSDF times, which
         come from the bundlesdf_timestamps.txt file.
         """
-        self._load_bundlesdf_poses()
+        self._load_bundlesdf_poses(load_pose_graph_opt_poses)
         self._load_bundlesdf_keyframe_poses()
 
         print(f'\nTarget frame rate: {self.frame_rate}\n')
@@ -208,7 +208,7 @@ class TagSLAMTrajectoryConverter:
         self.tagslam_b_full_poses = math_utils.pll_to_xyz_xyzw_format(
             tagslam_b_full_states_pll[:, :7])
 
-    def _load_bundlesdf_poses(self) -> None:
+    def _load_bundlesdf_poses(self, load_pose_graph_opt_poses=False) -> None:
         """Load all the poses reported by BundleSDF.  Store these in one or two
         formats:  of the BundleSDF body origin in world frame, and if not
         self.bsdf_only, also of the TagSLAM body origin in world frame
@@ -226,9 +226,21 @@ class TagSLAMTrajectoryConverter:
         if self.bsdf_offset_frames > 1:
             bundlesdf_times = bundlesdf_times[self.bsdf_offset_frames-1:]
 
+        if load_pose_graph_opt_poses:
+            frame_tfs = \
+            file_utils.load_optimized_allframe_poses_from_nerf_results(
+                dataset=self.bsdf_vision_asset,
+                cycle_iteration=self.cycle_iteration,
+                tracking_bundlesdf_id=self.tracking_bundlesdf_id,
+                nerf_bundlesdf_id=self.nerf_bundlesdf_id
+            )
+
         # Add 1 for range bounds because BundleSDF poses are 1-indexed.
         for i in range(1, bundlesdf_times.shape[0] + 1):
-            trans_mat = np.loadtxt(op.join(self.bundlesdf_dir, "%04i.txt" % i))
+            if load_pose_graph_opt_poses:
+                trans_mat = frame_tfs[i-1]
+            else:
+                trans_mat = np.loadtxt(op.join(self.bundlesdf_dir, "%04i.txt" % i))
             trans_mat_b = math_utils.camera_to_world(
                 trans_mat, translation=self.cam_trans,
                 axis_vec=self.cam_rot_axis_angle)

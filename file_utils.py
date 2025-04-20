@@ -1074,6 +1074,25 @@ def load_optimized_keyframe_poses_from_nerf_results(
 
     return keyframes_ob_in_cam
 
+def load_optimized_allframe_poses_from_nerf_results(
+        dataset: str, cycle_iteration: int, tracking_bundlesdf_id: str,
+        nerf_bundlesdf_id: str) -> np.ndarray:
+    """While BundleSDF trains the NeRF model, it produces optimized poses for
+    all frames.  This function loads these optimized poses from the
+    NeRF results directory, converting them to the standard ob_in_cam format."""
+    nerf_results_dir = bundlesdf_nerf_results_dir(
+        dataset=dataset, cycle_iteration=cycle_iteration,
+        tracking_bundlesdf_id=tracking_bundlesdf_id,
+        nerf_bundlesdf_id=nerf_bundlesdf_id
+    )
+    keyframe_data = np.loadtxt(
+        op.join(nerf_results_dir, 'poses_all_frame_after_nerf.txt'))
+
+    # The keyframe data is of size (4*frames, 4), where each group of 4
+    # rows is a 4x4 homogeneous transform.  Convert this to (n_frames, 4, 4).
+    keyframe_tfs = keyframe_data.reshape(-1, 4, 4)
+
+    return keyframe_tfs
 
 """ROS Bag utilities."""
 def get_depth_bag_filename(rosbag_number: int) -> str:

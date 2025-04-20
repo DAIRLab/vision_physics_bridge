@@ -84,7 +84,8 @@ class TrajectoryConverterBundleSDFToPLL(TagSLAMTrajectoryConverter):
                  cam_rot_axis_angle: np.ndarray, frame_rate: int,
                  z_table: float, relative_start_frames: list,
                  relative_end_frames: list, start_ros_times: list,
-                 plot: bool = False, bsdf_offset_frames: int = 1) -> None:
+                 plot: bool = False, bsdf_offset_frames: int = 1,
+                 load_pose_graph_opt_poses: bool = False) -> None:
         """Prepare for processing pose data from TagSLAM and BundleSDF.
 
         Args:
@@ -144,8 +145,9 @@ class TrajectoryConverterBundleSDFToPLL(TagSLAMTrajectoryConverter):
 
         self._set_up_directories()
 
+        self.load_pose_graph_opt_poses = load_pose_graph_opt_poses
         # Load the full pose trajectories from TagSLAM and BundleSDF.
-        self._load_poses()
+        self._load_poses(self.load_pose_graph_opt_poses)
 
         # Compute the absolute start and end frames for each toss.
         self._get_absolute_frames(
@@ -168,7 +170,7 @@ class TrajectoryConverterBundleSDFToPLL(TagSLAMTrajectoryConverter):
             self.start_frames = self.start_frames - self.bsdf_offset_frames + 1
             self.end_frames = self.end_frames - self.bsdf_offset_frames + 1
 
-    def _load_poses(self) -> None:
+    def _load_poses(self, load_pose_graph_opt_poses=False) -> None:
         """Load the timestamped poses reported from TagSLAM, BundleSDF, and the
         Franka, saving the results in attributes:
             - self.tagslam_full_times (only if not self.bsdf_only)
@@ -196,7 +198,7 @@ class TrajectoryConverterBundleSDFToPLL(TagSLAMTrajectoryConverter):
         running BundleSDF and are timestamped according to the BundleSDF times,
         which come from the bundlesdf_timestamps.txt file.
         """
-        super()._load_poses()
+        super()._load_poses(load_pose_graph_opt_poses)
 
         # Handle robot states.
         if self.has_robot_interactions:
@@ -1334,10 +1336,13 @@ class GeometryConverterBundleSDFToPLL:
 @click.option('--gt-shape',
               is_flag=True,
               help="whether to use the ground truth shape.")
-
+@click.option('--load-pose-graph-opt-poses', '-pgo', 
+                is_flag=True,
+                help="whether to load poses from the pose graph optimization.")
 def main_command(vision_asset: str, bundlesdf_id: str, nerf_bundlesdf_id: str,
                  cycle_iteration: int, bsdf_only: bool, make_videos: bool,
-                 remote: bool, show: bool, offset_frames: int, gt_shape: bool):
+                 remote: bool, show: bool, offset_frames: int, gt_shape: bool,
+                 load_pose_graph_opt_poses: bool) -> None:
     # First decode the system and start/end tosses from the provided asset
     # directory.
     assert cycle_iteration > 0, f'Invalid cycle iteration: {cycle_iteration}.'
@@ -1430,7 +1435,8 @@ def main_command(vision_asset: str, bundlesdf_id: str, nerf_bundlesdf_id: str,
         end_toss=end_toss, object=object, cycle_iteration=cycle_iteration,
         bsdf_only=bsdf_only, cam_trans=cam_trans,
         cam_rot_axis_angle=cam_rot_axis_angle, frame_rate=30, z_table=z_table,
-        plot=show, bsdf_offset_frames=offset_frames,
+        plot=show, bsdf_offset_frames=offset_frames, 
+        load_pose_graph_opt_poses=load_pose_graph_opt_poses,
     )
     traj_converter.do_process()
     traj_converter.plot_trajectory(full_trajectory=True)

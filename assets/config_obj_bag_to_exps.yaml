@@ -1,0 +1,228 @@
+bakingbox:
+  100:
+  - 1
+  - 10
+bottle:
+  43:
+  - 1
+  - 10
+box:
+  57:
+  - 1
+  - 10
+burger:
+  101:
+  - 1
+  - 10
+cardboard:
+  102:
+  - 1
+  - 10
+chocolate:
+  103:
+  - 1
+  - 10
+cream:
+  104:
+  - 1
+  - 10
+croc:
+  105:
+  - 1
+  - 10
+crushedcan:
+  106:
+  - 1
+  - 10
+cube:
+  8:
+  - 11
+  - 20
+  10:
+  - 1
+  - 10
+  12:
+  - 21
+  - 30
+cube_hand:
+  50:
+  - 1
+  - 10
+duck:
+  107:
+  - 1
+  - 10
+egg:
+  72:
+  - 1
+  - 10
+gallon:
+  108:
+  - 1
+  - 10
+greencan:
+  109:
+  - 1
+  - 10
+half:
+  62:
+  - 1
+  - 10
+hotdog:
+  110:
+  - 1
+  - 10
+icetray:
+  111:
+  - 1
+  - 10
+milk:
+  66:
+  - 1
+  - 10
+mug:
+  112:
+  - 1
+  - 10
+napkin:
+  51:
+  - 1
+  - 10
+  53:
+  - 11
+  - 13
+oatly:
+  113:
+  - 1
+  - 10
+pinkcan:
+  114:
+  - 1
+  - 10
+prism:
+  68:
+  - 1
+  - 10
+robot_bakingbox:
+  202:
+  - 1
+  - 12
+robot_bakingbox_sticky_A:
+  201:
+  - 1
+  - 2
+robot_greencan:
+  211:
+  - 1
+  - 11
+robot_milk:
+  213:
+  - 1
+  - 11
+robot_oatly:
+  217:
+  - 1
+  - 50
+robot_stapler:
+  219:
+  - 1
+  - 19
+robotocc_bakingbox:
+  324:
+  - 1
+  - 8
+  325:
+  - 9
+  - 11
+  330:
+  - 12
+  - 15
+robotocc_bottle:
+  332:
+  - 1
+  - 7
+robotocc_cardboard:
+  301:
+  - 1
+  - 7
+  304:
+  - 8
+  - 14
+robotocc_egg:
+  312:
+  - 1
+  - 6
+robotocc_milk:
+  305:
+  - 6
+  - 6
+  308:
+  - 1
+  - 5
+  311:
+  - 7
+  - 7
+  313:
+  - 8
+  - 8
+robotocc_oatly:
+  302:
+  - 1
+  - 6
+  303:
+  - 7
+  - 12
+robotocc_styrofoam:
+  306:
+  - 1
+  - 6
+  307:
+  - 7
+  - 10
+robotocc_toblerone:
+  309:
+  - 1
+  - 5
+  310:
+  - 6
+  - 11
+robotoccdual_bakingbox:
+  319:
+  - 1
+  - 7
+robotoccdual_bottle:
+  320:
+  - 1
+  - 7
+robotoccdual_milk:
+  318:
+  - 1
+  - 4
+robotoccdual_oatly:
+  316:
+  - 1
+  - 5
+robotoccmove_styrofoam:
+  317:
+  - 1
+  - 6
+robotoccmove_toblerone:
+  314:
+  - 1
+  - 7
+stapler:
+  115:
+  - 1
+  - 10
+styrofoam:
+  116:
+  - 1
+  - 10
+toblerone:
+  59:
+  - 1
+  - 10
+toothpaste:
+  117:
+  - 1
+  - 10

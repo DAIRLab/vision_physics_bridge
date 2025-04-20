@@ -15,7 +15,7 @@ Find the id of experiments that share a rosbag for an object.
 For example, if 1-6 are using rosbag 100 and 7-10 are using rosbag 101, return 1-6 and 7-10. 
 Then, create the dataset for as many experiments in a continuous rosbag as possible, using 
 the obtained ids. 
-Also output a file recording the ids: assets/config_objs_bags_to_exp.yaml: 
+Also output a file recording the ids: assets/config_obj_bag_to_exps.yaml: 
 robotocc_egg:
   312:
   - 1
@@ -59,7 +59,7 @@ for object in config['dataset']:
     objs_bags_to_exp[object] = obj_bag_to_exp_minmax
 
 # Save the results to a yaml file
-output_file = 'assets/config_objs_bags_to_exp.yaml'
+output_file = 'assets/config_obj_bag_to_exps.yaml'
 with open(output_file, 'w') as stream:
     yaml.dump(objs_bags_to_exp, stream)
 
