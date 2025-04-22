@@ -17,7 +17,6 @@ import os
 import os.path as op
 import re
 import yaml
-import rospy
 import sys
 
 import math_utils
@@ -495,7 +494,7 @@ def inspection_input_video_filepath(vision_asset: str) -> str:
 def inspection_overlay_video_filepath(
         dataset: str, tracking_bundlesdf_id: str, nerf_bundlesdf_id: str,
         pll_id: str, cycle_iteration: int, gt_mesh: bool = False,
-        with_robot: bool = False) -> str:
+        with_robot: bool = False, with_contacts: bool = False) -> str:
     """The directory for all overlay videos."""
     overlay_video_dir = op.join(inspection_dir(), 'overlay_videos')
 
@@ -505,7 +504,7 @@ def inspection_overlay_video_filepath(
         if nerf_bundlesdf_id.startswith('bundlesdf_id_'):
             nerf_bundlesdf_id = nerf_bundlesdf_id[13:]
     if pll_id is not None:
-            pll_id = pll_id[7:]
+        pll_id = pll_id[7:]
 
     now = datetime.datetime.now()
     date_str = now.strftime('%m%d')
@@ -528,6 +527,8 @@ def inspection_overlay_video_filepath(
     # filename = f'{dataset}_{tracking_id}_{mesh_id}_{cycle_iteration}.mp4'
     if with_robot:
         filename = filename.replace('.mp4', '_robot.mp4')
+    if pll_id is not None and with_contacts:
+        filename = filename.replace('.mp4', '_contacts.mp4')
 
     return op.join(overlay_video_dir, filename)
 
@@ -929,6 +930,7 @@ def load_toss_time_from_yaml(object: str, toss_number: int, key: str,
                              as_ros_time: bool = True):
     start_time_data = load_field_from_yaml(object, toss_number, key)
     if as_ros_time:
+        import rospy
         time = rospy.rostime.Time(secs=start_time_data['secs'],
                                   nsecs=start_time_data['nsecs'])
     else:

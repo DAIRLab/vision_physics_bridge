@@ -341,7 +341,8 @@ class GeometryConverterPLLToBundleSDF:
                 help="number of frames to offset the start of the BundleSDF " + \
                     "video from the start of the full video.")
 
-def main_command(vision_asset: str, pll_id: str, cycle_iteration: int, offset_frames: int):
+def main_command(vision_asset: str, pll_id: str, cycle_iteration: int,
+                 offset_frames: int):
     # First decode the system and start/end tosses from the provided asset
     # directory.
     assert '_' in vision_asset, f'Invalid asset directory: {vision_asset}.'

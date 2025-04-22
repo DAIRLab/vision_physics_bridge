@@ -1,7 +1,6 @@
 import math
 import numpy as np
 import os.path as op
-import rospy
 from PIL import Image
 from scipy.spatial.transform import Rotation as R
 import sys
@@ -56,13 +55,14 @@ def extract_floats_from_camk(lines):
 
 def convert_relative_frames_to_absolute(
         relative_frames: np.ndarray, full_times: np.ndarray,
-        ros_times: rospy.rostime.Time, 
-        end_ros_times: Optional[rospy.rostime.Time]=None) -> np.ndarray:
+        ros_times, #: rospy.rostime.Time,
+        end_ros_times=None, #: Optional[rospy.rostime.Time]
+        ) -> np.ndarray:
     """Converts frames relative to the start of a subsection of a longer
     trajectory to frames as absolute indices of the full trajectory.  Handles
     the case where a relative frame is set to -1, which is interpreted as
     include the last index of a given toss.
-    
+
     Args:
         relative_frames: 1D numpy array of relative frame indices.
         full_times: 1D numpy array of timestamps for the full trajectory.
@@ -102,7 +102,7 @@ def convert_relative_frames_to_absolute(
             subsection_start_frame = np.argmin(
                 np.abs(full_times - start_times[i]))
             absolute_frames[i] = subsection_start_frame + relative_frame
-    
+
     return absolute_frames
 
 
@@ -167,7 +167,7 @@ def transform_point_coordinates_given_pose(
 
 def ros_time_to_float(ros_times: np.ndarray) -> np.ndarray:
     """Converts ROS timestamps to floating point numbers.
-    
+
     Args:
         ros_time: 1D numpy array of ROS timestamps.
 
@@ -178,7 +178,7 @@ def ros_time_to_float(ros_times: np.ndarray) -> np.ndarray:
 
     for i in range(len(ros_times)):
         float_time[i] = ros_times[i].secs + ros_times[i].nsecs * 1e-9
-    
+
     return float_time
 
 
@@ -339,7 +339,7 @@ def transform_bundletrack_origin_to_tagslam_origin(
         # This yields world_T_Tn.
         pred_new_world = camera_to_world(pred_new, translation, axis_vec)
         return pred_new_world
-    
+
     return pred_new
 
 
@@ -542,7 +542,7 @@ def extrinsics_T_WC(translation, axis_vec):
 def extrinsics_T_CW(translation, axis_vec):
     """
     Convert translation and axis-angle representation to extrinsic matrix.
-    
+
     Parameters:
     - translation: 3x1 numpy array, translation vector.
     - axis_vec: 3x1 numpy array, rotation represented in axis-angle (rodriques) form.
@@ -554,7 +554,7 @@ def extrinsics_T_CW(translation, axis_vec):
     extrinsic = np.eye(4)
     extrinsic[:3, :3] = rotation_matrix
     extrinsic[:3, 3] = translation.squeeze()
-    
+
     return extrinsic
 
 
@@ -566,7 +566,7 @@ def inverse_homogeneous_transformation(transform: Tensor) -> Tensor:
             [ 0  1 ]
 
     for T (4,4), R (3,3), and d (3,1), then the inverse is:
-    
+
         inv(T) = [ R^T  -R^T*d ]
                  [  0      1   ]
     """
@@ -634,24 +634,24 @@ def trans_mat_to_pos_quat(trans):
 def slerp(q0, q1, t_array):
     """Spherical linear interpolation between two quaternions."""
     dot = np.dot(q0, q1)
-    
+
     # If the dot product is negative, slerp won't take the shorter path.
     if dot < 0.0:
         q1 = -q1
         dot = -dot
-        
+
     DOT_THRESHOLD = 0.9995
     if dot > DOT_THRESHOLD:
         # If the inputs are too close for comfort, linearly interpolate and normalize the result.
         result = q0 + t_array[:, np.newaxis] * (q1 - q0)
         return result / np.linalg.norm(result, axis=1)[:, np.newaxis]
-    
+
     # Compute the quaternion of the rotation angle
     theta_0 = np.arccos(dot)
     theta = theta_0 * t_array
     q2 = q1 - q0 * dot
     q2 /= np.linalg.norm(q2)
-    
+
     return np.cos(theta)[:, np.newaxis] * q0 + np.sin(theta)[:, np.newaxis] * q2
 
 def wxyz2xyzw(quat_wxyz):
@@ -734,7 +734,7 @@ def transform_points(points: np.ndarray, transformation_matrix: np.ndarray):
 def transform_pts_to_normalized_space(points, translation, sc_factor, offset):
     """From Utils.py's mesh_to_real_world function, we've uncovered that the
     conversion from the SDF function's space to real world space is:
-    
+
         # The basic structure from Utils.py's mesh_to_real_world implements:
         geom_origin_pts = sdf_pts/sc_factor - translation
         track_origin_pts = geom_origin_pts.apply(offset)

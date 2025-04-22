@@ -10,9 +10,9 @@ import pdb
 from PIL import Image, ImageDraw, ImageFont
 import cv2
 from tempfile import TemporaryDirectory
-import rosbag
 from selenium import webdriver
 import yaml
+import torch
 from tqdm import tqdm
 
 import meshcat
@@ -21,7 +21,9 @@ import meshcat.transformations as tf
 
 import file_utils
 import math_utils
-import rosbag_processor
+import robot_utils
+
+from conversion_pll_to_bsdf import GeometryConverterPLLToBundleSDF
 
 
 
@@ -35,6 +37,9 @@ TAGSLAM_COLOR = 0xff0000
 
 ROBOT_OPACITY = 0.8
 OBJECT_OPACITY = 1.0
+
+# Matches the variable in dair_pll bundlesdf_interface.py
+FORCE_RETENTION_RATE = 0.3
 
 PANDA_JOINT_NAMES = ['panda_panda_joint1_q', 'panda_panda_joint2_q',
                      'panda_panda_joint3_q', 'panda_panda_joint4_q',
@@ -259,7 +264,7 @@ class OverlayVideoGenerator:
             self.vision_asset, check_exists=True)
         joints = np.loadtxt(
             op.join(self.cnets_data_gen_dir, 'synced_joint_angles.txt'))
-        self.T_WEs = rosbag_processor.convert_franka_joints_to_ee_positions(
+        self.T_WEs = robot_utils.convert_franka_joints_to_ee_positions(
             joints, PANDA_JOINT_NAMES,
             as_homogeneous_transform_with_rotation=True)
 
@@ -448,7 +453,7 @@ class OverlayVideoGenerator:
         is part of the PLL toss or not."""
         # First determine if the frame index is within a PLL toss.
         toss_i = self._within_which_toss(image_frame_i)
-        
+
         # Add a PLL toss label to the image.
         draw = ImageDraw.Draw(im)
         font_path = op.join(cv2.__path__[0],'qt','fonts','DejaVuSans.ttf')
@@ -457,13 +462,13 @@ class OverlayVideoGenerator:
             text = f'Frame {image_frame_i:04d}. Session {toss_i}. '
         else:
             text = f'Frame {image_frame_i:04d}. '
-            
+
         text_x = 35
         text_y = 445
         margin = 5
         left, top, right, bottom = draw.textbbox((text_x, text_y), text, font)
-        
-        draw.rectangle((left - margin, top - margin, right + margin, bottom + margin), 
+
+        draw.rectangle((left - margin, top - margin, right + margin, bottom + margin),
                         fill='black')
         draw.text((text_x, text_y), text, fill='white', font=font)
 
@@ -631,6 +636,199 @@ class OverlayVideoGenerator:
         self._clean_up_meshcat()
 
 
+class ContactOverlayVideoGenerator(OverlayVideoGenerator):
+    """For a PLL run, can generate an overlay video with the contact points,
+    BundleSDF tracked origin (as a triad), and the robot end effector shown.
+    Future work could include drawing the estimated forces as arrows from the
+    estimated contact points."""
+    def __init__(self, vision_asset: str, cycle_iteration: int,
+                 tracking_bundlesdf_id: str = None,
+                 nerf_bundlesdf_id: str = None,
+                 pll_id: str = None,
+                 bsdf_only: bool = False, remote: bool = False,
+                 gt_mesh: bool = False, bsdf_offset_frames: int = 1,
+                 show_robot: bool = False) -> None:
+        show_robot = True
+        super().__init__(
+            vision_asset, cycle_iteration,
+            tracking_bundlesdf_id=tracking_bundlesdf_id,
+            nerf_bundlesdf_id=nerf_bundlesdf_id, pll_id=pll_id,
+            bsdf_only=bsdf_only, remote=remote, gt_mesh=gt_mesh,
+            bsdf_offset_frames=bsdf_offset_frames, show_robot=show_robot)
+
+        # Ensure this is a PLL run and rename the output video.
+        assert self.pll_id is not None, f'Need a PLL run to make a contact ' + \
+            f'overlay video.  Got {self.pll_id=} ' + \
+            f'{self.tracking_bundlesdf_id=} {self.nerf_bundlesdf_id=}'
+        self.output_file = file_utils.inspection_overlay_video_filepath(
+            dataset=vision_asset,
+            tracking_bundlesdf_id=self.tracking_bundlesdf_id,
+            nerf_bundlesdf_id=self.nerf_bundlesdf_id, pll_id=self.pll_id,
+            cycle_iteration=cycle_iteration, gt_mesh=gt_mesh,
+            with_robot=show_robot, with_contacts=True
+        )
+
+        self._get_contacts_directions_forces_frames()
+
+    def _get_contacts_directions_forces_frames(self) -> None:
+        """Save the following attributes:
+            - support_points_cam (N, 3)
+            - support_directions_cam (N, 3)
+            - forces_cam (N, 3)
+            - normal_forces (N,)
+            - support_frames (N,)
+            - n_contacts (int)
+            - cutoff_force (float)
+        """
+        # Look into the PLL output directory.
+        pll_geom_output_dir = file_utils.contactnets_output_geometry_dir(
+            self.vision_asset, self.cycle_iteration, self.pll_id)
+        bundlesdf_geom_input_dir = file_utils.bundlesdf_geometry_dir(
+            self.vision_asset, cycle_iteration=self.cycle_iteration,
+            pll_run_id=self.pll_id, create=True)
+        bundlesdf_pose_output_dir = file_utils.bundlesdf_pose_dir(
+            self.vision_asset, cycle_iteration=self.cycle_iteration,
+            bundlesdf_id=self.tracking_bundlesdf_id)
+
+        # Reuse some of the functionality of the PLL to BundleSDF converter.
+        geom_converter = GeometryConverterPLLToBundleSDF(
+            self.vision_asset, self.pll_id, self.cycle_iteration,
+            pll_geom_output_dir=pll_geom_output_dir,
+            bundlesdf_geom_input_dir=bundlesdf_geom_input_dir,
+            bundlesdf_pose_output_dir=bundlesdf_pose_output_dir,
+            annotated_poses_dir=None,
+            do_tagslam_to_bsdf_transform=False,
+            bsdf_offset_frames=1
+        )
+
+        support_points = torch.load(
+            op.join(bundlesdf_geom_input_dir, 'support_points.pt'))
+        support_directions = torch.load(
+            op.join(bundlesdf_geom_input_dir, 'support_directions.pt'))
+        support_point_all_forces = torch.load(
+            op.join(bundlesdf_geom_input_dir,
+                    'support_point_all_forces.pt'))
+        support_point_jacobians = torch.load(
+            op.join(bundlesdf_geom_input_dir, 'support_point_jacobians.pt'))
+        support_point_tosses_frames = torch.load(
+            op.join(bundlesdf_geom_input_dir,
+                    'tosses_and_frames.pt'))
+
+        world_frame_forces = (
+            support_point_jacobians.transpose(1,2) @
+            support_point_all_forces.unsqueeze(2)
+        ).squeeze(2)[:, -3:]
+
+        assert torch.all(support_point_tosses_frames[:, 0] == \
+                         support_point_tosses_frames[0, 0]), f'Need one ' + \
+            f'toss for the entire video.  Got {self.vision_asset=}.'
+
+        # Convert points and directions from body to camera frame.
+        support_points_cam = torch.zeros_like(support_points)
+        support_directions_cam = torch.zeros_like(support_directions)
+        for frame_i in range(1, support_point_tosses_frames[-1, 1]+1):
+            row_mask = support_point_tosses_frames[:, 1] == frame_i
+            support_points_cam[row_mask] = \
+                geom_converter._convert_body_to_cam_frame(
+                    support_points[row_mask],
+                    pose_dir=bundlesdf_pose_output_dir,
+                    camera_frame_i=frame_i
+                ).double()
+            support_directions_cam[row_mask] = \
+                geom_converter._convert_body_to_cam_frame(
+                    support_directions[row_mask],
+                    pose_dir=bundlesdf_pose_output_dir,
+                    camera_frame_i=frame_i
+                ).double()
+
+        # Convert forces from world to camera frame.
+        forces_cam = torch.zeros_like(world_frame_forces)
+        for row_i in range(forces_cam.shape[0]):
+            force_world = np.eye(4)
+            force_world[:3, 3] = world_frame_forces[row_i].detach().numpy()
+            forces_cam[row_i] = torch.tensor(math_utils.world_to_camera(
+                force_world, translation=self.cam_trans,
+                axis_vec=self.cam_axis_vec)[:3, 3])
+
+        self.support_points_cam = support_points_cam
+        self.support_directions_cam = support_directions_cam
+        self.forces_cam = forces_cam
+        self.normal_forces = support_point_all_forces[:, 0]
+
+        self.support_frames = support_point_tosses_frames[:, 1]
+
+        self.n_contacts = sum(row_mask).item()
+
+        self.cutoff_force = torch.quantile(
+            support_point_all_forces[:, 0], 1-FORCE_RETENTION_RATE).item()
+
+    # TODO could add arrows to indicate contact force direction and magnitude.
+    def _add_meshcat_objects(self, vis: meshcat.Visualizer) -> None:
+        super()._add_meshcat_objects(vis)
+
+        # Make the object mesh transparent.
+        vis["bundlesdf_mesh"].set_object(
+            g.ObjMeshGeometry.from_file(self.mesh_file),
+            g.MeshLambertMaterial(
+                color=self.mesh_color, reflectivity=0.0, transparent=0.9,
+                opacity=0.1)
+        )
+
+        # Make a larger triad for the object origin.
+        vis["tracked_x"].set_object(
+            g.ObjMeshGeometry.from_file(file_utils.x_axis_obj_filepath()),
+            g.MeshLambertMaterial(
+                color=0xff0000, reflectivity=0.0, transparent=0,
+                opacity=1.0))
+        vis["tracked_y"].set_object(
+            g.ObjMeshGeometry.from_file(file_utils.y_axis_obj_filepath()),
+            g.MeshLambertMaterial(
+                color=0x00ff00, reflectivity=0.0, transparent=0,
+                opacity=1.0))
+        vis["tracked_z"].set_object(
+            g.ObjMeshGeometry.from_file(file_utils.z_axis_obj_filepath()),
+            g.MeshLambertMaterial(
+                color=0x0000ff, reflectivity=0.0, transparent=0,
+                opacity=1.0))
+
+        # Add spheres for the contact points.
+        for contact_i in range(self.n_contacts):
+            vis[f'contact_{contact_i}'].set_object(
+                g.Sphere(radius=0.015),
+                g.MeshLambertMaterial(
+                    color=PLL_COLOR, reflectivity=0.0, transparent=0,
+                    opacity=1.0)
+            )
+
+    def _set_meshcat_object_poses(
+            self, frame_i: int, T_WA: np.ndarray, T_CB: np.ndarray) -> None:
+        super()._set_meshcat_object_poses(frame_i, T_WA, T_CB)
+
+        out_of_view_tf = self.T_MC @ tf.translation_matrix([0, 0, -1])
+
+        # Set the poses of the triad.
+        for dir in ['x', 'y', 'z']:
+            self.vis[f'tracked_{dir}'].set_transform(self.T_MC @ T_CB)
+
+        # Move the BundleSDF mesh out of the way.
+        self.vis['bundlesdf_mesh'].set_transform(out_of_view_tf)
+        self.vis['bundlesdf_triad'].set_transform(out_of_view_tf)
+
+        # Set the poses of the contact points.
+        support_mask = self.support_frames == frame_i+1
+        contact_locations = self.support_points_cam[support_mask]
+        contact_directions = self.support_directions_cam[support_mask]
+        normal_forces = self.normal_forces[support_mask]
+        for contact_i in range(self.n_contacts):
+            if (len(normal_forces) == 0) or \
+               (normal_forces[contact_i] < self.cutoff_force):
+                T_CS = out_of_view_tf
+            else:
+                T_CS = np.eye(4)
+                T_CS[:3, 3] = contact_locations[contact_i].detach().numpy()
+            self.vis[f'contact_{contact_i}'].set_transform(self.T_MC @ T_CS)
+
+
 #######################################################################
 @click.command()
 @click.option('--vision-asset',
@@ -675,18 +873,24 @@ class OverlayVideoGenerator:
 @click.option('--show-robot',
               is_flag=True,
               help="whether to overlay robot pose on image.")
+@click.option('--show-contacts',
+              is_flag=True,
+              help="whether to visualize contacts on image.")
 
 def main_command(vision_asset: str,
                  cycle_iteration: int,
                  bundlesdf_id: str, nerf_bundlesdf_id: str,
                  pll_id: str, bsdf_only: bool, all: bool,
                  remote: bool, gt_mesh: bool,
-                 bsdf_offset_frames: int, show_robot: bool) -> None:
+                 bsdf_offset_frames: int, show_robot: bool,
+                 show_contacts: bool) -> None:
     if not vision_asset.startswith('robot') and show_robot:
         print(f'Cannot show robot on non-robot {vision_asset=}.')
         show_robot = False
 
-    overlay_video_generator = OverlayVideoGenerator(
+    func = ContactOverlayVideoGenerator if show_contacts else \
+        OverlayVideoGenerator
+    overlay_video_generator = func(
         vision_asset, cycle_iteration,
         tracking_bundlesdf_id=bundlesdf_id,
         nerf_bundlesdf_id=nerf_bundlesdf_id,
@@ -701,7 +905,7 @@ def main_command(vision_asset: str,
     else:
         print('Skipping generating overlay video.')
 
-    if bundlesdf_id is not None:
+    if bundlesdf_id is not None and not show_contacts:
         overlay_video_generator.make_optimized_keyframe_overlay_images()
 
 
