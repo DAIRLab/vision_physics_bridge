@@ -350,6 +350,7 @@ class OverlayVideoGenerator:
         if self.remote:
             options.add_argument('--no-sandbox')
         self.driver = webdriver.Chrome(options=options)
+        print("✓ Chrome started successfully")
 
         # Set the desired window size.
         self.driver.set_window_size(self.image_width, self.image_height)
