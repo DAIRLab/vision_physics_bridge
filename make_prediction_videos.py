@@ -4,6 +4,7 @@ import click
 import matplotlib.pyplot as plt
 from matplotlib.collections import LineCollection
 import numpy as np
+import math
 import open3d as o3d
 import os
 import os.path as op
@@ -15,6 +16,9 @@ from typing import Optional
 import evaluate, eval_utils, file_utils, math_utils, rosbag_processor
 from eval_utils import PredictionOverlayGenerator, \
     OfficialVideoPredictionOverlayGenerator
+
+from overlay_videos import BUNDLESDF_COLOR, PLL_COLOR, \
+    VYSICS_COLOR
 
 NUMBERS = ['1', '1-2', '1-3', '1-4', '1-5']
 OBJECTS = ['bakingbox', 'cardboard', 'crushedcan', 'gallon', 'greencan',
@@ -184,12 +188,105 @@ def load_viewable_mesh(mesh_path: str):
 
     return mesh
 
-def rotate_and_capture(mesh, num_images: int, output_file: str):
+def rotate_and_capture(meshes_to_render, num_images: int, output_file: str, 
+                    meshes_for_bbox=None, meshes_for_center=None):
+    """
+    Rotate and capture images of 3D meshes.
+    
+    Args:
+        meshes_to_render: List or single mesh to be rendered
+        num_images: Number of images to capture during rotation
+        output_file: Path to save the output video
+        meshes_for_bbox: Optional list or single mesh to determine the bounding box (view extent)
+        meshes_for_center: Optional list or single mesh to determine the center of view
+    """
+    width, height = 1920, 1080  # Define your desired resolution
     vis = o3d.visualization.Visualizer()
-    vis.create_window(visible=False)
-    vis.add_geometry(mesh)
+    vis.create_window(width=width, height=height, visible=False)
+    
+    # Add all render geometries to the visualizer
+    render_geoms = []
+    if isinstance(meshes_to_render, list):
+        for m in meshes_to_render:
+            vis.add_geometry(m)
+            render_geoms.append(m)
+    else:
+        vis.add_geometry(meshes_to_render)
+        render_geoms = [meshes_to_render]
+    
+    # Default: use render geometries for both bbox and center if not specified
+    if meshes_for_bbox is None:
+        meshes_for_bbox = render_geoms
+    
+    if meshes_for_center is None:
+        meshes_for_center = render_geoms
+    
+    # Convert single geometries to lists for consistent handling
+    if not isinstance(meshes_for_bbox, list):
+        meshes_for_bbox = [meshes_for_bbox]
+    
+    if not isinstance(meshes_for_center, list):
+        meshes_for_center = [meshes_for_center]
+    
+    # Calculate combined bounding box for all bbox geometries
+    bbox = o3d.geometry.AxisAlignedBoundingBox()
+    for geom in meshes_for_bbox:
+        geom_bbox = geom.get_axis_aligned_bounding_box()
+        bbox += geom_bbox
+    
+    # Calculate center point from center geometries
+    center_bbox = o3d.geometry.AxisAlignedBoundingBox()
+    for geom in meshes_for_center:
+        geom_bbox = geom.get_axis_aligned_bounding_box()
+        center_bbox += geom_bbox
+    center = center_bbox.get_center()
+    
+    # Find the max distance from the center to the corners of the bounding box
+    corners = np.array(bbox.get_box_points())
+    offsets = np.absolute(corners - center)
+    w_bbox = np.max(offsets[:, 0]) * 2
+    h_bbox = np.max(offsets[:, 1]) * 2
+    d_bbox = np.max(offsets[:, 2]) * 2
+    
+    # Force view update
+    vis.poll_events()
+    vis.update_renderer()
     view_control = vis.get_view_control()
+    
+    # Set camera parameters using more direct methods
+    view_control.set_lookat(center)     # Look at the center
 
+    # Try to set camera position instead of zoom
+    # This is more experimental - not all versions of Open3D support this
+    param = view_control.convert_to_pinhole_camera_parameters()
+    w_im = param.intrinsic.width
+    h_im = param.intrinsic.height
+    intrinsic_matrix = param.intrinsic.intrinsic_matrix
+    fx = intrinsic_matrix[0, 0]
+    fy = intrinsic_matrix[1, 1]
+    cx = intrinsic_matrix[0, 2]
+    cy = intrinsic_matrix[1, 2]
+
+    # Set the camera position based on the bounding box
+    distance_based_on_w = fx * w_bbox / w_im * 1.2
+    distance_based_on_h = fy * h_bbox / h_im * 1.2
+    distance_based_on_d = fx * d_bbox / w_im * 1.2
+    distance = max(distance_based_on_w, distance_based_on_h, distance_based_on_d)
+    # Set the camera position in world coordinates
+    camera_pos = [center[0], center[1], center[2] + distance]
+    
+    param.extrinsic = np.array([
+        [1, 0, 0, -camera_pos[0]],
+        [0, -1, 0, camera_pos[1]],
+        [0, 0, -1, camera_pos[2]],
+        [0, 0, 0, 1]
+    ])
+
+    view_control.convert_from_pinhole_camera_parameters(param, allow_arbitrary=True)
+    # Force another view update
+    vis.poll_events()
+    vis.update_renderer()
+    
     with TemporaryDirectory(prefix="mesh-images-") as tmpdir:
         print(f'Storing temporary files at {tmpdir}')
         # Loop to rotate the mesh and capture images.
@@ -212,9 +309,27 @@ def rotate_and_capture(mesh, num_images: int, output_file: str):
         os.system(f'ffmpeg -y -r 30 -i {tmpdir}/image_%07d.png -vcodec ' + \
                   f'libx264 -preset slow -crf 18 {output_file}')
 
+def hex_to_rgb(hex, normalize=True):
+  # remove leading 0x if present
+  hex = format(hex, 'x')
+  rgb = tuple(int(hex[i:i+2], 16) for i in (0, 2, 4))
+  # convert to list of floats in [0, 1]
+  if normalize:
+    return [x / 255.0 for x in rgb]
+  else:
+    # convert to list of ints in [0, 255]
+    return [int(x) for x in rgb]
+def rgb_to_hex(r, g, b):
+  # assuming r, g, b are in [0, 255]
+  return ('{:02X}' * 3).format(r, g, b)
+
 def make_colorized_mesh_spin_video(
-        eval_dir: str, mesh_video_path: str, do_error_color: bool,
-        do_learned_mesh: bool = True):
+        eval_dir: str, mesh_video_path: str, do_color: bool,
+        do_learned_mesh: bool = True, method_color: Optional[str] = None, 
+        do_method_color: bool = False, 
+        flag_meshes_to_vis: str = 'learned', # 'learned', 'true', or 'both'
+        flag_meshes_for_bbox: str = 'both',
+        flag_meshes_for_center: str = 'learned'):
     if do_learned_mesh:
         # Get the mesh from the eval directory.
         learned_mesh_path = op.join(eval_dir, 'bsdf_mesh.obj')
@@ -235,7 +350,7 @@ def make_colorized_mesh_spin_video(
             f' checked for _assist, _assist_copied, and just _aligned.'
         true_mesh = load_viewable_mesh(true_mesh_path)
 
-        if do_error_color:
+        if do_color:
             # Compute the chamfer distance between the learned mesh's vertices
             # and sampled points on the true mesh.
             true_mesh_samples = true_mesh.sample_points_poisson_disk(2000)
@@ -250,6 +365,11 @@ def make_colorized_mesh_spin_video(
                 0, 1
             )
             colors = cmap(dists_to_scale)[:, :3]
+            if do_method_color and method_color is not None:
+                colors_bsdf = np.array(hex_to_rgb(method_color, normalize=True))
+                colors_bsdf = np.expand_dims(colors_bsdf, axis=0).repeat(
+                    len(learned_mesh.vertices), axis=0)
+                colors = colors_bsdf
             learned_mesh.vertex_colors = o3d.utility.Vector3dVector(colors)
 
         else:
@@ -263,8 +383,44 @@ def make_colorized_mesh_spin_video(
             # Rename the video to indicate it's not colored.
             mesh_video_path = mesh_video_path.replace('.mp4', '_uncolored.mp4')
 
-        mesh_to_vis = learned_mesh
+        # mesh_to_vis = learned_mesh
+        if flag_meshes_to_vis == 'learned':
+            meshes_to_vis = learned_mesh
+        elif flag_meshes_to_vis == 'both':
+            meshes_to_vis = [learned_mesh, true_mesh]
+        elif flag_meshes_to_vis == 'true':
+            meshes_to_vis = true_mesh
+        else:
+            raise ValueError(
+                f'Invalid {flag_meshes_to_vis=}, must be one of ' + \
+                f'learned, true, or both.'
+            )
+        if flag_meshes_for_bbox == 'learned':
+            meshes_for_bbox = learned_mesh
+        elif flag_meshes_for_bbox == 'both':
+            meshes_for_bbox = [learned_mesh, true_mesh]
+        elif flag_meshes_for_bbox == 'true':
+            meshes_for_bbox = true_mesh
+        else:
+            raise ValueError(
+                f'Invalid {flag_meshes_for_bbox=}, must be one of ' + \
+                f'learned, true, or both.'
+            )
+        if flag_meshes_for_center == 'learned':
+            meshes_for_center = learned_mesh
+        elif flag_meshes_for_center == 'both':
+            meshes_for_center = [learned_mesh, true_mesh]
+        elif flag_meshes_for_center == 'true':
+            meshes_for_center = true_mesh
+        else:
+            raise ValueError(
+                f'Invalid {flag_meshes_for_center=}, must be one of ' + \
+                f'learned, true, or both.'
+            )
+        mesh_video_path = mesh_video_path.replace('.mp4', '_test.mp4')
 
+        rotate_and_capture(meshes_to_vis, NUM_SPIN_IMAGES, mesh_video_path, 
+                        meshes_for_bbox, meshes_for_center)
     else:
         # Get the GT mesh from the eval directory.
         true_mesh_path = op.join(eval_dir, 'true_geom_aligned_assist.obj')
@@ -283,7 +439,7 @@ def make_colorized_mesh_spin_video(
         mesh_video_path = op.join(
             op.dirname(mesh_video_path), f'{object_name}_true.mp4')
 
-    rotate_and_capture(mesh_to_vis, NUM_SPIN_IMAGES, mesh_video_path)
+        rotate_and_capture(mesh_to_vis, NUM_SPIN_IMAGES, mesh_video_path)
 
 
 #######################################################################
@@ -325,10 +481,30 @@ def cli():
               type=bool,
               default=True,
               help="whether to visualize the learned or true mesh.")
+@click.option('--do-method-color/--no-method-color',
+              type=bool,
+              default=False,
+              help="whether to color the mesh according to the method " + \
+                "color.")
+@click.option('--flag-meshes-to-vis', '-fv',
+              type=click.Choice(['learned', 'true', 'both']),
+              default='learned',
+              help="Which meshes to visualize (effective only if --learned-mesh is True)")
+@click.option('--flag-meshes-for-bbox', '-fb',
+              type=click.Choice(['learned', 'true', 'both']),
+              default='both',
+              help="which meshes to bound the view (effective only if --learned-mesh is True)")
+@click.option('--flag-meshes-for-center', '-fc',
+              type=click.Choice(['learned', 'true', 'both']),
+              default='learned',
+              help="which meshes to center the view on (effective only if --learned-mesh is True)")
 
 def process_mesh_comand(vision_asset: str, bundlesdf_id: str, nerf_bundlesdf_id: str,
                  pll_id: Optional[str], cycle_iteration: int, color: bool,
-                 learned_mesh: bool):
+                 learned_mesh: bool, do_method_color: bool = False,
+                 flag_meshes_to_vis: str = 'learned',
+                 flag_meshes_for_bbox: str = 'both',
+                 flag_meshes_for_center: str = 'learned'):
     if cycle_iteration == 0:
         assert pll_id is not None, f'Need {pll_id=} if cycle_iteration is 0.'
         assert bundlesdf_id is None, f'Cannot have {bundlesdf_id=} if ' + \
@@ -337,7 +513,7 @@ def process_mesh_comand(vision_asset: str, bundlesdf_id: str, nerf_bundlesdf_id:
             f' if cycle_iteration is 0.'
     assert cycle_iteration >= 0, f'Invalid {cycle_iteration=}.'
     assert '_' in vision_asset, f'Invalid {vision_asset=}.'
-
+    method_color = None
     if pll_id is None:
         assert bundlesdf_id is not None, f'Need {bundlesdf_id=} if not ' + \
             f'{pll_id=}.'
@@ -351,6 +527,10 @@ def process_mesh_comand(vision_asset: str, bundlesdf_id: str, nerf_bundlesdf_id:
         elif nerf_bundlesdf_id[:13] != 'bundlesdf_id_':
             nerf_bundlesdf_id = f'bundlesdf_id_{nerf_bundlesdf_id}'
 
+        if nerf_bundlesdf_id==tracking_bundlesdf_id:  #cycle_iteration==1
+            method_color = BUNDLESDF_COLOR
+        else:
+            method_color = VYSICS_COLOR
     else:
         assert bundlesdf_id is None and nerf_bundlesdf_id is None, f'Can ' + \
             f'only have {pll_id=} if not {bundlesdf_id=} or ' + \
@@ -359,6 +539,8 @@ def process_mesh_comand(vision_asset: str, bundlesdf_id: str, nerf_bundlesdf_id:
         # Decode the PLL run ID.
         if pll_id[:7] != 'pll_id_':
             pll_id = f'pll_id_{pll_id}'
+
+        method_color = PLL_COLOR
 
     # Get the evaluation directory.
     eval_dir = file_utils.evaluation_subdir(
@@ -375,8 +557,12 @@ def process_mesh_comand(vision_asset: str, bundlesdf_id: str, nerf_bundlesdf_id:
     )
 
     make_colorized_mesh_spin_video(
-        eval_dir, mesh_video_path, do_error_color=color,
-        do_learned_mesh=learned_mesh)
+        eval_dir, mesh_video_path, do_color=color,
+        do_learned_mesh=learned_mesh, method_color=method_color, 
+        do_method_color=do_method_color,
+        flag_meshes_to_vis=flag_meshes_to_vis,
+        flag_meshes_for_bbox=flag_meshes_for_bbox,
+        flag_meshes_for_center=flag_meshes_for_center)
 
 
 @cli.command('video')

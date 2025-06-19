@@ -1774,7 +1774,7 @@ class ConglomeratedDynamicsMetrics():
                 axs[0].yaxis.set_major_formatter(mtick.PercentFormatter(1.0))
                 axs[1].yaxis.set_major_formatter(mtick.PercentFormatter(1.0))
                 fig.suptitle('Fraction of Trajectory Length before ' + \
-                             'Prediction Divergence', fontsize=28,
+                             'Prediction Divergence', fontsize=24,
                              fontname='serif')
             else:
                 axs[0].set_ylabel(f'Time of Position Divergence ' + \
@@ -1793,7 +1793,7 @@ class ConglomeratedDynamicsMetrics():
             axs[1].set_title(f'Orientation Divergence ({deg_tolerance:.0f}deg)')
 
             models = ['vysics', 'bsdf', 'pll', 'gt']
-            labels = ['Vysics', 'BundleSDF', 'PLL', 'GT Geometry']
+            labels = ['Vysics (ours)', 'BundleSDF', 'PLL', 'GT Geometry']
             colors = [VYSICS_MESH_HEX, BSDF_MESH_HEX, PLL_MESH_HEX, GT_MESH_HEX]
             linestyles = ['solid', 'solid', 'dashed', 'dashed']
 
@@ -1831,7 +1831,7 @@ class ConglomeratedDynamicsMetrics():
                 for tick in ax.get_yticklabels():
                     tick.set_fontname('serif')
 
-                ax.tick_params(axis='both', which='major', labelsize=16)
+                ax.tick_params(axis='both', which='major', labelsize=24)
 
             fig.set_size_inches(13, 10)
             plt.subplots_adjust(bottom=0.15)

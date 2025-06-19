@@ -291,7 +291,7 @@ LABELS = {
     GT: 'Using Ground Truth URDF',
     BSDF_CONVEX_OCC: 'BundleSDF Convex Loss (Occluded)',
     BSDF_PLL_CONVEX_OCC: 'Vysics Convex Loss (Occluded)',
-    BSDF_PLL_ROBOTOCC: 'Vysics',
+    BSDF_PLL_ROBOTOCC: 'Vysics (ours)',
     BSDF_ROBOTOCC: 'BundleSDF',
 }
 
@@ -1539,6 +1539,13 @@ class ResultsPlotter:
                         ['tagged_objects']*len(self.tagged_objects)
                 else:
                     raise ValueError(f'Unknown object scope {obj_scope}')
+                
+                # Sort the objects by their names, also sort the object labels
+                # to match the sorted objects.
+                all_objects, object_labels = zip(*sorted(
+                    zip(all_objects, object_labels), key=lambda x: x[0]))
+                all_objects = list(all_objects)
+                object_labels = list(object_labels)
 
                 # Iterate over all the objects.
                 for obj, tag_label in zip(all_objects, object_labels):
@@ -2354,13 +2361,13 @@ class ResultsPlotter:
                 data_str += f'\n{exp_key}_data:\n{ys[exp_key]}'
 
         # Finalize plot
-        plt.xticks(range(len(xlabel_txt)), xlabel_txt, rotation=45,
-                ha='right', fontsize=20)
+        plt.xticks(range(len(xlabel_txt)), xlabel_txt, rotation=30,
+                ha='center', fontsize=30)
 
         if normalize:
             ylabel = ylabel.replace('[cm]', '[% length]')
-        plt.ylabel(ylabel)
-        plt.title(title)
+        ylabel_plt = plt.ylabel(ylabel, fontsize=30)
+        title_plt = plt.title(title, fontsize=35)
         plt.legend()
         # Leave some space for the legend at the top
         ymin, ymax = ax.get_ylim()
@@ -2370,6 +2377,11 @@ class ResultsPlotter:
         self._beautify_plot(fig, ax, range(len(xlabel_txt)), False,
                             scatter=True, normalized=normalize)
 
+        title_fontsize = title_plt.get_fontsize()
+        ylabel_fontsize = ylabel_plt.get_fontsize()
+
+        print(f"Title fontsize: {title_fontsize}")
+        print(f"Y-label fontsize: {ylabel_fontsize}")
         # Save plot and data
         plot_filename = filename.split('.')[0] + '.png'
         file_utils.assure_created(op.join(self.plot_dir, subdir))
@@ -2675,8 +2687,8 @@ class ResultsPlotter:
         ax.yaxis.set_minor_formatter(NullFormatter())
         ax.yaxis.set_major_formatter(NullFormatter())
 
-        ax.tick_params(axis='y', which='minor', labelsize=20)
-        ax.tick_params(axis='y', which='major', labelsize=20)
+        ax.tick_params(axis='y', which='minor', labelsize=30)
+        ax.tick_params(axis='y', which='major', labelsize=30)
 
         if auc:
             ax.yaxis.set_major_formatter(FormatStrFormatter("%.0f"))
@@ -2721,6 +2733,7 @@ class ResultsPlotter:
                 ax.yaxis.set_major_formatter(FormatStrFormatter("%.1f"))
                 ax.yaxis.set_minor_formatter(FormatStrFormatter("%.1f"))
 
+            # fig.set_size_inches(16, 10)
             fig.set_size_inches(13, 9)
             plt.subplots_adjust(bottom=0.16)
 
@@ -2732,7 +2745,7 @@ class ResultsPlotter:
 
             handles, labels = plt.gca().get_legend_handles_labels()
             plt.legend(handles, labels)
-            plt.legend(prop=dict(weight='bold', family='serif'))
+            plt.legend(prop=dict(weight='bold', family='serif', size=30))
 
             for tick in ax.get_xticklabels():
                 tick.set_fontname('serif')
