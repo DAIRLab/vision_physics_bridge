@@ -363,12 +363,43 @@ def robot_dynamics_dir() -> str:
     """Directory for the robot dynamics predictions assets."""
     return op.join(DATA_GEN_DIR, 'robot_dynamics')
 
-def robot_dynamics_subdir(dataset: str, overwrite: bool = False) -> str:
-    """Subdirectory for the robot dynamics predictions assets."""
-    subdir = op.join(robot_dynamics_dir(), dataset)
+def robot_dynamics_eval_dir() -> str:
+    """Directory for the robot dynamics prediction evaluation assets."""
+    return op.join(robot_dynamics_dir(), 'evaluation')
+
+def robot_dynamics_dataset_subdir(
+        vision_asset: str, overwrite: bool = False) -> str:
+    """Dataset subdirectory for the robot dynamics predictions assets."""
+    subdir = op.join(robot_dynamics_dir(), 'dataset', vision_asset)
     if op.exists(subdir):
         if overwrite:
-            print(f'Overwriting robot dynamics subdirectory for {dataset}.')
+            print(f'Overwriting robot dynamics dataset for {vision_asset}.')
+            shutil.rmtree(subdir)
+            os.makedirs(subdir)
+    else:
+        os.makedirs(subdir)
+    return subdir
+
+def robot_dynamics_result_subdir(
+        vision_asset: str, overwrite: bool = False) -> str:
+    """Result subdirectory for the robot dynamics predictions assets."""
+    subdir = op.join(robot_dynamics_dir(), 'results', vision_asset)
+    if op.exists(subdir):
+        if overwrite:
+            print(f'Overwriting robot dynamics results for {vision_asset}.')
+            shutil.rmtree(subdir)
+            os.makedirs(subdir)
+    else:
+        os.makedirs(subdir)
+    return subdir
+
+def robot_dynamics_eval_subdir(
+        vision_asset: str, overwrite: bool = False) -> str:
+    """Evaluation subdirectory for the robot dynamics predictions assets."""
+    subdir = op.join(robot_dynamics_eval_dir(), vision_asset)
+    if op.exists(subdir):
+        if overwrite:
+            print(f'Overwriting robot dynamics evaluation for {vision_asset}.')
             shutil.rmtree(subdir)
             os.makedirs(subdir)
     else:

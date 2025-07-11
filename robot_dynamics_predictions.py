@@ -744,17 +744,19 @@ class RobotDynamicsPredictor():
         self.debug = debug
         self.open_meshcat = open_meshcat
 
-        self._export_test_data()
+        self._export_dataset()
         self._load_data()
         self._create_drake_trajectories()
 
     def run_simulation(self, model_to_test: str, overwrite: bool = False):
+        self.pred_dir = file_utils.robot_dynamics_result_subdir(
+            self.vision_asset, overwrite=False)
         if model_to_test == 'pll':
             self.learned_urdf_path = make_pll_geometry_urdf(
                 vision_asset=self.vision_asset,
                 bsdf_iteration=self.bsdf_iteration,
                 pll_id=self.pll_id,
-                save_dir=self.save_dir,
+                save_dir=self.pred_dir,
                 verbose=self.debug
             )
         elif model_to_test == 'vysics':
@@ -764,7 +766,7 @@ class RobotDynamicsPredictor():
                 pll_id=self.pll_id,
                 track_bsdf_id=self.bundlesdf_id,
                 nerf_bsdf_id=self.nerf_bundlesdf_id,
-                save_dir=self.save_dir,
+                save_dir=self.pred_dir,
                 verbose=self.debug
             )
         elif model_to_test == 'bsdf':
@@ -773,7 +775,7 @@ class RobotDynamicsPredictor():
                 bsdf_iteration=self.bsdf_iteration,
                 pll_id=self.pll_id,
                 track_bsdf_id=self.bundlesdf_id,
-                save_dir=self.save_dir,
+                save_dir=self.pred_dir,
                 verbose=self.debug
             )
         elif model_to_test == 'gt':
@@ -783,7 +785,7 @@ class RobotDynamicsPredictor():
                 pll_id=self.pll_id,
                 track_bsdf_id=self.bundlesdf_id,
                 nerf_bsdf_id=self.nerf_bundlesdf_id,
-                save_dir=self.save_dir,
+                save_dir=self.pred_dir,
                 verbose=self.debug,
                 for_comparison=False
             )
@@ -797,17 +799,17 @@ class RobotDynamicsPredictor():
             pll_id=self.pll_id,
             track_bsdf_id=self.bundlesdf_id,
             nerf_bsdf_id=self.nerf_bundlesdf_id,
-            save_dir=self.save_dir,
+            save_dir=self.pred_dir,
             verbose=self.debug,
             for_comparison=True
         )
 
         pred_object_states_filename = op.join(
-            self.save_dir, f'pred_object_states_{model_to_test}.txt')
+            self.pred_dir, f'pred_object_states_{model_to_test}.txt')
         pred_franka_states_filename = op.join(
-            self.save_dir, f'pred_franka_states_{model_to_test}.txt')
+            self.pred_dir, f'pred_franka_states_{model_to_test}.txt')
         pred_forces_on_object_by_ee_filename = op.join(
-            self.save_dir, f'pred_forces_from_ee_{model_to_test}.txt')
+            self.pred_dir, f'pred_forces_from_ee_{model_to_test}.txt')
 
         do_simulation = False if op.exists(pred_object_states_filename) and \
             op.exists(pred_franka_states_filename) and \
@@ -966,8 +968,8 @@ class RobotDynamicsPredictor():
 
         return contact_force
 
-    def _export_test_data(self):
-        self.save_dir = file_utils.robot_dynamics_subdir(
+    def _export_dataset(self):
+        self.dataset_dir = file_utils.robot_dynamics_dataset_subdir(
             self.vision_asset, overwrite=False)
 
         object = '_'.join(self.vision_asset.split('_')[:-1])
@@ -978,7 +980,7 @@ class RobotDynamicsPredictor():
 
         did_extract = False
         for file in FILES_TO_EXPORT:
-            if not op.exists(op.join(self.save_dir, file)):
+            if not op.exists(op.join(self.dataset_dir, file)):
                 self._extract_data_from_rosbag()
                 did_extract = True
                 break
@@ -997,11 +999,11 @@ class RobotDynamicsPredictor():
 
         rosbag_processor.extract_franka_states(
             start_time=start, end_time=end, bag_file=bag_file,
-            franka_states_output_dir=self.save_dir
+            franka_states_output_dir=self.dataset_dir
         )
         rosbag_processor.extract_pose_commands(
             start_time=start, end_time=end, bag_file=bag_file,
-            ee_pose_command_output_dir=self.save_dir
+            ee_pose_command_output_dir=self.dataset_dir
         )
 
     def _load_data(self):
@@ -1019,25 +1021,25 @@ class RobotDynamicsPredictor():
             - object_poses (L, 7)
             - object_pose_ts (L,)
         """
-        save_dir = self.save_dir
+        dataset_dir = self.dataset_dir
 
-        command_ts = np.loadtxt(op.join(save_dir, 'pose_command_times.txt'))
-        des_pos = np.loadtxt(op.join(save_dir, 'des_pos.txt'))
-        des_quat_wxyz = np.loadtxt(op.join(save_dir, 'des_quat_wxyz.txt'))
+        command_ts = np.loadtxt(op.join(dataset_dir, 'pose_command_times.txt'))
+        des_pos = np.loadtxt(op.join(dataset_dir, 'des_pos.txt'))
+        des_quat_wxyz = np.loadtxt(op.join(dataset_dir, 'des_quat_wxyz.txt'))
 
         des_quats = []
         for quat_wxyz in des_quat_wxyz:
             des_quats.append(Quaternion(quat_wxyz))
 
-        franka_joint_ts = np.loadtxt(op.join(save_dir, 'joint_times.txt'))
-        joint_angles = np.loadtxt(op.join(save_dir, 'joint_angles.txt'))
-        joint_velocities = np.loadtxt(op.join(save_dir, 'joint_velocities.txt'))
-        joint_torques = np.loadtxt(op.join(save_dir, 'tau_J_ds.txt'))
+        franka_joint_ts = np.loadtxt(op.join(dataset_dir, 'joint_times.txt'))
+        joint_angles = np.loadtxt(op.join(dataset_dir, 'joint_angles.txt'))
+        joint_velocities = np.loadtxt(op.join(dataset_dir, 'joint_velocities.txt'))
+        joint_torques = np.loadtxt(op.join(dataset_dir, 'tau_J_ds.txt'))
 
         cartesian_stiffness = np.loadtxt(op.join(
-            save_dir, 'cartesian_stiffness.txt'))
+            dataset_dir, 'cartesian_stiffness.txt'))
         cartesian_damping = np.loadtxt(op.join(
-            save_dir, 'cartesian_damping.txt'))
+            dataset_dir, 'cartesian_damping.txt'))
 
         # Zero out the trajectories.
         init_t = min(command_ts[0], franka_joint_ts[0])
@@ -1298,7 +1300,7 @@ class RobotDynamicsPredictor():
                 vis_builder, vis_scene_graph, self.meshcat)
 
         video_writer_front = VideoWriter.AddToBuilder(
-            filename=op.join(self.save_dir,
+            filename=op.join(self.pred_dir,
                              f'{self.vision_asset}_{model_to_test}_front.mp4'),
             builder=vis_builder,
             sensor_pose=SENSOR_POSE_FRONT_VIEW,
@@ -1309,7 +1311,7 @@ class RobotDynamicsPredictor():
             fov_y=CAM_FOV
         )
         video_writer_camera = VideoWriter.AddToBuilder(
-            filename=op.join(self.save_dir,
+            filename=op.join(self.pred_dir,
                              f'{self.vision_asset}_{model_to_test}_cam.mp4'),
             builder=vis_builder,
             sensor_pose=SENSOR_POSE_CAMERA_VIEW,
@@ -1351,8 +1353,8 @@ class DynamicsPredictionQuantifier():
     def __init__(self, vision_asset: str, interactive: bool = False):
         self.vision_asset = vision_asset
         self.interactive = interactive
-        self.pred_dir = file_utils.robot_dynamics_subdir(vision_asset)
-        self.save_dir = file_utils.robot_dynamics_subdir(
+        self.pred_dir = file_utils.robot_dynamics_result_subdir(vision_asset)
+        self.eval_dir = file_utils.robot_dynamics_eval_subdir(
             vision_asset, overwrite=False)
 
         if interactive:
@@ -1504,7 +1506,7 @@ class DynamicsPredictionQuantifier():
 
             plt.legend()
             plt.savefig(
-                op.join(self.save_dir, f'{compare_against}_{model}_errors.png'))
+                op.join(self.eval_dir, f'{compare_against}_{model}_errors.png'))
             if not self.interactive:
                 plt.close()
 
@@ -1539,7 +1541,7 @@ class DynamicsPredictionQuantifier():
 
             plt.legend()
             plt.savefig(op.join(
-                self.save_dir, f'{compare_against}_{model}_time_divergence.png'
+                self.eval_dir, f'{compare_against}_{model}_time_divergence.png'
             ))
             if not self.interactive:
                 plt.close()
@@ -1575,7 +1577,7 @@ class DynamicsPredictionQuantifier():
         axs.set_yticks([i for i in range(len(models))], models)
         plt.tight_layout()
 
-        plt.savefig(op.join(self.save_dir, f'contact_activations.png'))
+        plt.savefig(op.join(self.eval_dir, f'contact_activations.png'))
         if not self.interactive:
             plt.close()
 
@@ -1647,7 +1649,7 @@ class ConglomeratedDynamicsMetrics():
                  interactive: bool = False):
         self.dpqs = list_of_dpqs
         self.interactive = interactive
-        self.save_dir = file_utils.robot_dynamics_dir()
+        self.save_dir = file_utils.robot_dynamics_eval_dir()
 
         self.is_minimal = isinstance(list_of_dpqs[0], MinimalDPQFromStatistics)
         self.compare_againsts = list(list_of_dpqs[0].errors)
